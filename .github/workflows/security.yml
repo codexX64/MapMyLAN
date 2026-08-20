@@ -1,0 +1,83 @@
+name: security
+
+# Chaîne d'approvisionnement (OWASP A03) et dépendances (A06) : audit à chaque
+# push et pull request, plus une passe hebdomadaire qui rattrape les CVE
+# publiées après coup.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # lundi 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit + typecheck (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [backend, frontend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+      # Installe à l'identique du lockfile : un lockfile absent ou désynchronisé
+      # fait échouer le job (builds reproductibles, SEC-DEP-001).
+      - run: npm ci
+      # Échoue sur toute vulnérabilité de niveau « high » ou plus (SEC-DEP-002).
+      - run: npm audit --audit-level=high
+      # Le typage doit passer : c'est aussi ce qui garantit que les correctifs de
+      # sécurité de cet audit compilent (backend = tsc, frontend = build Vite).
+      - run: npm run build --if-present
+      # Prisma client requis par certains tests du backend.
+      - run: npx prisma generate
+        if: matrix.dir == 'backend'
+      # Le filet de sécurité : les tests verrouillent les défenses durcies pour
+      # qu'un futur changement ne puisse pas les affaiblir en silence.
+      - run: npm test --if-present
+
+  sbom:
+    name: SBOM (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [backend, frontend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+      - run: npm ci
+      # Génère une nomenclature logicielle CycloneDX (SEC-DEP-006).
+      - run: npx --yes @cyclonedx/cyclonedx-npm --output-file sbom.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.dir }}
+          path: ${{ matrix.dir }}/sbom.json
+
+  secrets:
+    name: gitleaks (secret scanning)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Détecte tout secret commité dans l'historique (SEC-TEST-002).
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_SUMMARY: "true"

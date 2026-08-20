@@ -1,0 +1,30 @@
+# Secrets — ne doivent jamais partir dans le dépôt
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dépendances et artefacts
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Base et sauvegardes
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.tar.gz
+backups/
+
+# Journaux
+*.log
+logs/
+
+# Système
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

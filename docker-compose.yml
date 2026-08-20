@@ -1,0 +1,135 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no
+    ports:
+      - "127.0.0.1:6379:6379"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Read-only proxy in front of the Docker socket.
+  #
+  # The backend needs to list containers (host stats), but mounting
+  # /var/run/docker.sock directly would give it full control of the Docker
+  # daemon — and therefore of the machine — at the first slip-up. So we
+  # interpose this minimal proxy: it alone touches the socket, and it only
+  # allows reading containers. Everything else (creation, exec, images,
+  # secrets…) is denied.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.2.0
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1        # GET /containers (read) — the only real need
+      POST: 0              # no writes
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      EXEC: 0
+      SECRETS: 0
+      SERVICES: 0
+      INFO: 0
+      SYSTEM: 0
+    ports:
+      # Exposed on the loopback only: the backend (host network) reaches it
+      # via 127.0.0.1, no one else.
+      - "127.0.0.1:2375:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    # Host network: essential so that arp-scan and nmap see the real LAN.
+    # This is a design choice of a network scanner, framed here by the
+    # principle of least privilege: we drop ALL capabilities, then grant back
+    # only the two needed for raw sockets (arp-scan/nmap), and we forbid
+    # privilege escalation.
+    network_mode: host
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # /proc and /sys read-only for host monitoring.
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # No more mounting the Docker socket: we go through the read-only proxy.
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      MASTER_KEY: ${MASTER_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      DEFAULT_ADMIN_USER: ${DEFAULT_ADMIN_USER}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD}
+      SCAN_SUBNET: ${SCAN_SUBNET}
+      SCAN_INTERVAL: ${SCAN_INTERVAL}
+      SCAN_INTERFACE: ${SCAN_INTERFACE}
+      PORT: ${PORT}
+      NODE_ENV: ${NODE_ENV}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      # Container stats via the read-only proxy (never the raw socket).
+      DOCKER_HOST: tcp://127.0.0.1:2375
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "8090:80"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

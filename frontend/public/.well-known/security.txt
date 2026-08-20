@@ -1,0 +1,9 @@
+# Politique de divulgation des vulnérabilités — MapMyLAN (RFC 9116)
+# Remplacez le contact ci-dessous par le vôtre si nécessaire.
+
+Contact: https://github.com/CodexX64
+Contact: https://github.com/CodexX64/mapmylan/security/advisories/new
+Expires: 2027-12-31T23:59:59Z
+Preferred-Languages: fr, en
+Canonical: https://github.com/CodexX64/mapmylan/blob/main/frontend/public/.well-known/security.txt
+Policy: https://github.com/CodexX64/mapmylan/blob/main/SECURITY.md

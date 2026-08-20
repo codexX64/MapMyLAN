@@ -1,0 +1,319 @@
+// MapMyLAN v2 schema
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  lastLogin DateTime?
+  // Incremented on each revocation: invalidates all already-issued tokens.
+  tokenVersion Int      @default(0)
+  // Temporary lockout after a series of failures.
+  failedLogins Int      @default(0)
+  lockedUntil  DateTime?
+}
+
+model Device {
+  id            String   @id @default(cuid())
+  ip            String
+  mac           String?  @unique
+  hostname      String?
+  customName    String?  // user-edited display name
+  vendor        String?
+  model         String?
+  os            String?
+  type          String   @default("unknown")  // router|switch|ap|firewall|server|laptop|phone|iot|unknown
+  customType    String?  // user override
+  vlan          Int?
+  zone          String?  // user-defined area (Living, Office, etc.)
+  tags          String[] @default([])
+  notes         String?
+  role          String?  // gateway|core|edge|client (auto-detected)
+
+  status        String   @default("online")   // online|offline|suspect|quarantined|banned
+
+  // ── 4-axis scoring ──
+  trustScore    Int      @default(50)   // 0-100, higher = more trusted
+  activityScore Int      @default(0)    // 0-100, higher = more suspicious activity
+  vulnScore     Int      @default(0)    // 0-100, higher = more vulnerable
+  dangerScore   Int      @default(0)    // 0-100, final fused score, higher = more dangerous
+  scoreReasons  Json?    // breakdown of how the scores were computed
+
+  // ── Protection ──
+  whitelisted   Boolean  @default(false)  // never auto-banned
+  isMainRouter  Boolean  @default(false)  // protected, never bannable
+
+  // ── Map persistence ──
+  posX          Float?
+  posY          Float?
+  pinned        Boolean  @default(false)
+
+  firstSeen     DateTime @default(now())
+  lastSeen      DateTime @default(now())
+  metadata      Json?
+
+  ports         Port[]
+  cves          CveMatch[]
+  history       DeviceHistory[]
+  interfaces    Interface[]
+  linksFrom     TopologyLink[] @relation("from")
+  linksTo       TopologyLink[] @relation("to")
+
+  @@index([ip])
+  @@index([status])
+  @@index([dangerScore])
+}
+
+// Network Interfaces (NICs). One device may have several (e.g. Wi-Fi + Ethernet).
+// Each interface has its own MAC and may have its own position on the topology map,
+// so the same physical device can be shown twice on the map with one link going
+// to its LAN switch and another to its Wi-Fi AP.
+model Interface {
+  id        String   @id @default(cuid())
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId  String
+  mac       String?  @unique
+  ip        String?
+  type      String   @default("ethernet")  // ethernet|wifi|virtual|other
+  label     String?  // user label, e.g. "eth0", "wlan0"
+  posX      Float?
+  posY      Float?
+  isPrimary Boolean  @default(false)  // primary NIC mirrors Device.mac/ip
+  createdAt DateTime @default(now())
+  @@index([deviceId])
+}
+
+model Port {
+  id         String   @id @default(cuid())
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId   String
+  port       Int
+  protocol   String
+  state      String
+  service    String?
+  product    String?
+  version    String?
+  detectedAt DateTime @default(now())
+  @@unique([deviceId, port, protocol])
+}
+
+model CveMatch {
+  id          String   @id @default(cuid())
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId    String
+  cveId       String
+  cvss        Float
+  severity    String
+  description String
+  service     String?
+  detectedAt  DateTime @default(now())
+}
+
+model DeviceHistory {
+  id        String   @id @default(cuid())
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId  String
+  event     String   // ip_change|first_seen|status_change|score_change|action_taken|note_added
+  data      Json
+  createdAt DateTime @default(now())
+  @@index([deviceId, createdAt])
+}
+
+// User-editable & auto-discovered links
+// Links can connect either two whole devices (legacy) or two specific interfaces.
+// Interface-level links allow the same device to appear on the map with separate
+// LAN and Wi-Fi nodes connected to different upstream gear.
+model TopologyLink {
+  id        String   @id @default(cuid())
+  fromId    String
+  from      Device   @relation("from", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        Device   @relation("to", fields: [toId], references: [id], onDelete: Cascade)
+  fromIfaceId String?
+  toIfaceId   String?
+  type      String   @default("ethernet")  // ethernet|wifi|vpn|trunk|wan|docker|sibling
+  speed     String?
+  vlan      String?
+  manual    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  @@unique([fromId, toId, fromIfaceId, toIfaceId])
+}
+
+model Zone {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("#38bdf8")
+  x         Float
+  y         Float
+  width     Float    @default(200)
+  height    Float    @default(150)
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
+model Vlan {
+  id          Int      @id
+  name        String
+  subnet      String
+  description String?
+  color       String   @default("#38bdf8")
+  isolated    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model SshDevice {
+  id            String   @id @default(cuid())
+  name          String
+  host          String
+  port          Int      @default(22)
+  username      String
+  passwordEnc   String?
+  privateKeyEnc String?
+  passphraseEnc String?
+  // Adapter identifier: unifi, asus-merlin, openwrt, routeros,
+  // pfsense, cisco-ios, zyxel, edgeos, generic.
+  vendor        String   @default("generic")
+  // Control channel: ssh for most, api for UniFi.
+  transport     String   @default("ssh")
+  apiBaseUrl    String?
+  site          String?
+  verifyTls     Boolean  @default(false)
+  isMainRouter  Boolean  @default(false)
+  lastConnected DateTime?
+  lastTestOk    Boolean?
+  lastTestAt    DateTime?
+  lastTestInfo  String?
+  createdAt     DateTime @default(now())
+}
+
+model Alert {
+  id           String   @id @default(cuid())
+  severity     String
+  source       String
+  message      String
+  deviceId     String?
+  deviceIp     String?
+  deviceMac    String?
+  acknowledged Boolean  @default(false)
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  @@index([createdAt])
+  @@index([severity])
+}
+
+model LogEntry {
+  id        String   @id @default(cuid())
+  level     String
+  source    String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model NotificationConfig {
+  id          String   @id @default(cuid())
+  channel     String   @unique
+  enabled     Boolean  @default(false)
+  configEnc   String?
+  lastTested  DateTime?
+  lastSuccess DateTime?
+}
+
+// User-defined bot commands. The user types /something in Telegram (or whatever
+// channel later supports it) and the bot runs the configured action server-side.
+// Examples:
+//   { trigger: "/alert",   action: "lockdown",   confirm: true }
+//   { trigger: "/status",  action: "status" }
+//   { trigger: "/scan",    action: "scan_now" }
+//   { trigger: "/reboot_router", action: "exec_ssh", params: { deviceId: "...", cmd: "reboot" }, confirm: true }
+model BotCommand {
+  id              String   @id @default(cuid())
+  trigger         String   @unique  // e.g. "/alert" or "/lockdown"
+  description     String?
+  action          String   // see ACTIONS catalog in services/botCommands.ts
+  params          Json?    // arbitrary action-specific parameters
+  enabled         Boolean  @default(true)
+  confirm         Boolean  @default(false)  // require Y/N reply before exec
+  allowedChatIds  String[] @default([])     // empty = primary chatId only
+  cooldownSec     Int      @default(0)
+  lastFiredBy     String?
+  lastFiredAt     DateTime?
+  fireCount       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// User-defined "when X happens → do Y" rules.
+// Each command has a trigger (one of ~50 events), one or more actions (notify
+// channels and/or in-app actions), an optional cooldown, and an optional filter.
+model NotificationCommand {
+  id           String   @id @default(cuid())
+  name         String
+  enabled      Boolean  @default(true)
+  trigger      String   // see TRIGGERS catalog in services/commands.ts
+  filter       Json?    // optional filter, e.g. { minSeverity: "high", deviceType: "iot" }
+  actions      Json     // array, e.g. [{ kind: "notify", channels: ["telegram", "email"] }, { kind: "log" }]
+  template     String?  // optional message template with {{placeholders}}
+  cooldownSec  Int      @default(0)
+  lastFired    DateTime?
+  fireCount    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  @@index([trigger, enabled])
+}
+
+model SecurityRule {
+  id          String   @id @default(cuid())
+  name        String
+  enabled     Boolean  @default(true)
+  trigger     String   // dangerScore|portScan|arpSpoof|cve|newDevice
+  threshold   Float?
+  action      String   // alert|quarantine|ban|disablePort
+  exceptWhitelist Boolean @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model ScanRun {
+  id         String   @id @default(cuid())
+  type       String
+  subnet     String
+  status     String   @default("running")
+  hostsFound Int      @default(0)
+  startedAt  DateTime @default(now())
+  endedAt    DateTime?
+  error      String?
+}
+
+model HostMetric {
+  id          String   @id @default(cuid())
+  cpuPct      Float
+  memPct      Float
+  memUsedMB   Int
+  memTotalMB  Int
+  diskPct     Float
+  tempC       Float?
+  loadAvg     Float
+  netRxKBs    Float
+  netTxKBs    Float
+  uptimeSec   Int
+  createdAt   DateTime @default(now())
+  @@index([createdAt])
+}
