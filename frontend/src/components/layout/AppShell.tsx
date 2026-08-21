@@ -66,7 +66,6 @@ export function AppShell() {
   const t = compatTheme(THEMES[resolveTheme(themeKey)]);
   const { currentPage, setPage } = useStore();
   const s = useT();
-  const [lang, setLangValue] = useLang();
 
   return (
     <>
@@ -208,6 +207,7 @@ function TopBar({ t, s }: any) {
   const { setTheme, logout } = useStore(st => ({ setTheme: st.setTheme, logout: st.logout }));
   const themeKey = useStore(st => st.themeKey);
   const isDark = resolveTheme(themeKey) === "dark";
+  const [lang, setLangValue] = useLang();
 
   return (
     <div style={{
