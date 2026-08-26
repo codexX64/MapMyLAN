@@ -10,7 +10,7 @@
 
 ## 1. Résumé exécutif
 
-MapMyLAN partait d'un socle de sécurité déjà solide (Argon2id + poivre, égalisation des temps de réponse, verrouillage de compte, versionnage de jeton, chiffrement AES-256-GCM des identifiants d'équipement, validation « refus par défaut » des adresses réseau, garde anti-enchaînement sur les commandes routeur). L'audit a relevé **20 constats** ; **tous sont désormais corrigés**, et des contrôles de gouvernance et de chaîne d'approvisionnement ont été ajoutés.
+MapMyLAN partait d'un socle de sécurité déjà solide (Argon2id + poivre, égalisation des temps de réponse, verrouillage de compte, versionnage de jeton, chiffrement AES-256-GCM des identifiants d'équipement, validation « refus par défaut » des adresses réseau, garde anti-enchaînement sur les commandes routeur). L'audit a relevé **20 constats** ; **19 sont corrigés et un l'est partiellement** (H-03, voir section 8), et des contrôles de gouvernance et de chaîne d'approvisionnement ont été ajoutés.
 
 Les deux failles critiques mettaient en jeu l'exécution de code — l'une sans authentification. Elles sont fermées, et les protections structurelles restantes (session en cookie `HttpOnly`, anti-CSRF, en-têtes nginx, moindre privilège Docker, CI de sécurité) ont été mises en place.
 
@@ -29,12 +29,12 @@ Les deux failles critiques mettaient en jeu l'exécution de code — l'une sans 
 1. Les routes de commandes/bot, jadis ouvertes à tous, exigent maintenant une session admin. Fin de l'exécution SSH non authentifiée sur le routeur.
 2. Le scan et l'enrichissement valident désormais chaque IP/plage avant de toucher un shell. Fin de l'injection de commande.
 3. Plus d'identifiants `admin/admin` : refus des mots de passe faibles, secret aléatoire généré et affiché une fois.
-4. Le jeton de session est passé de `localStorage` à un **cookie `HttpOnly` + protection CSRF** : un XSS ne peut plus voler la session.
+4. Le jeton de session est passé de `localStorage` à un **cookie `HttpOnly` + protection CSRF**. Voir la nuance en section 7 : l'interface en conserve encore une copie dans `localStorage`, et le retrait de cette copie reste à faire.
 5. En-têtes de sécurité posés par nginx (CSP sur le document), déploiement Docker au moindre privilège (socket Docker retiré au profit d'un proxy lecture seule), et une **chaîne CI** (npm audit, gitleaks, SBOM) qui garde les dépendances sous contrôle.
 
 ---
 
-## 2. Tableau des constats — tous corrigés
+## 2. Tableau des constats
 
 Statut : **FIXED** = corrigé dans le code livré.
 
@@ -44,7 +44,7 @@ Statut : **FIXED** = corrigé dans le code livré.
 | C-02 | CRITICAL | ✅ FIXED | `services/scanner.ts`, `services/enrichment.ts`, `routes/devices.ts` | IP/plage interpolées dans un shell sans validation → injection de commande. | Gardes `ipSur`/`plageSure`/`communauteSure` (`estIP`/`estCIDR`) avant chaque commande ; validation à la création d'appareil et au lancement du scan. |
 | H-01 | HIGH | ✅ FIXED | `frontend/src/pages/index.tsx` | XSS stocké : réponse de bot (données d'appareil) rendue en HTML. | Rendu en texte via `stripTags()`. |
 | H-02 | HIGH | ✅ FIXED | `prisma/seed.ts` | Identifiants par défaut `admin`/`admin`. | Refus des mots de passe faibles/courts ; sinon secret aléatoire généré, affiché une fois ; compte existant intact. |
-| H-03 | HIGH | ✅ FIXED | `middleware/auth.ts`, `middleware/csrf.ts`, `routes/auth.ts`, `ws/realtime.ts`, `frontend/src/api/*`, `stores/app.ts` | Jeton JWT en `localStorage` → vol par XSS. | Migration en **cookie `HttpOnly; Secure; SameSite=Strict`** + **anti-CSRF double soumission** ; WS authentifié par cookie + vérif. de version de jeton ; plus aucun jeton en JS. |
+| H-03 | HIGH | ⚠️ PARTIEL | `middleware/auth.ts`, `middleware/csrf.ts`, `routes/auth.ts`, `ws/realtime.ts`, `frontend/src/api/*`, `stores/app.ts` | Jeton JWT en `localStorage` → vol par XSS. | **Cookie `HttpOnly; SameSite=Strict`** (`Secure` sous HTTPS) + **anti-CSRF double soumission** ; WS authentifié par le cookie avec vérification de version de jeton ; route `/auth/logout` qui efface les cookies. **La copie en `localStorage` subsiste** : voir section 7. |
 | H-04 | HIGH | ✅ FIXED | `frontend/nginx.conf` | Aucun en-tête de sécurité sur le document servi. | CSP, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy (+ HSTS prêt pour HTTPS) ; `X-Forwarded-For` transmis. |
 | H-05 | HIGH | ✅ FIXED | `services/defense.ts` | Cible de bannissement non validée avant construction de commande. | `validerCible()` appelée dans `act()`. |
 | S-01 | HIGH | ✅ FIXED | `extensions/synapse.js` *(homelab)* | Spool `/var/tmp` partagé en 0644 : faux événements rejoués avec le token, lecture de l'inventaire. | Spool privé (`mkdir 0700`, fichiers `0600`), refus non-propriétaire/symlink, **vérif. de hash** avant rejeu. |
@@ -69,7 +69,7 @@ Une catégorie **PASSE** si tous ses contrôles CRITICAL+HIGH passent.
 
 | Catégorie | Résultat | Contrôles déterminants |
 |-----------|:--------:|------------------------|
-| **A01 – Broken Access Control** | ✅ PASS | C-01 corrigé ; session en cookie `HttpOnly` (H-03) ; `authRequired`/`requireRole` sur tout le reste. |
+| **A01 – Broken Access Control** | ✅ PASS | C-01 corrigé ; session en cookie `HttpOnly` (H-03, partiel) ; `authRequired`/`requireRole` sur tout le reste. |
 | **A02 – Cryptographic Failures** | ✅ PASS | Argon2id+poivre, AES-256-GCM, `timingSafeEqual` ; token synapse protégé (M-02). |
 | **A03 – Software Supply Chain** | ✅ PASS | Chargeur d'extensions durci (M-05) ; builds reproductibles (`npm ci`, SEC-DEP-001) ; SBOM CycloneDX et gitleaks en CI. |
 | **A04 – Insecure Design** | ✅ PASS | « Refus par défaut » (`valider.ts`), garde de commande, verrouillage de compte, anti-CSRF. |
@@ -86,7 +86,7 @@ Une catégorie **PASSE** si tous ses contrôles CRITICAL+HIGH passent.
 
 ## 4. Nouveaux contrôles ajoutés
 
-- **Session en cookie `HttpOnly; Secure; SameSite=Strict`** + jeton anti-CSRF (double soumission, en-tête `X-CSRF-Token`). Le JWT ne transite plus jamais par du JavaScript. WebSocket authentifié par le cookie, avec vérification de la version de jeton (révocation immédiate au changement de mot de passe). Route `/auth/logout` qui efface les cookies.
+- **Session en cookie `HttpOnly; SameSite=Strict`** (`Secure` dès que la connexion est en HTTPS) + jeton anti-CSRF (double soumission, en-tête `X-CSRF-Token`). WebSocket authentifié par le cookie, avec vérification de la version de jeton — un jeton révoqué par un changement de mot de passe ne peut plus ouvrir le flux. Route `/auth/logout` qui efface les cookies.
 - **En-têtes de sécurité nginx** sur le document lui-même (CSP, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy ; HSTS prêt à activer sous HTTPS).
 - **Moindre privilège Docker** : `docker-socket-proxy` en lecture seule à la place du socket brut ; `cap_drop: ALL` puis seules les capacités nécessaires ; `no-new-privileges` sur tous les services ; builds reproductibles (`npm ci`).
 - **CI de sécurité** (`.github/workflows/security.yml`) : `npm audit` bloquant, `gitleaks`, SBOM CycloneDX, typecheck/build — à chaque push/PR et chaque semaine.
@@ -149,4 +149,57 @@ Si la configuration du canal de messagerie ne porte pas de `chatId`, la liste
 autorisée est vide et **plus aucune commande ne répond** — y compris les
 vôtres. C'est le seul effet de bord de cette passe, et il se lève en
 renseignant le salon.
+
+---
+
+## 8. Rattrapage — ce qu'une reprise de code avait fait disparaître
+
+Une mise à jour du dépôt a écrasé `backend/src` en bloc à partir d'une capture
+antérieure de l'installation déployée, au lieu de fusionner. Trois choses ont
+disparu avec elle, et sont revenues ici :
+
+| Disparu | Rétabli |
+|---|---|
+| `middleware/csrf.ts` et les aides à cookie de `middleware/auth.ts` | Rétablis. `extraireJeton` lit le cookie en priorité et retombe sur `Authorization` : un client qui n'a pas de cookie continue de fonctionner. |
+| La suite de tests (`vitest`, 6 fichiers) | Rétablie et complétée. **49 tests passent.** |
+| `docs/screenshots/` | Rétabli. |
+
+La reprise a aussi révélé deux divergences réelles entre le dépôt audité et
+l'installation déployée. Elles sont traitées ici.
+
+### Le flux temps réel ignorait la révocation
+
+`ws/realtime.ts` ne vérifiait que la **signature** du jeton. Un jeton révoqué —
+après un changement de mot de passe, typiquement — ouvrait donc encore le flux
+et continuait de recevoir appareils, alertes, journaux et métriques d'hôte
+jusqu'à son expiration, soit douze heures.
+
+La poignée de main applique désormais les mêmes règles que `authRequired` :
+type de jeton en liste blanche, puis version comparée au compte. Base
+injoignable : on refuse, on n'ouvre pas « en attendant ». La décision est
+extraite dans `verifierPoigneeDeMain()` et couverte par sept tests, dont celui
+qui échouait avant le correctif.
+
+### Ce qui reste à faire — la copie en `localStorage`
+
+La session voyage maintenant dans un cookie `HttpOnly`, hors de portée de tout
+script. Mais l'interface **conserve aussi le jeton dans `localStorage`**, et
+l'en-tête `Authorization` continue d'être envoyé. Un XSS peut donc encore lire
+cette copie : le gain est réel — le cookie est le chemin principal, la
+déconnexion efface une vraie session, le flux temps réel respecte la
+révocation — mais **H-03 n'est pas entièrement fermé**.
+
+Le retrait de cette copie n'a pas été fait ici parce qu'il change la façon dont
+l'interface s'authentifie, et qu'il ne peut pas être validé sans un essai en
+navigateur sur une installation réelle. La marche à suivre, dans cet ordre :
+
+1. vérifier que la connexion pose bien les deux cookies (onglet réseau) ;
+2. retirer `localStorage` de `client.ts` — garder le jeton en mémoire pour un
+   client servi depuis une autre origine, où le cookie ne partirait pas ;
+3. vérifier la connexion, le rechargement de page, le flux temps réel et la
+   déconnexion ;
+4. seulement alors, retirer `Authorization` du chemin navigateur.
+
+Tant que l'étape 4 n'est pas franchie, cette section décrit l'état réel du
+code — c'est ce qui compte davantage que la case cochée.
 

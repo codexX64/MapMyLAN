@@ -4,11 +4,33 @@ const BASE = "/api";
 function getToken() { return localStorage.getItem("mapmylan_token"); }
 export function setToken(t: string | null) { t ? localStorage.setItem("mapmylan_token", t) : localStorage.removeItem("mapmylan_token"); }
 
+/**
+ * Le cookie anti-CSRF, seul cookie de session lisible par le JS.
+ *
+ * Le jeton, lui, vit dans un cookie `HttpOnly` que ce code ne peut pas lire —
+ * c'est précisément ce qui le met hors de portée d'un XSS. Le navigateur
+ * l'envoie tout seul, à condition que la requête porte `credentials`.
+ */
+function jetonAntiCsrf(): string | null {
+  const m = document.cookie.match(/(?:^|;\s*)mapmylan_csrf=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = { "Content-Type": "application/json", ...(options.headers as any) };
+  // L'en-tête reste envoyé : il fait vivre les clients qui n'ont pas de cookie,
+  // et le serveur lit le cookie en priorité quand il y en a un.
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  // Double soumission : sur toute méthode qui modifie l'état, le serveur exige
+  // que cet en-tête soit égal au cookie. Un site tiers ne peut lire ni l'un ni
+  // l'autre, il ne peut donc pas forger la requête.
+  const csrf = jetonAntiCsrf();
+  const methode = String(options.method || "GET").toUpperCase();
+  if (csrf && methode !== "GET" && methode !== "HEAD") headers["X-CSRF-Token"] = csrf;
+  // `same-origin` : le cookie de session part avec la requête vers notre propre
+  // origine, et nulle part ailleurs.
+  const res = await fetch(`${BASE}${path}`, { credentials: "same-origin", ...options, headers });
   if (res.status === 401 && !path.startsWith("/auth/")) { setToken(null); location.reload(); throw new Error("Unauthorized"); }
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
@@ -20,6 +42,9 @@ export const api = {
   // Auth
   login: (username: string, password: string) =>
     request<{ token: string; user: any; setupComplete: boolean }>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  // Effacer le stockage local ne suffit plus : le cookie de session survivrait
+  // à la déconnexion. C'est le serveur qui le retire.
+  logout: () => request("/auth/logout", { method: "POST" }).catch(() => null),
   // L'identifiant n'est plus transmis : le serveur travaille sur le compte
   // porteur du jeton, ce qui ferme l'oracle de devinette qu'exposait
   // l'ancienne version non authentifiée.

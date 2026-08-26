@@ -33,7 +33,7 @@ interface AppState {
 
   login: (username: string, password: string) => Promise<any>;
   ouvrirSession: (res: any) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loadInitialData: () => Promise<void>;
   setSetupComplete: (v: boolean) => void;
 
@@ -100,7 +100,16 @@ export const useStore = create<AppState>((set, get) => ({
     await get().loadInitialData();
   },
 
-  logout: () => { localStorage.removeItem("mapmylan_token"); set({ user: null }); location.reload(); },
+  // Effacer le stockage local ne suffit plus : la session vit aussi dans un
+  // cookie `HttpOnly` que seul le serveur peut retirer. On le lui demande
+  // AVANT de recharger — sinon la page revient authentifiée, et « se
+  // déconnecter » ne déconnecterait de rien.
+  logout: async () => {
+    localStorage.removeItem("mapmylan_token");
+    set({ user: null });
+    await api.logout();          // ne rejette jamais : la déconnexion aboutit
+    location.reload();
+  },
 
   loadInitialData: async () => {
     try {

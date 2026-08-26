@@ -37,6 +37,25 @@ autrefois une valeur en dur sont devenus des variables :
 `frontend/public/` — parce que les contextes de construction Docker sont
 séparés. La CI vérifie qu'ils restent identiques.
 
+## Langues : 18 avant, 2 aujourd'hui
+
+L'ancienne interface tirait ses libellés de `frontend/src/lib/i18n-data.ts`, une
+table générée couvrant dix-huit langues, dont l'arabe en écriture droite-à-gauche.
+La disposition atelier a remplacé ce mécanisme par `lib/i18n.ts`, qui ne porte
+plus que le **français** (langue par défaut) et l'**anglais**.
+
+Le fichier n'est plus référencé nulle part : il a donc été retiré plutôt que
+laissé à pourrir. Il reste récupérable dans l'historique :
+
+```bash
+git show b771bf4:frontend/src/lib/i18n-data.ts > /tmp/i18n-data.ts
+```
+
+Rétablir les seize autres langues demande de porter la table vers la forme
+qu'attend le nouveau `i18n.ts`, et de vérifier que les clés se recouvrent : les
+écrans ont changé, une partie des anciennes clés n'existe plus. Ce n'est pas
+fait, et ce n'est pas une régression silencieuse : c'est écrit ici.
+
 ## Correctif non appliqué
 
 `docs/patch-v29/` contient un correctif d'interface qui n'a pas été appliqué au

@@ -25,6 +25,7 @@ import { attachSocketIO } from "./ws/realtime";
 import { startScheduler } from "./workers/scheduler";
 import { startTelegramBot } from "./services/notifier";
 import { annoncerPoste } from "./services/poste";
+import { csrfProtection } from "./middleware/csrf";
 
 async function main() {
   // Avant toute chose : sans secrets solides, rien ne doit démarrer.
@@ -89,6 +90,15 @@ async function main() {
   }
   app.use(cors({ origin: config.corsOrigin, credentials: !!origineNommee }));
   app.use(express.json({ limit: "5mb" }));
+
+  // Anti-CSRF par double soumission, sur toute methode qui modifie l'etat ET
+  // s'authentifie par cookie. Posee apres l'analyse du corps, avant les routes.
+  //
+  // Elle ne s'applique pas a un client qui envoie son jeton dans l'en-tete
+  // Authorization : un site tiers ne peut pas poser d'en-tete personnalise sans
+  // preflight, ce chemin n'est donc pas forgeable. Le controle est la pour le
+  // chemin navigateur, ou le cookie part tout seul.
+  app.use(csrfProtection);
 
   const authLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true });
 

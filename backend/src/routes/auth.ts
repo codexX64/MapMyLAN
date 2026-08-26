@@ -6,7 +6,7 @@ import { prisma } from "../db";
 import { hacher as hacherMotDePasse, verifier as verifierMotDePasse } from "../services/password";
 import { config } from "../config";
 import { logEvent } from "../services/logger";
-import { authRequired } from "../middleware/auth";
+import { authRequired, poserCookiesSession, effacerCookiesSession } from "../middleware/auth";
 import { sendTelegram, getConfig } from "../services/notifier";
 import { generateSecret, verifyTotp, otpauthUri, numericCode } from "../services/totp";
 import {
@@ -264,12 +264,22 @@ function jetonDeSession(user: any): string {
     config.jwtSecret, { expiresIn: "12h" });
 }
 
-async function reponseDeConnexion(user: any, res: any) {
+async function reponseDeConnexion(user: any, req: any, res: any) {
   const setup = await prisma.setting.findUnique({ where: { key: "setup.complete" } });
   const exigee = await a2fExigee(user.id);
   const m = await moyensDe(user);
+  const token = jetonDeSession(user);
+
+  // La session part AUSSI en cookie `HttpOnly`, hors de portee de tout script :
+  // c'est ce qui met le jeton a l'abri d'un XSS, contrairement au meme jeton
+  // range dans `localStorage`. Le jeton reste dans la reponse pour ne couper
+  // aucun client existant — un client API, ou une interface pas encore a jour.
+  // Le cookie anti-CSRF qui l'accompagne est lisible par le JS : ce n'est pas
+  // un secret, juste la preuve que la requete vient bien de notre page.
+  poserCookiesSession(req, res, token, crypto.randomBytes(32).toString("base64url"));
+
   res.json({
-    token: jetonDeSession(user),
+    token,
     user: {
       id: user.id, username: user.username, role: user.role,
       mustChangePassword: user.mustChangePassword,
@@ -337,7 +347,7 @@ router.post("/login", async (req, res) => {
   }
 
   await logEvent("info", "auth", `Login: ${username}`);
-  await reponseDeConnexion(user, res);
+  await reponseDeConnexion(user, req, res);
 });
 
 // ── Seconde étape ───────────────────────────────────────────────────────────
@@ -362,7 +372,7 @@ router.post("/2fa/application", async (req, res) => {
   secondsFacteurs.delete(defi);
   await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
   await logEvent("info", "auth", `Login (application) : ${user.username}`);
-  await reponseDeConnexion(user, res);
+  await reponseDeConnexion(user, req, res);
 });
 
 // ── Second facteur par Telegram ─────────────────────────────────────────────
@@ -422,7 +432,7 @@ router.post("/2fa/telegram", async (req, res) => {
   secondsFacteurs.delete(cle);
   await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
   await logEvent("info", "auth", `Login (telegram) : ${user.username}`);
-  await reponseDeConnexion(user, res);
+  await reponseDeConnexion(user, req, res);
 });
 
 router.post("/2fa/trousseau/options", async (req, res) => {
@@ -479,7 +489,7 @@ router.post("/2fa/trousseau", async (req, res) => {
     await majCompteur(enregistree.credentialId, v.authenticationInfo.newCounter);
     await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
     await logEvent("info", "auth", `Login (trousseau) : ${user.username}`);
-    await reponseDeConnexion(user, res);
+    await reponseDeConnexion(user, req, res);
   } catch (e: any) {
     res.status(401).json({ error: e?.message || "Clé refusée." });
   }
@@ -487,6 +497,18 @@ router.post("/2fa/trousseau", async (req, res) => {
 
 // Qui suis-je ?
 //
+// Deconnexion. Tant que la session ne vivait que dans `localStorage`, se
+// deconnecter revenait a effacer une variable cote navigateur. Maintenant
+// qu'un cookie `HttpOnly` porte aussi la session, il FAUT le retirer ici :
+// sinon la session survivrait a la deconnexion, ce qui serait pire que rien.
+//
+// Volontairement sans `authRequired` : une session deja expiree ou invalide
+// doit pouvoir nettoyer ses cookies. La route ne lit rien et ne renvoie rien.
+router.post("/logout", (_req, res) => {
+  effacerCookiesSession(res);
+  res.json({ ok: true });
+});
+
 // Au rechargement de la page, l'interface n'avait que le jeton et se
 // contentait d'un utilisateur factice — sans identifiant, sans rôle, sans
 // l'indicateur de mot de passe à changer. Résultat : le changement imposé
