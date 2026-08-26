@@ -1,7 +1,7 @@
 // Background scheduler. Runs scans, scoring, host metrics polling, and rule engine.
 
 import cron from "node-cron";
-import { fullScan } from "../services/scanner";
+import { fullScanAll, plagesActives } from "../services/scanner";
 import { scoreAllDevices } from "../services/scoring";
 import { applyRules } from "../services/rules";
 import { autoBuildTopology } from "../services/topology";
@@ -11,16 +11,23 @@ import { prisma } from "../db";
 import { config } from "../config";
 import { eventBus } from "../ws/realtime";
 import { logEvent } from "../services/logger";
+import { demarrerCollecteTrafic } from "../services/trafic";
+import { relever as releverVlans } from "../services/vlanReleve";
 
 let scanRunning = false;
 
 export function startScheduler() {
+  // ── Collecte du trafic sortant ──
+  // Une seule boucle, côté serveur : l'historique se construit même quand
+  // personne ne regarde, et la passerelle n'est interrogée qu'une fois.
+  demarrerCollecteTrafic();
+
   // ── Scan loop ──
   if (config.scan.interval > 0) {
     const intervalMs = config.scan.interval * 1000;
     setTimeout(runScan, 8000); // first scan 8s after boot
     setInterval(runScan, intervalMs);
-    console.log(`[scheduler] Full scan every ${config.scan.interval}s on ${config.scan.subnet}`);
+    console.log(`[scheduler] Balayage complet toutes les ${config.scan.interval}s`);
   }
 
   // ── Scoring + rules every minute ──
@@ -71,7 +78,11 @@ async function runScan() {
   if (scanRunning) return;
   scanRunning = true;
   try {
-    await fullScan();
+    await fullScanAll();
+    // Les VLAN déclarés sur la passerelle, relevés au même rythme que le reste.
+    // Sans ça, un réseau déjà segmenté restait vide côté MapMyLAN et chaque
+    // appareil retombait sur son sous-réseau faute de rattachement.
+    await releverVlans().catch(() => ({}));
     await scoreAllDevices();
     // Topology auto-build is NEVER triggered here. The user builds it once
     // via the "↻ Auto-rebuild" button on the map (or the onboarding wizard).

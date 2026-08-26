@@ -2,11 +2,13 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { computeGroupingSuggestions } from "../services/grouping";
 import { dedupeDevices } from "../services/dedupe";
-import { fullScan, pingHost, nmapDeepScan } from "../services/scanner";
+import { fullScan, fullScanAll, plagesActives, pingHost, nmapDeepScan } from "../services/scanner";
 import { scoreDevice, scoreAllDevices, globalHealthScore } from "../services/scoring";
 import { banDevice, quarantineDevice, unbanDevice } from "../services/defense";
 import { authRequired } from "../middleware/auth";
-import { estIP, estMAC, estCIDR } from "../services/valider";
+import { mainRouter } from "../adapters";
+import { plageUtilisable, verifierAdresse } from "../services/vlanReleve";
+import { logEvent } from "../services/logger";
 
 const router = Router();
 router.use(authRequired);
@@ -29,14 +31,16 @@ router.get("/scans/latest", async (_req, res) => {
   res.json(run);
 });
 
+// Plages configurées, pour affichage.
+router.get("/scan/ranges", async (_req, res) => {
+  res.json(await plagesActives());
+});
+
 router.post("/scan", async (req, res) => {
   const subnet = req.body?.subnet as string | undefined;
-  // The range flows down into a shell command (arp-scan/nmap). We refuse
-  // anything that is not CIDR notation or an IP before launching the scan.
-  if (subnet !== undefined && subnet !== null && subnet !== "" && !estCIDR(subnet) && !estIP(subnet)) {
-    return res.status(400).json({ error: "Invalid range (expected: CIDR, e.g. 192.168.1.0/24)." });
-  }
-  fullScan(subnet || undefined).then(() => scoreAllDevices()).catch(console.error);
+  // Sans plage précisée, on balaie toutes celles qui sont configurées.
+  const lancement = subnet ? fullScan(subnet) : fullScanAll();
+  lancement.then(() => scoreAllDevices()).catch(console.error);
   res.json({ ok: true });
 });
 
@@ -48,15 +52,6 @@ router.post("/manual", async (req, res) => {
     const { ip, mac, hostname, customName, vendor, model, type, customType, posX, posY, notes } = req.body || {};
     if (!customName && !hostname && !ip && !mac) {
       return res.status(400).json({ error: "At least one of: name, hostname, IP, MAC required" });
-    }
-    // A device's IP and MAC end up in the scan and defense commands. Here we
-    // refuse anything that does not have the expected format, rather than
-    // storing a value that would become an injection vector on the first scan.
-    if (ip && !estIP(ip)) {
-      return res.status(400).json({ error: "Invalid IP address." });
-    }
-    if (mac && !estMAC(mac)) {
-      return res.status(400).json({ error: "Invalid MAC address." });
     }
     const data: any = {
       ip: ip || "0.0.0.0",
@@ -104,6 +99,153 @@ router.patch("/:id", async (req, res) => {
     });
   }
   res.json(dev);
+});
+
+// ── Réservation d'adresse ───────────────────────────────────────────────────
+//
+// Ce que cette route fait, et ce qu'elle ne fait pas, parce que la nuance
+// décide de tout :
+//
+//   elle NE réécrit PAS l'adresse de l'appareil. Aucun outil ne peut aller
+//   changer la configuration réseau d'une machine à distance sans y avoir un
+//   agent ou un accès ;
+//
+//   elle demande à la passerelle de toujours servir cette adresse-là à cette
+//   carte réseau. L'appareil la prendra à son prochain bail — tout de suite si
+//   on coupe sa session, sinon à l'expiration du bail en cours.
+//
+// Le VLAN choisi ne déplace pas non plus l'appareil de segment : il dit de
+// quel réseau l'adresse relève. Un appareil branché sur un port du VLAN 10 ne
+// passera pas au VLAN 20 parce qu'on a réservé une adresse du VLAN 20 — c'est
+// le profil du port, ou le SSID, qui décide de ça, et ça ne se règle pas d'ici.
+
+router.get("/:id/reservation", async (req, res) => {
+  const dev = await prisma.device.findUnique({ where: { id: req.params.id } });
+  if (!dev) return res.status(404).json({ error: "Appareil introuvable" });
+
+  const vlans = await prisma.vlan.findMany({ orderBy: { id: "asc" } });
+  res.json({
+    mac: dev.mac,
+    ip: dev.ip,
+    vlan: dev.vlan,
+    // Ce que l'interface a besoin de savoir pour composer une adresse valable.
+    segments: vlans.map((v: any) => ({
+      id: v.id, nom: v.name, sousReseau: v.subnet,
+      passerelle: v.gateway, plage: plageUtilisable(v.subnet),
+      pousseSurEquipement: !!v.networkId,
+    })),
+  });
+});
+
+router.post("/:id/reservation", async (req, res) => {
+  const dev = await prisma.device.findUnique({ where: { id: req.params.id } });
+  if (!dev) return res.status(404).json({ error: "Appareil introuvable" });
+  if (!dev.mac) {
+    return res.status(400).json({
+      error: "Aucune adresse MAC relevée pour cet appareil : une réservation se pose sur une carte réseau, pas sur une adresse.",
+    });
+  }
+
+  const retirer = req.body?.retirer === true;
+  const ip = String(req.body?.ip || "").trim();
+  const vlanId = req.body?.vlan == null || req.body?.vlan === "" ? null : Number(req.body.vlan);
+
+  let vlan: any = null;
+  if (!retirer) {
+    if (vlanId == null || !Number.isInteger(vlanId)) {
+      return res.status(400).json({ error: "Choisis le VLAN auquel l'adresse appartient." });
+    }
+    vlan = await prisma.vlan.findUnique({ where: { id: vlanId } });
+    if (!vlan) return res.status(400).json({ error: `VLAN ${vlanId} inconnu.` });
+
+    const v = verifierAdresse(ip, vlan.subnet, vlan.gateway);
+    if (!v.ok) return res.status(400).json({ error: v.raison });
+
+    // Deux machines sur la même adresse, c'est la panne garantie. On regarde
+    // avant, plutôt que de laisser le réseau la découvrir.
+    const occupant = await prisma.device.findFirst({
+      where: { ip, NOT: { id: dev.id } },
+      select: { id: true, ip: true, hostname: true, customName: true, mac: true },
+    });
+    if (occupant) {
+      return res.status(409).json({
+        error: `${ip} est déjà portée par ${occupant.customName || occupant.hostname || occupant.mac || occupant.ip}.`,
+      });
+    }
+  }
+
+  let adapter, ctx;
+  try { ({ adapter, ctx } = await mainRouter()); }
+  catch (e: any) { return res.status(400).json({ error: e?.message || "Aucun équipement principal." }); }
+
+  if (!adapter.reserver) {
+    return res.status(400).json({
+      error: `${adapter.label} ne sait pas poser de réservation depuis MapMyLAN. ` +
+             `Il faut la déclarer sur l'équipement lui-même.`,
+    });
+  }
+
+  let sortie: string;
+  try {
+    sortie = await adapter.reserver(ctx, {
+      mac: dev.mac,
+      ip: retirer ? undefined : ip,
+      networkId: vlan?.networkId || undefined,
+    });
+  } catch (e: any) {
+    return res.status(502).json({ error: e?.message || "L'équipement a refusé." });
+  }
+
+  // On note le VLAN voulu, jamais l'adresse : tant que l'appareil n'a pas
+  // repris de bail, il porte encore l'ancienne. L'écrire ici afficherait une
+  // adresse à laquelle personne ne répond.
+  if (!retirer && vlanId != null) {
+    await prisma.device.update({ where: { id: dev.id }, data: { vlan: vlanId } });
+  }
+  await prisma.deviceHistory.create({
+    data: {
+      deviceId: dev.id,
+      event: "note_added",
+      data: { reservation: retirer ? null : ip, vlan: vlanId, sortie },
+    },
+  }).catch(() => {});
+  await logEvent("info", "devices",
+    retirer ? `Réservation retirée pour ${dev.mac}` : `Adresse ${ip} réservée pour ${dev.mac}`);
+
+  res.json({
+    ok: true,
+    sortie,
+    ipActuelle: dev.ip,
+    ipReservee: retirer ? null : ip,
+    // Dire les choses : rien n'a encore bougé côté machine.
+    appliquee: retirer ? false : dev.ip === ip,
+    message: retirer
+      ? "Réservation retirée. L'appareil repassera en adresse dynamique à son prochain bail."
+      : dev.ip === ip
+        ? "L'appareil porte déjà cette adresse : elle est maintenant garantie."
+        : `Réservation posée. L'appareil porte encore ${dev.ip} et prendra ${ip} à son prochain bail — ` +
+          `« forcer la reprise de bail » l'y oblige tout de suite.`,
+  });
+});
+
+/** Coupe la session du client pour qu'il redemande un bail immédiatement. */
+router.post("/:id/relancer-bail", async (req, res) => {
+  const dev = await prisma.device.findUnique({ where: { id: req.params.id } });
+  if (!dev) return res.status(404).json({ error: "Appareil introuvable" });
+
+  let adapter, ctx;
+  try { ({ adapter, ctx } = await mainRouter()); }
+  catch (e: any) { return res.status(400).json({ error: e?.message || "Aucun équipement principal." }); }
+  if (!adapter.relancerBail) {
+    return res.status(400).json({ error: `${adapter.label} ne sait pas faire ça depuis MapMyLAN.` });
+  }
+  try {
+    const sortie = await adapter.relancerBail(ctx, { ip: dev.ip, mac: dev.mac || undefined });
+    await logEvent("warn", "devices", `Bail relancé pour ${dev.mac || dev.ip}`);
+    res.json({ ok: true, sortie, message: "Session coupée : l'appareil redemande un bail. Compte quelques secondes." });
+  } catch (e: any) {
+    res.status(502).json({ error: e?.message || "L'équipement a refusé." });
+  }
 });
 
 router.delete("/:id", async (req, res) => {
@@ -200,7 +342,7 @@ router.get("/grouping/suggestions", async (_req, res) => {
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
-// Manual cleanup of duplicate addresses.
+// Nettoyage manuel des doublons d'adresse.
 router.post("/dedupe", async (_req, res) => {
   try { res.json(await dedupeDevices()); }
   catch (err: any) { res.status(400).json({ error: err.message }); }

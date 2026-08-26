@@ -1,31 +1,31 @@
-// Optional extensions.
+// Extensions facultatives.
 //
-// MapMyLAN stays usable on its own. Some installations do, however, want to
-// graft extra behavior onto it — feeding a knowledge base, pushing to a metrics
-// warehouse, mirroring alerts to an internal system. Rather than maintaining
-// two versions of the code that would diverge over the course of fixes, the
-// application queries this hook: if an extension is present, it's called;
-// otherwise nothing happens.
+// MapMyLAN reste utilisable seul. Certaines installations veulent cependant lui
+// greffer un comportement supplémentaire — alimenter une base de connaissances,
+// pousser vers un entrepôt de métriques, doubler les alertes vers un système
+// interne. Plutôt que d'entretenir deux versions du code qui divergeraient au
+// fil des correctifs, l'application interroge ce point d'accroche : si une
+// extension est présente, elle est appelée ; sinon il ne se passe rien.
 //
-// An extension is a module dropped into `extensions/`. It isn't declared: its
-// mere presence is enough. Nothing to recompile, nothing to configure in the
-// core of the application.
+// Une extension est un module déposé dans `extensions/`. Elle n'est pas
+// déclarée : sa seule présence suffit. Rien à recompiler, rien à configurer
+// dans le cœur de l'application.
 
-/** What an extension can receive. All methods are optional. */
+/** Ce qu'une extension peut recevoir. Toutes les méthodes sont facultatives. */
 export interface Extension {
-  /** Name shown in the logs. */
+  /** Nom affiché dans les journaux. */
   nom?: string;
 
-  /** A device has just appeared, disappeared, or changed. */
+  /** Un appareil vient d'apparaître, de disparaître ou de changer. */
   surAppareil?(fait: string, donnees: Record<string, unknown>): void;
 
-  /** A scan is completing. */
+  /** Un balayage s'achève. */
   surBalayage?(resume: Record<string, unknown>): void;
 
-  /** An alert has been emitted, whatever channels were used. */
+  /** Une alerte a été émise, quels que soient les canaux employés. */
   surAlerte?(alerte: Record<string, unknown>): void;
 
-  /** Is the extension responding? Used for the status display, nothing else. */
+  /** L'extension répond-elle ? Sert à l'affichage d'état, à rien d'autre. */
   disponible?(): Promise<boolean>;
 }
 
@@ -33,11 +33,11 @@ const chargees: Extension[] = [];
 let initialise = false;
 
 /**
- * Loads the extensions that are present.
+ * Charge les extensions présentes.
  *
- * The absence of the folder is the normal case, not an anomaly: it therefore
- * produces no message. An extension that refuses to load, on the other hand, is
- * reported, without which one would search a long time for why it stays silent.
+ * L'absence du dossier est le cas normal, pas une anomalie : elle ne produit
+ * donc aucun message. Une extension qui refuse de se charger est en revanche
+ * signalée, sans quoi on chercherait longtemps pourquoi elle reste muette.
  */
 export function chargerExtensions(journal?: (n: string, m: string) => void): void {
   if (initialise) return;
@@ -54,28 +54,28 @@ export function chargerExtensions(journal?: (n: string, m: string) => void): voi
   try {
     fichiers = fs.readdirSync(dossier).filter(f => /\.(js|ts)$/.test(f) && !f.startsWith("_"));
   } catch {
-    return;                       // no extensions: the ordinary case
+    return;                       // pas d'extensions : le cas ordinaire
   }
 
   for (const f of fichiers) {
     try {
       const chemin = path.join(dossier, f);
-      // Loading a module means executing its code with all the backend's
-      // privileges (SSH credentials for the equipment, blocking actions). A
-      // file writable by the group or by everyone, or that we don't own, may
-      // have been replaced by a third party: we refuse to execute it rather
-      // than make it a silent entry point.
+      // Charger un module, c'est exécuter son code avec tous les privilèges du
+      // backend (identifiants SSH des équipements, actions de blocage). Un
+      // fichier inscriptible par le groupe ou par tous, ou qui ne nous
+      // appartient pas, a pu être remplacé par un tiers : on refuse de
+      // l'exécuter plutôt que d'en faire une porte d'entrée silencieuse.
       const st = fs.lstatSync(chemin);
       if (st.isSymbolicLink()) {
-        journal?.("warn", `Extension ${f} skipped: symbolic link refused`);
+        journal?.("warn", `Extension ${f} ignorée : lien symbolique refusé`);
         continue;
       }
       if ((st.mode & 0o022) !== 0) {
-        journal?.("warn", `Extension ${f} skipped: file writable by group or others (chmod 600/644)`);
+        journal?.("warn", `Extension ${f} ignorée : fichier inscriptible par le groupe ou tous (chmod 600/644)`);
         continue;
       }
       if (process.getuid && st.uid !== process.getuid()) {
-        journal?.("warn", `Extension ${f} skipped: unexpected owner`);
+        journal?.("warn", `Extension ${f} ignorée : propriétaire inattendu`);
         continue;
       }
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -83,19 +83,19 @@ export function chargerExtensions(journal?: (n: string, m: string) => void): voi
       const ext: Extension = m?.default || m;
       if (ext && typeof ext === "object") {
         chargees.push(ext);
-        journal?.("info", `Extension loaded: ${ext.nom || f}`);
+        journal?.("info", `Extension chargée : ${ext.nom || f}`);
       }
     } catch (e: any) {
-      journal?.("warn", `Extension ${f} skipped: ${e?.message || "could not load"}`);
+      journal?.("warn", `Extension ${f} ignorée : ${e?.message || "chargement impossible"}`);
     }
   }
 }
 
 /**
- * Calls a method on all the extensions.
+ * Appelle une méthode sur toutes les extensions.
  *
- * A faulty extension must not interrupt a scan: each call is isolated, and an
- * error stays within its extension.
+ * Une extension défaillante ne doit pas interrompre un balayage : chaque appel
+ * est isolé, et une erreur reste dans son extension.
  */
 function diffuser(methode: keyof Extension, ...args: unknown[]): void {
   for (const e of chargees) {
@@ -104,8 +104,8 @@ function diffuser(methode: keyof Extension, ...args: unknown[]): void {
     try {
       (fn as (...a: unknown[]) => void).apply(e, args);
     } catch {
-      // Silent: an extension that fails is its own problem, not that of the
-      // scan in progress.
+      // Silencieux : une extension qui échoue est son problème, pas celui du
+      // balayage en cours.
     }
   }
 }
@@ -114,7 +114,7 @@ export const extensions = {
   appareil: (fait: string, d: Record<string, unknown>) => diffuser("surAppareil", fait, d),
   balayage: (r: Record<string, unknown>) => diffuser("surBalayage", r),
   alerte: (a: Record<string, unknown>) => diffuser("surAlerte", a),
-  /** How many extensions are active. For the status display. */
+  /** Combien d'extensions sont actives. Pour l'affichage d'état. */
   nombre: () => chargees.length,
   noms: () => chargees.map((e, i) => e.nom || `extension ${i + 1}`),
 };

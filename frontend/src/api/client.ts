@@ -1,42 +1,15 @@
 // Relative URL — nginx proxies /api/ → backend:4000
 const BASE = "/api";
 
-// The session token now lives in an HttpOnly cookie set by the server:
-// it is never touched by JavaScript anymore, so an XSS can no longer steal it.
-// The browser sends it on its own (same origin). This module now only handles
-// the anti-CSRF token, which is not a secret.
-
-const MUTATIONS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-
-// CSRF token: remembered from the login response, with a fallback to the
-// readable `mapmylan_csrf` cookie (e.g. after a page reload).
-let csrfToken: string | null = null;
-export function setCsrfToken(t: string | null) { csrfToken = t; }
-
-function lireCookie(nom: string): string | null {
-  const m = document.cookie.match(new RegExp("(?:^|; )" + nom.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=([^;]*)"));
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
-function jetonCsrf(): string | null {
-  return csrfToken || lireCookie("mapmylan_csrf");
-}
+function getToken() { return localStorage.getItem("mapmylan_token"); }
+export function setToken(t: string | null) { t ? localStorage.setItem("mapmylan_token", t) : localStorage.removeItem("mapmylan_token"); }
 
 async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
-  const method = (options.method || "GET").toUpperCase();
+  const token = getToken();
   const headers: Record<string, string> = { "Content-Type": "application/json", ...(options.headers as any) };
-  if (MUTATIONS.has(method)) {
-    const c = jetonCsrf();
-    if (c) headers["X-CSRF-Token"] = c;
-  }
-  // `same-origin`: sends the session cookie to our own origin.
-  const res = await fetch(`${BASE}${path}`, { credentials: "same-origin", ...options, headers });
-  if (res.status === 401) {
-    // Session missing or expired. We notify the app (which will show the login
-    // screen) rather than reloading in a loop.
-    window.dispatchEvent(new CustomEvent("mapmylan:unauthorized"));
-    throw new Error("Unauthorized");
-  }
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  if (res.status === 401 && !path.startsWith("/auth/")) { setToken(null); location.reload(); throw new Error("Unauthorized"); }
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
@@ -46,10 +19,12 @@ async function request<T = any>(path: string, options: RequestInit = {}): Promis
 export const api = {
   // Auth
   login: (username: string, password: string) =>
-    request<{ user: any; setupComplete: boolean; csrfToken: string }>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
-  logout: () => request("/auth/logout", { method: "POST" }),
-  changePassword: (username: string, oldPassword: string, newPassword: string) =>
-    request<{ ok: boolean; csrfToken?: string }>("/auth/change-password", { method: "POST", body: JSON.stringify({ username, oldPassword, newPassword }) }),
+    request<{ token: string; user: any; setupComplete: boolean }>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  // L'identifiant n'est plus transmis : le serveur travaille sur le compte
+  // porteur du jeton, ce qui ferme l'oracle de devinette qu'exposait
+  // l'ancienne version non authentifiée.
+  changePassword: (oldPassword: string, newPassword: string) =>
+    request<any>("/auth/change-password", { method: "POST", body: JSON.stringify({ oldPassword, newPassword }) }),
 
   // Setup
   setupStatus: () => request<{ complete: boolean; mainRouter: any }>("/setup/status"),
@@ -61,6 +36,12 @@ export const api = {
   scan: (subnet?: string) => request("/devices/scan", { method: "POST", body: JSON.stringify({ subnet }) }),
   createManualDevice: (data: any) => request<any>("/devices/manual", { method: "POST", body: JSON.stringify(data) }),
   deleteDevice: (id: string) => request(`/devices/${id}`, { method: "DELETE" }),
+  // Réservation d'adresse : on ne réécrit pas la machine, on demande à la
+  // passerelle de toujours lui servir la même adresse.
+  deviceReservation: (id: string) => request<any>(`/devices/${id}/reservation`),
+  poserReservation: (id: string, corps: { vlan?: number | null; ip?: string; retirer?: boolean }) =>
+    request<any>(`/devices/${id}/reservation`, { method: "POST", body: JSON.stringify(corps) }),
+  relancerBail: (id: string) => request<any>(`/devices/${id}/relancer-bail`, { method: "POST" }),
   pingDevice: (id: string) => request<{ alive: boolean; latencyMs?: number }>(`/devices/${id}/ping`),
   scoreDevice: (id: string) => request(`/devices/${id}/score`, { method: "POST" }),
   deepScan: (id: string) => request(`/devices/${id}/deep-scan`, { method: "POST" }),
@@ -79,6 +60,8 @@ export const api = {
 
   // VLANs
   listVlans: () => request<any[]>("/vlans"),
+  // Sens lecture : on range ce que la passerelle déclare, on ne pousse rien.
+  releverVlans: () => request<any>("/vlans/relever", { method: "POST" }),
   createVlan: (data: any) => request<{ vlan: any; provision: any }>("/vlans", { method: "POST", body: JSON.stringify(data) }),
   updateVlan: (id: number, data: any) => request(`/vlans/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteVlan: (id: number, removeFromRouter = true) => request(`/vlans/${id}?removeFromRouter=${removeFromRouter}`, { method: "DELETE" }),
@@ -89,6 +72,75 @@ export const api = {
   testSsh: (data: any) => request<{ ok: boolean; error?: string; banner?: string }>("/ssh/test", { method: "POST", body: JSON.stringify(data) }),
   deleteSsh: (id: string) => request(`/ssh/${id}`, { method: "DELETE" }),
   execSsh: (id: string, command: string) => request<{ stdout: string; stderr: string; code: number | null }>(`/ssh/${id}/exec`, { method: "POST", body: JSON.stringify({ command }) }),
+
+  // Identification des destinations publiques auprès des registres (RDAP).
+  whois: (ips: string[]) => request<{ actif: boolean; fiches: {
+    ip: string; reseau?: string; organisation?: string; pays?: string; domaine?: string; registre?: string;
+  }[] }>("/net/whois", { method: "POST", body: JSON.stringify({ ips }) }),
+
+  // Historique du trafic, tenu par le serveur.
+  trafficState: () => request<any>("/traffic/state"),
+  trafficFlows: (o: { limite?: number; depuis?: number; avant?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (o.limite) q.set("limite", String(o.limite));
+    if (o.depuis) q.set("depuis", String(o.depuis));
+    if (o.avant)  q.set("avant", String(o.avant));
+    return request<any[]>(`/traffic/flows${q.toString() ? `?${q}` : ""}`);
+  },
+  trafficCollect: () => request<any>("/traffic/collect", { method: "POST" }),
+  trafficPurge:   () => request<any>("/traffic/purge", { method: "POST" }),
+  trafficClear:   () => request<any>("/traffic/flows", { method: "DELETE" }),
+
+  // Comptes.
+  // Second facteur.
+  mfaEtat: () => request<any>("/mfa/etat"),
+  mfaPasskeyOptions: () => request<any>("/mfa/passkey/options", { method: "POST", body: "{}" }),
+  mfaPasskeyEnregistrer: (reponse: any, label: string) =>
+    request<any>("/mfa/passkey", { method: "POST", body: JSON.stringify({ reponse, label }) }),
+  mfaPasskeySupprimer: (id: string) => request<any>(`/mfa/passkey/${id}`, { method: "DELETE" }),
+  // Telegram : on demande un code au chat annoncé, puis on le confirme. Rien
+  // n'est enregistré tant que le code n'est pas revenu.
+  mfaTelegramCode: (chatId: string) =>
+    request<any>("/mfa/telegram/code", { method: "POST", body: JSON.stringify({ chatId }) }),
+  mfaTelegramLier: (code: string) =>
+    request<any>("/mfa/telegram", { method: "POST", body: JSON.stringify({ code }) }),
+  mfaTelegramDelier: () => request<any>("/mfa/telegram", { method: "DELETE" }),
+  userMfa: (id: string) => request<any>(`/users/${id}/mfa`),
+  userMfaExiger: (id: string, valeur: boolean) =>
+    request<any>(`/users/${id}/mfa/exiger`, { method: "POST", body: JSON.stringify({ valeur }) }),
+  userMfaRevoquer: (id: string) => request<any>(`/users/${id}/mfa`, { method: "DELETE" }),
+
+  // Seconde étape de connexion.
+  deuxiemeApplication: (defi: string, code: string) =>
+    request<any>("/auth/2fa/application", { method: "POST", body: JSON.stringify({ defi, code }) }),
+  deuxiemeTrousseauOptions: (defi: string) =>
+    request<any>("/auth/2fa/trousseau/options", { method: "POST", body: JSON.stringify({ defi }) }),
+  deuxiemeTrousseau: (defi: string, reponse: any) =>
+    request<any>("/auth/2fa/trousseau", { method: "POST", body: JSON.stringify({ defi, reponse }) }),
+  deuxiemeTelegramEnvoyer: (defi: string) =>
+    request<any>("/auth/2fa/telegram/envoyer", { method: "POST", body: JSON.stringify({ defi }) }),
+  deuxiemeTelegram: (defi: string, code: string) =>
+    request<any>("/auth/2fa/telegram", { method: "POST", body: JSON.stringify({ defi, code }) }),
+
+  me: () => request<{
+    id: string; username: string; role: string;
+    mustChangePassword: boolean; totpEnabled: boolean;
+  }>("/auth/me"),
+
+  users: () => request<{
+    comptes: any[]; creationVerrouillee: boolean; roles: string[];
+  }>("/users"),
+  userCreate: (d: { username: string; password: string; role: string }) =>
+    request<any>("/users", { method: "POST", body: JSON.stringify(d) }),
+  userUpdate: (id: string, d: Record<string, any>) =>
+    request<any>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(d) }),
+  userPassword: (id: string, password: string) =>
+    request<any>(`/users/${id}/password`, { method: "POST", body: JSON.stringify({ password }) }),
+  userDelete: (id: string) => request<any>(`/users/${id}`, { method: "DELETE" }),
+  usersLockState: () => request<{ verrouille: boolean; peutVerrouiller: boolean }>("/users/creation/etat"),
+  usersLock: () => request<any>("/users/creation/lock", { method: "POST" }),
+  usersUnlock: (code: string) =>
+    request<any>("/users/creation/unlock", { method: "POST", body: JSON.stringify({ code }) }),
 
   // Topology
   getTopology: () => request<{ links: any[]; zones: any[] }>("/topology"),
@@ -141,7 +193,7 @@ export const api = {
   deleteBotCommand:  (id: string) => request(`/bot-commands/${id}`, { method: "DELETE" }),
   runBotCommand:     (id: string, args?: string[]) => request<{ reply: string }>(`/bot-commands/${id}/run`, { method: "POST", body: JSON.stringify({ args: args || [] }) }),
 
-  // Main network gear
+  // Équipement réseau principal
   routerAdapters: () => request<any[]>("/router/adapters"),
   getRouter:      () => request<any>("/router"),
   saveRouter:     (data: any) => request("/router", { method: "PUT", body: JSON.stringify(data) }),
@@ -154,5 +206,36 @@ export const api = {
   // Maintenance
   dedupeDevices:  () => request<{ groups: number; removed: number }>("/devices/dedupe", { method: "POST" }),
 
+  // Boites mail
+  mailProviders: () => request<any[]>("/mail/providers"),
+  mailboxes: () => request<any[]>("/mail/mailboxes"),
+  verifyMailbox: (cfg: any) => request<any>("/mail/verify", { method: "POST", body: JSON.stringify(cfg) }),
+  saveMailbox: (cfg: any) => request<any>("/mail/mailboxes", { method: "POST", body: JSON.stringify(cfg) }),
+  deleteMailbox: (id: string) => request<any>(`/mail/mailboxes/${id}`, { method: "DELETE" }),
+
+  // Premier lancement
+  needsSetup: () => request<{ needsSetup: boolean }>("/auth/needs-setup"),
+  bootstrap: (username: string, password: string) =>
+    request<any>("/auth/bootstrap", { method: "POST", body: JSON.stringify({ username, password }) }),
+
+  // Second facteur
+  totpStatus: () => request<{ totpEnabled: boolean; telegramReady: boolean }>("/auth/totp/status"),
+  totpSetup: () => request<{ secret: string; uri: string }>("/auth/totp/setup", { method: "POST" }),
+  totpEnable: (code: string) => request<any>("/auth/totp/enable", { method: "POST", body: JSON.stringify({ code }) }),
+  totpDisable: (password: string, code: string) =>
+    request<any>("/auth/totp/disable", { method: "POST", body: JSON.stringify({ password, code }) }),
+
+  // Réinitialisation du mot de passe
+  resetStart: (username: string) =>
+    request<{ ok: boolean; challengeId?: string; ttlMinutes: number }>("/auth/reset/start", { method: "POST", body: JSON.stringify({ username }) }),
+  resetVerify: (challengeId: string, totpCode: string, telegramCode: string) =>
+    request<{ resetToken: string }>("/auth/reset/verify", { method: "POST", body: JSON.stringify({ challengeId, totpCode, telegramCode }) }),
+  resetComplete: (resetToken: string, password: string) =>
+    request<any>("/auth/reset/complete", { method: "POST", body: JSON.stringify({ resetToken, password }) }),
+
+  scanRanges: () => request<any[]>("/devices/scan/ranges"),
+
   health: () => request<{ status: string }>("/health"),
 };
+
+export { getToken };

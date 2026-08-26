@@ -1,15 +1,21 @@
-// Regroupement des interfaces selon la convention d'adressage.
+// Regroupement des interfaces d'une même machine, pour les conventions
+// d'adressage où le numéro d'appareil est porté par le dernier octet.
 //
-// Convention (no VLANs, purely a personal naming scheme):
-//   PREFIX.C.N      → device N of category C, on ETHERNET
-//   PREFIX.(C*10).N → the SAME device N, on WIFI
+// Convention reconnue (sans VLAN, purement un plan de nommage) :
+//   PREFIXE.C.N      → appareil N de la catégorie C, sur ETHERNET
+//   PREFIXE.(C×MULT).N → le MÊME appareil N, sur WIFI
 //
-// e.g. with PREFIX=10.0, MULT=10:
-//   192.0.2.10  (docker #2, ethernet)  ↔  198.51.100.10 (docker #2, wifi)
-//   192.0.2.15  (pc #5, ethernet)      ↔  198.51.100.15 (pc #5, wifi)
+// Par exemple avec PREFIXE = « 203.0 » et MULT = 10 :
+//   203.0.2.2  (conteneur nº 2, ethernet)  ↔  203.0.20.2 (le même, en wifi)
+//   203.0.1.5  (poste nº 5, ethernet)      ↔  203.0.10.5 (le même, en wifi)
 //
-// The grouping key is (min(C, C/MULT), N). Two devices that resolve to the same
-// key are the same physical machine seen on two media.
+// La clé de regroupement est (min(C, C/MULT), N) : deux appareils qui tombent
+// sur la même clé sont la même machine vue sur deux médias.
+//
+// Le préfixe n'a **pas** de valeur par défaut : il dépend entièrement du plan
+// d'adressage de l'installation. Tant qu'il n'est pas renseigné — réglage
+// « grouping.prefix », ou variable GROUPING_PREFIX — le regroupement ne
+// propose rien, plutôt que de deviner.
 
 import { prisma } from "../db";
 
@@ -31,7 +37,7 @@ async function cfg(key: string, def: string): Promise<string> {
   return def;
 }
 
-// Parse "198.51.100.10" with prefix "10.0" → { category: 20, octet: 2 }
+// Lit « 203.0.20.2 » avec le préfixe « 203.0 » → { category: 20, octet: 2 }
 function parse(ip: string, prefix: string): { category: number; octet: number } | null {
   if (!ip || !ip.startsWith(prefix + ".")) return null;
   const rest = ip.slice(prefix.length + 1).split(".");
@@ -45,7 +51,9 @@ function parse(ip: string, prefix: string): { category: number; octet: number } 
 export async function computeGroupingSuggestions(): Promise<GroupSuggestion[]> {
   const enabled = (await cfg("grouping.enabled", "false")) === "true";
   if (!enabled) return [];
-  const prefix = await cfg("grouping.prefix", "10.0");
+  const prefix = await cfg("grouping.prefix", process.env.GROUPING_PREFIX || "");
+  // Sans préfixe, aucune convention à reconnaître : on ne propose rien.
+  if (!prefix) return [];
   const mult = parseInt(await cfg("grouping.wifiMultiplier", "10"), 10) || 10;
 
   const devices = await prisma.device.findMany({

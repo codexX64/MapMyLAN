@@ -3,24 +3,6 @@ import { Server as SocketServer } from "socket.io";
 import type { Server as HttpServer } from "http";
 import jwt from "jsonwebtoken";
 import { config } from "../config";
-import { prisma } from "../db";
-import { SESSION_COOKIE } from "../middleware/auth";
-
-// Parses the Cookie header of the handshake (the browser sends it on its own
-// under same origin — no need to pass the token through JS anymore).
-function jetonDepuisHandshake(socket: any): string | null {
-  const auth = socket.handshake?.auth?.token;
-  if (auth) return String(auth);
-  const brut: string = socket.handshake?.headers?.cookie || "";
-  for (const part of brut.split(";")) {
-    const i = part.indexOf("=");
-    if (i < 0) continue;
-    if (part.slice(0, i).trim() === SESSION_COOKIE) {
-      return decodeURIComponent(part.slice(i + 1).trim());
-    }
-  }
-  return null;
-}
 
 export const eventBus = new EventEmitter();
 eventBus.setMaxListeners(100);
@@ -38,21 +20,11 @@ export function attachSocketIO(httpServer: HttpServer) {
     path: "/ws",
   });
 
-  io.use(async (socket, next) => {
-    const token = jetonDepuisHandshake(socket);
+  io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
     if (!token) return next(new Error("No auth token"));
-    try {
-      const payload: any = jwt.verify(token, config.jwtSecret, { algorithms: ["HS256"] });
-      // Same requirement as over HTTP: a revoked token (password changed) must
-      // not keep a real-time stream open.
-      const user = await prisma.user.findUnique({
-        where: { id: payload.id }, select: { tokenVersion: true },
-      });
-      if (!user || (user.tokenVersion || 0) !== (payload.tv || 0)) {
-        return next(new Error("Invalid token"));
-      }
-      next();
-    } catch { next(new Error("Invalid token")); }
+    try { jwt.verify(token, config.jwtSecret); next(); }
+    catch { next(new Error("Invalid token")); }
   });
 
   io.on("connection", (socket) => {

@@ -3,12 +3,25 @@ import { z } from "zod";
 import { prisma } from "../db";
 import { authRequired } from "../middleware/auth";
 import { provisionVlanOnRouter, deprovisionVlanOnRouter } from "../services/vlanProvision";
+import { relever } from "../services/vlanReleve";
 
 const router = Router();
 router.use(authRequired);
 
 router.get("/", async (_req, res) => {
+  // Par numéro croissant : 1, 10, 20, 30. C'est l'ordre dans lequel on les
+  // pense, et `id` est un entier, donc le tri est bien numérique ici.
   res.json(await prisma.vlan.findMany({ orderBy: { id: "asc" } }));
+});
+
+/**
+ * Relève les VLAN déclarés sur l'équipement et les enregistre.
+ *
+ * Sens inverse du POST ci-dessous : ici, rien n'est poussé sur l'équipement.
+ * On lit sa configuration et on la range.
+ */
+router.post("/relever", async (_req, res) => {
+  res.json(await relever());
 });
 
 const vlanSchema = z.object({

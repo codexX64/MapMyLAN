@@ -1,45 +1,78 @@
-// Application shell.
+// Coquille applicative — les deux dispositions de la maquette.
 //
-// Icon navigation rail, inset search bar, light/dark toggle, language
-// selector, countdown card for the next sweep. The background carries a light
-// grain: the surface has a texture rather than a dead flat fill.
+// Un seul arbre, deux lectures :
+//
+//   « lecture » (reading)  rail large à gauche, barre de recherche, une page à
+//                          la fois, beaucoup d'air.
+//   « atelier » (workshop) barre supérieure, rail à pictos, explorateur en
+//                          arbre, dock d'état en bas, tout visible d'un coup.
+//
+// Ce qui distingue les deux n'est pas un composant mais l'attribut
+// data-shell posé sur <html> par lib/theme-runtime.ts : la feuille de la
+// maquette masque le rail large en atelier, et l'explorateur en lecture. On
+// évite ainsi deux arbres à maintenir en parallèle, et le contenu des pages
+// est rigoureusement le même d'une disposition à l'autre.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../../stores/app";
 import { THEMES, compatTheme, resolveTheme } from "../../lib/themes";
 import { Icon } from "../../lib/icons";
-import { useT, useLang, LANGS } from "../../lib/i18n";
+import { useT, useLang } from "../../lib/i18n";
+import { api } from "../../api/client";
 import { DeviceDrawer } from "../device/DeviceDrawer";
+import { ExplorerTree, Dock, WorkshopTop, WorkshopRail } from "./WorkshopShell";
 import {
-  Dashboard, MapPage, DevicesPage, VlansPage, SecurityPage,
-  VulnsPage, SshPage, HostPage, NotificationsPage, LogsPage,
+  Dashboard, MapPage, WorldPage, DevicesPage, VlansPage, SecurityPage,
+  VulnsPage, SshPage, HostPage, NotificationsPage, LogsPage, InventoryPage,
   ReportsPage, SettingsPage, UsersPage, BotCommandsPage, RouterPage,
 } from "../../pages";
+
+// ─── Navigation ────────────────────────────────────────────────────────────
+// L'ordre est celui de la maquette. Les groupes portent un nom : un rail de
+// quinze entrées sans intertitre ne se lit plus.
 
 const NAV = [
   { id: "dashboard",     icon: "overview", group: "main" },
   { id: "map",           icon: "map",      group: "main" },
+  { id: "world",         icon: "globe",    group: "main" },
   { id: "devices",       icon: "devices",  group: "main" },
   { id: "vlans",         icon: "vlan",     group: "main" },
   { id: "security",      icon: "shield",   group: "security" },
   { id: "vulns",         icon: "alert",    group: "security" },
   { id: "router",        icon: "router",   group: "control" },
-  { id: "ssh",           icon: "ssh",      group: "control" },
   { id: "botcommands",   icon: "bot",      group: "control" },
-  { id: "host",          icon: "chip",     group: "control" },
+  { id: "ssh",           icon: "ssh",      group: "control" },
+  { id: "host",          icon: "server",   group: "control" },
+  { id: "inventory",     icon: "switch",   group: "control" },
   { id: "notifications", icon: "bell",     group: "monitor" },
   { id: "logs",          icon: "logs",     group: "monitor" },
-  { id: "reports",       icon: "report",   group: "monitor" },
+  { id: "reports",       icon: "chart",    group: "monitor" },
   { id: "settings",      icon: "settings", group: "system" },
   { id: "users",         icon: "users",    group: "system" },
 ];
 
 const GROUPS = ["main", "security", "control", "monitor", "system"];
 
-function pageContent(page: string, t: any) {
+// Rail à pictos de l'atelier : un sous-ensemble, celui qu'on ouvre dix fois
+// par jour. Le reste passe par l'explorateur ou la recherche.
+const RAIL_ATELIER = [
+  { id: "dashboard", icon: "overview", court: "Aperçu" },
+  { id: "map",       icon: "map",      court: "Carte" },
+  { id: "world",     icon: "globe",    court: "Monde" },
+  { id: "devices",   icon: "devices",  court: "Parc" },
+  { id: "security",  icon: "shield",   court: "Défense" },
+  { id: "router",    icon: "router",   court: "Équip." },
+];
+const RAIL_ATELIER_BAS = [
+  { id: "logs",     icon: "logs",     court: "Journal" },
+  { id: "settings", icon: "settings", court: "Réglages" },
+];
+
+export function pageContent(page: string, t: any) {
   switch (page) {
     case "dashboard":     return <Dashboard t={t}/>;
     case "map":           return <MapPage t={t}/>;
+    case "world":         return <WorldPage t={t}/>;
     case "devices":       return <DevicesPage t={t}/>;
     case "vlans":         return <VlansPage t={t}/>;
     case "security":      return <SecurityPage t={t}/>;
@@ -48,6 +81,7 @@ function pageContent(page: string, t: any) {
     case "ssh":           return <SshPage t={t}/>;
     case "host":          return <HostPage t={t}/>;
     case "monitoring":    return <HostPage t={t}/>;
+    case "inventory":     return <InventoryPage t={t}/>;
     case "notifications": return <NotificationsPage t={t}/>;
     case "logs":          return <LogsPage t={t}/>;
     case "reports":       return <ReportsPage t={t}/>;
@@ -58,206 +92,261 @@ function pageContent(page: string, t: any) {
   }
 }
 
-const GRAIN =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E\")";
+// ─── Compte à rebours du prochain balayage ─────────────────────────────────
+// La période vient des réglages ; à défaut, cinq minutes, comme le serveur.
+// Le compteur repart à chaque fin de balayage plutôt qu'à intervalle fixe :
+// c'est la fin réelle qui fait foi, pas l'horloge de l'interface.
+
+function useProchainBalayage() {
+  const scanRunning = useStore(s => s.scanRunning);
+  const [periode, setPeriode] = useState(300);
+  const [reste, setReste] = useState(300);
+
+  useEffect(() => {
+    api.settings()
+      .then(r => {
+        const v = parseInt(String(r?.["scan.interval"] ?? 300), 10);
+        if (Number.isFinite(v) && v > 0) { setPeriode(v); setReste(v); }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { if (!scanRunning) setReste(periode); }, [scanRunning, periode]);
+
+  useEffect(() => {
+    const i = setInterval(() => setReste(v => (v <= 0 ? periode : v - 1)), 1000);
+    return () => clearInterval(i);
+  }, [periode]);
+
+  const mmss = `${Math.floor(reste / 60)}:${String(reste % 60).padStart(2, "0")}`;
+  const avancement = Math.max(0, Math.min(100, Math.round(100 - (reste / periode) * 100)));
+  return { mmss, avancement, minutes: Math.round(periode / 60), scanRunning };
+}
+
+// ─── Coquille ──────────────────────────────────────────────────────────────
 
 export function AppShell() {
   const themeKey = useStore(s => s.themeKey);
   const t = compatTheme(THEMES[resolveTheme(themeKey)]);
-  const { currentPage, setPage } = useStore();
+  const currentPage = useStore(s => s.currentPage);
+  const setPage = useStore(s => s.setPage);
+  const shell = useStore(s => s.shell);
+  const setShell = useStore(s => s.setShell);
   const s = useT();
 
   return (
     <>
-      <style>{`
-        body { background: ${t.bg}; color: ${t.txt}; font-family: ${t.font};
-               font-feature-settings: "tnum" 1; }
-        ::-webkit-scrollbar { width: 11px; height: 11px; }
-        ::-webkit-scrollbar-thumb { background: ${t.border}; border-radius: 20px;
-                                    border: 3.5px solid ${t.bg}; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        :focus-visible { outline: 2px solid ${t.primary}; outline-offset: 3px; border-radius: 4px; }
-        input::placeholder { color: ${t.faint}; }
-        @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
-      `}</style>
+      <div className="app">
+        <WorkshopTop/>
 
-      {/* grain: gives fabric to the background */}
-      <div aria-hidden style={{
-        position: "fixed", inset: 0, zIndex: 9999, pointerEvents: "none",
-        opacity: t.grain, backgroundImage: GRAIN,
-      }}/>
+        <div className="body">
+          <Rail active={currentPage} onNav={setPage}/>
+          <WorkshopRail items={RAIL_ATELIER} bas={RAIL_ATELIER_BAS} active={currentPage} onNav={setPage}/>
+          <ExplorerTree/>
 
-      <div style={{
-        width: "100vw", height: "100vh", display: "flex",
-        background: t.bg, color: t.txt, fontFamily: t.font, overflow: "hidden",
-      }}>
-        <Rail t={t} active={currentPage} onNav={setPage} s={s}/>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <TopBar t={t} s={s}/>
-          <div style={{ flex: 1, overflow: "auto" }}>
-            {pageContent(currentPage, t)}
+          <div className="main">
+            <TopBar/>
+            <div className="stage">{pageContent(currentPage, t)}</div>
+            <Dock/>
           </div>
         </div>
+
+        <StatusBar/>
       </div>
+
+      {/* Bascule entre les deux dispositions, toujours accessible. */}
+      <button className="swap" onClick={() => setShell(shell === "workshop" ? "reading" : "workshop")}>
+        <Icon name={shell === "workshop" ? "logs" : "overview"} size={14}/>
+        <span>{shell === "workshop" ? s("shell.toReading") : s("shell.toWorkshop")}</span>
+      </button>
+
       <DeviceDrawer theme={t}/>
     </>
   );
 }
 
-function Rail({ t, active, onNav, s }: any) {
-  const stats = useStore(st => st.stats);
-  const [left, setLeft] = useState(300);
-  useEffect(() => {
-    const i = setInterval(() => setLeft(v => (v <= 0 ? 300 : v - 1)), 1000);
-    return () => clearInterval(i);
-  }, []);
-  const mmss = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+// ─── Rail large, disposition lecture ───────────────────────────────────────
 
-  const counts: Record<string, number> = {
-    devices: stats?.total || 0,
-    vulns: stats?.alerts || 0,
-    security: (stats?.banned || 0) + (stats?.quarantined || 0),
-  };
+function Rail({ active, onNav }: { active: string; onNav: (p: string) => void }) {
+  const s = useT();
+  const devices = useStore(st => st.devices);
+  const vlans = useStore(st => st.vlans);
+  const alerts = useStore(st => st.alerts);
+  const { mmss, avancement, minutes, scanRunning } = useProchainBalayage();
+
+  const compteurs = useMemo<Record<string, number>>(() => {
+    const cves = devices.reduce((n: number, d: any) => n + (d.cves?.length || 0), 0);
+    return {
+      devices: devices.length,
+      vlans: vlans.length,
+      vulns: cves,
+      security: devices.filter((d: any) => d.status === "banned" || d.status === "quarantined").length,
+      notifications: alerts.filter((a: any) => !a.acknowledged).length,
+    };
+  }, [devices, vlans, alerts]);
 
   return (
-    <aside style={{
-      width: 224, flexShrink: 0, height: "100vh",
-      padding: "26px 16px 24px 22px",
-      display: "flex", flexDirection: "column", overflow: "hidden",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", marginBottom: 30 }}>
-        <span style={{
-          width: 28, height: 28, borderRadius: 9, background: t.grad, color: t.onPrimary,
-          display: "flex", alignItems: "center", justifyContent: "center", boxShadow: t.lift,
-        }}><Icon name="logo" size={16}/></span>
-        <b style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.03em" }}>MapMyLAN</b>
-        <span style={{
-          width: 6, height: 6, borderRadius: "50%", background: t.primary, marginLeft: "auto",
-          animation: "mml-ping 2.6s ease-out infinite",
-        }}/>
+    <aside className="rail">
+      <div className="mark">
+        {/* La marque de la maison, à la place de l'ancienne pastille dessinée.
+            Le fichier porte sa propre transparence : pas de fond, pas
+            d'arrondi, elle tient sur le clair comme sur le sombre. */}
+        <img className="marque" src="/logo.png" alt="MapMyLAN"/>
+        <b>MapMyLAN</b>
+        <span className="pulse"/>
       </div>
-      <style>{`@keyframes mml-ping {
-        0% { box-shadow: 0 0 0 0 ${t.primary}66 } 70% { box-shadow: 0 0 0 7px transparent }
-        100% { box-shadow: 0 0 0 0 transparent } }`}</style>
 
-      <nav style={{ flex: 1, overflowY: "auto", marginRight: -6, paddingRight: 6 }}>
-        {GROUPS.map(g => (
-          <div key={g} style={{ marginBottom: 20 }}>
-            <div style={{
-              fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase",
-              color: t.faint, padding: "0 10px", marginBottom: 7,
-            }}>{s(`nav.group.${g}`)}</div>
-            {NAV.filter(n => n.group === g).map(n => {
-              const on = active === n.id;
-              const c = counts[n.id];
-              return (
-                <button key={n.id} onClick={() => onNav(n.id)} style={{
-                  display: "flex", alignItems: "center", gap: 11, width: "100%",
-                  textAlign: "left", padding: "7px 10px", borderRadius: 9, border: "none",
-                  background: on ? t.surface : "transparent",
-                  boxShadow: on ? t.lift : "none",
-                  color: on ? t.txt : t.muted,
-                  fontWeight: on ? 500 : 400, fontSize: 13.5, fontFamily: t.font,
-                  cursor: "pointer", transition: "background .15s, color .15s",
-                }}>
-                  <span style={{ color: on ? t.primary : "inherit", display: "flex" }}>
-                    <Icon name={n.icon} size={16}/>
-                  </span>
-                  <span>{s(`nav.${n.id}`)}</span>
-                  {c ? (
-                    <span style={{
-                      marginLeft: "auto", fontFamily: t.monoFont, fontSize: 10.5,
-                      color: on ? t.muted : t.faint,
-                    }}>{c}</span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
-
-      <div style={{ background: t.surface, borderRadius: 12, padding: "13px 14px", boxShadow: t.lift }}>
-        <Row t={t} icon="clock" label={s("rail.next")} value={mmss}/>
-        <Row t={t} icon="refresh" label={s("rail.every")} value={s("rail.minutes", { n: 5 })}/>
-        <div style={{ height: 3, borderRadius: 3, background: t.well, marginTop: 12, overflow: "hidden" }}>
-          <div style={{
-            height: "100%", borderRadius: 3, background: t.primary,
-            width: `${Math.round(100 - left / 3)}%`, transition: "width 1s linear",
-          }}/>
+      {GROUPS.map(g => (
+        <div className="grp" key={g}>
+          <span>{s(`nav.group.${g}`)}</span>
+          {NAV.filter(n => n.group === g).map(n => {
+            const c = compteurs[n.id];
+            return (
+              <button key={n.id} className={active === n.id ? "nav on" : "nav"} onClick={() => onNav(n.id)}>
+                <Icon name={n.icon} size={16}/>
+                {s(`nav.${n.id}`)}
+                {c ? <span className="cnt">{c}</span> : null}
+              </button>
+            );
+          })}
         </div>
+      ))}
+
+      <div className="railcard">
+        <div className="row">
+          <Icon name="clock" size={13}/>{s("rail.next")}
+          <b>{scanRunning ? "…" : mmss}</b>
+        </div>
+        <div className="row">
+          <Icon name="refresh" size={13}/>{s("rail.every")}
+          <b>{s("rail.minutes", { n: minutes })}</b>
+        </div>
+        <div className="bar"><i style={{ width: `${scanRunning ? 100 : avancement}%` }}/></div>
       </div>
     </aside>
   );
 }
 
-function Row({ t, icon, label, value }: any) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12, color: t.muted, marginBottom: 9 }}>
-      <Icon name={icon} size={13} stroke={1.8}/>
-      {label}
-      <b style={{ marginLeft: "auto", fontFamily: t.monoFont, fontSize: 11.5, color: t.txtSoft, fontWeight: 400 }}>
-        {value}
-      </b>
-    </div>
-  );
-}
+// ─── Barre du haut, disposition lecture ────────────────────────────────────
 
-function TopBar({ t, s }: any) {
-  const { setTheme, logout } = useStore(st => ({ setTheme: st.setTheme, logout: st.logout }));
-  const themeKey = useStore(st => st.themeKey);
-  const isDark = resolveTheme(themeKey) === "dark";
+function TopBar() {
+  const s = useT();
   const [lang, setLangValue] = useLang();
+  const themeKey = useStore(st => st.themeKey);
+  const setTheme = useStore(st => st.setTheme);
+  const logout = useStore(st => st.logout);
+  const setPage = useStore(st => st.setPage);
+  const user = useStore(st => st.user);
+  const sombre = resolveTheme(themeKey) === "dark";
+
+  const initiales = String(user?.username || "?").slice(0, 2).toUpperCase();
 
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 12,
-      padding: "22px 32px 0", flexShrink: 0,
-    }}>
-      <label style={{
-        display: "flex", alignItems: "center", gap: 9, background: t.well,
-        borderRadius: 10, padding: "8px 13px", width: 280, color: t.faint, fontSize: 13,
-      }}>
-        <Icon name="search" size={13} stroke={1.8}/>
-        <input placeholder={s("top.search")} style={{
-          border: "none", background: "none", outline: "none", font: "inherit",
-          color: t.txt, width: "100%",
-        }}/>
-        <kbd style={{
-          fontFamily: t.monoFont, fontSize: 10, color: t.faint,
-          border: `1px solid ${t.border}`, borderRadius: 5, padding: "1px 5px",
-        }}>⌘K</kbd>
-      </label>
-
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-        <select value={lang} onChange={e => setLangValue(e.target.value)}
-          title={s("top.language")} aria-label={s("top.language")} style={{
-            ...ghost(t), width: "auto", padding: "0 8px", cursor: "pointer",
-            fontFamily: t.monoFont, fontSize: 11,
-          }}>
-          {LANGS.map(l => (
-            <option key={l.code} value={l.code}>{l.label}</option>
-          ))}
-        </select>
-        <button title={s("top.notifications")} style={ghost(t)}>
+    <div className="top">
+      <Recherche/>
+      <div className="topright">
+        <button className="ghost" title={s("top.language")}
+          style={{ width: "auto", padding: "0 11px", fontFamily: "var(--mono)", fontSize: 11 }}
+          onClick={() => setLangValue(lang === "fr" ? "en" : "fr")}>
+          {lang.toUpperCase()}
+        </button>
+        <button className="ghost" title={s("top.notifications")} onClick={() => setPage("notifications")}>
           <Icon name="bell" size={16}/>
         </button>
-        <button onClick={() => setTheme(isDark ? "light" : "dark")}
-          title={s("top.appearance")} style={ghost(t)}>
+        <button className="ghost" title={s("top.appearance")} onClick={() => setTheme(sombre ? "light" : "dark")}>
           <Icon name="mode" size={16}/>
         </button>
-        <button onClick={logout} title={s("top.logout")} style={ghost(t)}>
+        <button className="ghost" title={s("top.logout")} onClick={logout}>
           <Icon name="power" size={16}/>
         </button>
+        <div className="who">{initiales}</div>
       </div>
     </div>
   );
 }
 
-function ghost(t: any): any {
-  return {
-    width: 32, height: 32, borderRadius: 10, border: "none", background: "none",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    color: t.muted, cursor: "pointer", transition: "background .15s, color .15s",
-  };
+/**
+ * Recherche : filtre le parc et ouvre la fiche de l'appareil choisi.
+ * Elle ne remplace pas le tableau des appareils, elle évite d'y aller.
+ */
+function Recherche() {
+  const s = useT();
+  const devices = useStore(st => st.devices);
+  const selectDevice = useStore(st => st.selectDevice);
+  const [q, setQ] = useState("");
+
+  const trouves = useMemo(() => {
+    const r = q.trim().toLowerCase();
+    if (!r) return [];
+    return devices.filter((d: any) =>
+      [d.ip, d.mac, d.hostname, d.customName, d.vendor, d.type]
+        .filter(Boolean).some((v: any) => String(v).toLowerCase().includes(r))
+    ).slice(0, 7);
+  }, [devices, q]);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <label className="search">
+        <Icon name="search" size={13}/>
+        <input placeholder={s("top.search")} value={q} onChange={e => setQ(e.target.value)}/>
+        <kbd>⌘K</kbd>
+      </label>
+      {trouves.length > 0 && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", left: 0, width: 290, zIndex: 40,
+          background: "var(--surface)", borderRadius: 12, boxShadow: "var(--lift-hi)",
+          overflow: "hidden", padding: 4,
+        }}>
+          {trouves.map((d: any) => (
+            <button key={d.id} className="trow" style={{ height: 30 }}
+              onClick={() => { selectDevice(d.id); setQ(""); }}>
+              <span className="ic"><Icon name="devices" size={13}/></span>
+              <span className="nm2">{d.customName || d.hostname || d.ip}</span>
+              <span className="ipx2">{d.ip}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Barre d'état, disposition atelier ─────────────────────────────────────
+
+function StatusBar() {
+  const devices = useStore(st => st.devices);
+  const [lang] = useLang();
+  const [heure, setHeure] = useState("--:--");
+  const [plage, setPlage] = useState<string>("—");
+
+  useEffect(() => {
+    const tic = () => {
+      const d = new Date();
+      setHeure(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+    };
+    tic();
+    const i = setInterval(tic, 20000);
+    return () => clearInterval(i);
+  }, []);
+
+  useEffect(() => {
+    api.scanRanges()
+      .then(r => { if (Array.isArray(r) && r.length) setPlage(r[0]?.cidr || r[0]?.subnet || "—"); })
+      .catch(() => {});
+  }, []);
+
+  const enLigne = devices.filter((d: any) => d.status === "online").length;
+  const isoles = devices.filter((d: any) => d.status === "quarantined" || d.status === "banned").length;
+
+  return (
+    <div className="statusbar">
+      <span><i className="dot"/> {plage}</span>
+      <span>{enLigne} en ligne</span>
+      <span>{isoles} isolé{isoles > 1 ? "s" : ""}</span>
+      <div className="r">
+        <span>{lang.toUpperCase()}</span>
+        <span>{heure}</span>
+      </div>
+    </div>
+  );
 }

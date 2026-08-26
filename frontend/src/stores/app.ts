@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { api, setCsrfToken } from "../api/client";
-import { connectWS, disconnectWS } from "../api/ws";
+import { api } from "../api/client";
+import { connectWS } from "../api/ws";
 
 interface AppState {
   user: any | null;
@@ -20,13 +20,19 @@ interface AppState {
   // UI
   currentPage: string;
   themeKey: string;
+  shell: "reading" | "workshop";
+  needsSetup: boolean;
   selectedDeviceId: string | null;
 
   setPage: (p: string) => void;
   setTheme: (t: string) => void;
+  setShell: (k: "reading" | "workshop") => void;
+  clearMustChange: () => void;
+  bootstrap: (username: string, password: string) => Promise<void>;
   selectDevice: (id: string | null) => void;
 
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<any>;
+  ouvrirSession: (res: any) => Promise<void>;
   logout: () => void;
   loadInitialData: () => Promise<void>;
   setSetupComplete: (v: boolean) => void;
@@ -57,31 +63,44 @@ export const useStore = create<AppState>((set, get) => ({
 
   currentPage: "dashboard",
   themeKey: localStorage.getItem("mapmylan_theme") || "light",
+  // Disposition : « reading » aérée, une page à la fois ; « workshop » dense,
+  // tout visible en même temps. Mémorisée par navigateur.
+  shell: (localStorage.getItem("mapmylan_shell") as any) || "reading",
+  needsSetup: false,
   selectedDeviceId: null,
 
   setPage: (p) => set({ currentPage: p }),
   setTheme: (t) => { localStorage.setItem("mapmylan_theme", t); set({ themeKey: t }); },
+  setShell: (k) => { localStorage.setItem("mapmylan_shell", k); set({ shell: k }); },
+  clearMustChange: () => set(st => ({ user: { ...st.user, mustChangePassword: false } })),
   selectDevice: (id) => set({ selectedDeviceId: id }),
 
   setSetupComplete: (v) => set({ setupComplete: v }),
 
+  bootstrap: async (username, password) => {
+    const res = await api.bootstrap(username, password);
+    localStorage.setItem("mapmylan_token", res.token);
+    set({ user: res.user, setupComplete: res.setupComplete, needsSetup: false, authLoading: false });
+  },
+
   login: async (username, password) => {
-    const res = await api.login(username, password);
-    // The session token is in an HttpOnly cookie; here we only keep the
-    // anti-CSRF token (non-secret) for requests that mutate state.
-    setCsrfToken(res.csrfToken);
+    const res: any = await api.login(username, password);
+    // Le compte a un second facteur : pas de session encore, un défi à relever.
+    // On le rend à l'appelant plutôt que de le garder ici — c'est l'écran de
+    // connexion qui mène la seconde étape.
+    if (res?.etape === "second-facteur") return res;
+    await get().ouvrirSession(res);
+    return null;
+  },
+
+  /** Pose la session à partir d'une réponse de connexion complète. */
+  ouvrirSession: async (res: any) => {
+    localStorage.setItem("mapmylan_token", res.token);
     set({ user: res.user, setupComplete: res.setupComplete, authLoading: false });
     await get().loadInitialData();
   },
 
-  logout: () => {
-    // The server clears the cookie; we have nothing to remove from the browser ourselves.
-    api.logout().catch(() => {});
-    setCsrfToken(null);
-    disconnectWS();
-    set({ user: null });
-    location.reload();
-  },
+  logout: () => { localStorage.removeItem("mapmylan_token"); set({ user: null }); location.reload(); },
 
   loadInitialData: async () => {
     try {
@@ -117,26 +136,27 @@ export const useStore = create<AppState>((set, get) => ({
   triggerScan: async (subnet) => { set({ scanRunning: true }); await api.scan(subnet); },
 }));
 
-// An expired or missing session (401) cleanly returns to the login screen,
-// without reloading in a loop.
-if (typeof window !== "undefined") {
-  window.addEventListener("mapmylan:unauthorized", () => {
-    setCsrfToken(null);
-    disconnectWS();
-    useStore.setState({ user: null, authLoading: false });
+// Bootstrap if token present
+const token = localStorage.getItem("mapmylan_token");
+if (token) {
+  // Au rechargement, on redemande qui porte ce jeton. L'utilisateur factice
+  // d'avant n'avait ni identifiant, ni rôle, ni l'indicateur de mot de passe à
+  // changer : le changement imposé sautait au moindre rafraîchissement.
+  Promise.all([api.setupStatus(), api.me().catch(() => null)]).then(([status, moi]) => {
+    useStore.setState({
+      authLoading: false,
+      user: moi || { username: "(loading)" },
+      setupComplete: status.complete,
+    });
+    useStore.getState().loadInitialData();
+  }).catch(() => {
+    localStorage.removeItem("mapmylan_token");
+    useStore.setState({ authLoading: false });
   });
+} else {
+  // Aucun jeton : on demande au serveur s'il existe au moins un compte, sinon
+  // l'interface propose d'en créer un au lieu d'afficher une connexion vide.
+  api.needsSetup()
+    .then(r => useStore.setState({ needsSetup: r.needsSetup, authLoading: false }))
+    .catch(() => useStore.setState({ authLoading: false }));
 }
-
-// Bootstrap: the session cookie (if present) authenticates the probe. If it
-// succeeds, we are logged in; otherwise, we show the login. No more token read
-// from localStorage.
-api.setupStatus().then((status) => {
-  useStore.setState({
-    authLoading: false,
-    user: { username: "(loading)" },
-    setupComplete: status.complete,
-  });
-  useStore.getState().loadInitialData();
-}).catch(() => {
-  useStore.setState({ authLoading: false, user: null });
-});

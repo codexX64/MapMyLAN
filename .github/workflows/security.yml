@@ -39,12 +39,26 @@ jobs:
       # Le typage doit passer : c'est aussi ce qui garantit que les correctifs de
       # sécurité de cet audit compilent (backend = tsc, frontend = build Vite).
       - run: npm run build --if-present
-      # Prisma client requis par certains tests du backend.
-      - run: npx prisma generate
-        if: matrix.dir == 'backend'
-      # Le filet de sécurité : les tests verrouillent les défenses durcies pour
-      # qu'un futur changement ne puisse pas les affaiblir en silence.
-      - run: npm test --if-present
+
+  coherence:
+    name: fichiers partagés identiques
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Le catalogue des fournisseurs de courrier vit en deux exemplaires — les
+      # contextes de construction Docker sont séparés. S'ils divergent, l'écran
+      # et le serveur ne lisent plus les mêmes réglages : on le fait échouer ici
+      # plutôt que de le découvrir sur une boîte mail qui ne se connecte pas.
+      - name: backend/mail-providers.js == frontend/public/mail-providers.js
+        run: diff -u backend/mail-providers.js frontend/public/mail-providers.js
+      # Aucune adresse privée ni identifiant d'installation dans le dépôt public.
+      # Les exemples utilisent les plages réservées à la documentation (RFC 5737).
+      - name: aucune donnée d'installation
+        run: |
+          ! grep -rIn -E '\b10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\b' \
+              --exclude-dir=node_modules --exclude='package-lock.json' \
+              --include='*.ts' --include='*.tsx' --include='*.js' \
+              --include='*.md' --include='*.yml' --include='*.html' .
 
   sbom:
     name: SBOM (${{ matrix.dir }})

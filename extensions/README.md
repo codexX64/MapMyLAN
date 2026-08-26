@@ -1,13 +1,13 @@
 # Extensions
 
-This folder is empty, and that is normal.
+Ce dossier est vide, et c'est normal.
 
-An extension dropped here is loaded at startup with no further declaration. Its
-absence is not a fault: MapMyLAN works on its own.
+Une extension déposée ici est chargée au démarrage sans autre déclaration. Son
+absence n'est pas une anomalie : MapMyLAN fonctionne seul.
 
-## Writing an extension
+## Écrire une extension
 
-A file exporting an object. All methods are optional.
+Un fichier exportant un objet. Toutes les méthodes sont facultatives.
 
 ```js
 module.exports = {
@@ -22,16 +22,17 @@ module.exports = {
   },
 
   surAlerte(alerte) {
-    // the built ticket, whatever channels were used
+    // le ticket construit, quels que soient les canaux employés
   },
 };
 ```
 
-An extension that throws an exception is skipped for that call: it never
-interrupts a scan. An extension that refuses to load is reported in the log.
+Une extension qui lève une exception est ignorée pour cet appel : elle
+n'interrompt jamais un balayage. Une extension qui refuse de se charger est
+signalée dans le journal.
 
-## Why this mechanism
+## Pourquoi ce mécanisme
 
-It makes it possible to add behavior specific to an installation without forking
-the project. Without it, you would have to maintain two versions of the code that
-would diverge over the course of fixes.
+Il permet d'ajouter un comportement propre à une installation sans forker le
+projet. Sans lui, il faudrait entretenir deux versions du code qui divergeraient
+au fil des correctifs.

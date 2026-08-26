@@ -1,9 +1,9 @@
-// Device icon on the map.
+// Icône d'appareil sur la carte.
 //
-// We reuse the app's single icon set (lib/icons) instead of maintaining a
-// second set of shapes here: this way the camera, the NAS, the Pi or the
-// printer have the same drawing everywhere, and any new type added to the
-// classifier is covered automatically.
+// On réutilise le jeu de pictos unique de l'app (lib/icons) au lieu de
+// maintenir un deuxième jeu de formes ici : ainsi la caméra, le NAS, le Pi ou
+// l'imprimante ont le même dessin partout, et tout nouveau type ajouté au
+// classifieur est couvert automatiquement.
 
 import { CSSProperties } from "react";
 import { Icon, deviceIcon } from "../../lib/icons";

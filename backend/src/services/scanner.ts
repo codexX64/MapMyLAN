@@ -8,45 +8,30 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { prisma } from "../db";
 import { config } from "../config";
-import { nettoyerNom, nettoyerTexte, estIP, estMAC, estCIDR } from "./valider";
+import { adressesDePasserelle, purgerPasserelles } from "./vlanReleve";
 import { logEvent } from "./logger";
 import { eventBus } from "../ws/realtime";
 import { lookupMacExtended } from "../lib/oui";
 
 const execAsync = promisify(exec);
 
-// ── Anti-injection guard ────────────────────────────────────────────────────
-//
-// Scan commands are built by string interpolation and then executed by a shell
-// (`exec`). An address or a range isn't typed into a form: it may come from a
-// device created by hand, or from a value advertised on the network. An `ip`
-// equal to `1.2.3.4; rm -rf /` would allow arbitrary command execution on the
-// server host.
-//
-// We refuse by format: an IP must be an IP, a range must be a range. Nothing
-// else reaches the shell. An SNMP community name is reduced to a safe
-// character set.
-function ipSur(ip: unknown): string {
-  if (!estIP(ip)) throw new Error(`IP address refused (scan): ${JSON.stringify(String(ip)).slice(0, 60)}`);
-  return ip as string;
-}
-
-function plageSure(subnet: unknown): string {
-  if (typeof subnet === "string" && (estCIDR(subnet) || estIP(subnet))) return subnet;
-  throw new Error(`Range refused (scan): ${JSON.stringify(String(subnet)).slice(0, 60)}`);
-}
-
-function communauteSure(c: unknown): string {
-  const s = String(c ?? "public");
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(s)) throw new Error("SNMP community refused");
-  return s;
-}
-
 async function run(cmd: string, timeoutMs = 120_000): Promise<string> {
   try {
-    const { stdout } = await execAsync(cmd, { timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 });
+    // killSignal explicite : par defaut Node envoie SIGTERM, qu'arp-scan
+    // ignore pendant un balayage. Le processus survivait au delai depasse et
+    // continuait a consommer de la memoire indefiniment.
+    const { stdout } = await execAsync(cmd, {
+      timeout: timeoutMs,
+      killSignal: "SIGKILL",
+      maxBuffer: 32 * 1024 * 1024,
+    });
     return stdout;
   } catch (err: any) {
+    if (err?.killed || err?.signal === "SIGKILL") {
+      const e: any = new Error(`delai depasse apres ${Math.round(timeoutMs / 1000)}s`);
+      e.timedOut = true;
+      throw e;
+    }
     // some tools exit nonzero but print useful output
     if (err.stdout) return err.stdout;
     throw err;
@@ -65,17 +50,17 @@ export interface ScannedHost {
   mdnsName?: string;
   mdnsServices?: string[];
   ports: { port: number; protocol: string; state: string; service?: string; product?: string; version?: string }[];
-  /** Other MACs seen for the same IP (multi-NIC machine, bridge) — informational. */
+  /** Autres MAC vues pour la même IP (machine multi-cartes, pont) — informatif. */
   altMacs?: string[];
 }
 
-// ─── Layer 2 discovery ───────────────────────────────────────────────────────
+// ─── Découverte couche 2 ─────────────────────────────────────────────────────
 //
-// arp-scan failed systematically: without an explicit interface, --localnet
-// doesn't know which one to pick on a host that carries a dozen Docker bridges.
-// So we derive the interface that actually owns the targeted subnet, and we
-// provide two fallbacks: the kernel's neighbor table, then the ARP table of the
-// network equipment itself, which sees the silent devices we miss.
+// arp-scan échouait systématiquement : sans interface explicite, --localnet ne
+// sait pas laquelle choisir sur un hôte qui porte une douzaine de ponts Docker.
+// On déduit donc l'interface qui possède réellement le sous-réseau visé, et on
+// prévoit deux replis : la table de voisinage du noyau, puis la table ARP de
+// l'équipement réseau lui-même, qui voit les appareils muets que nous ratons.
 
 let cachedIface: string | null = null;
 
@@ -91,12 +76,12 @@ async function ifaceForSubnet(subnet: string): Promise<string | null> {
         return cachedIface;
       }
     }
-  } catch { /* we'll try without an interface */ }
+  } catch { /* on tentera sans interface */ }
   return null;
 }
 
-// Tests whether an IP belongs to the CIDR subnet. A three-octet filter
-// ("10.0.2.") missed any /22 or /19 that spilled over the third octet.
+// Teste si une IP appartient au sous-réseau CIDR. Un filtre à trois octets
+// (« 198.51.100. ») ratait tout /22 ou /19 qui débordait du troisième octet.
 function ipInSubnet(ip: string, subnet: string): boolean {
   const [net, bitsStr] = subnet.split("/");
   const bits = Number(bitsStr) || 24;
@@ -106,11 +91,11 @@ function ipInSubnet(ip: string, subnet: string): boolean {
 }
 
 function parseArpScan(out: string): ScannedHost[] {
-  // An IP that answers with several MACs ("DUP: n" lines) is NOT several
-  // devices: it's a multi-NIC machine, or a bridge echoing back. So we group by
-  // IP and keep only one entry. The MAC we retain is preferentially the one
-  // whose vendor is identified — more telling than an unknown OUI — and
-  // otherwise the first one seen.
+  // Une IP qui répond avec plusieurs MAC (lignes « DUP: n ») n'est PAS plusieurs
+  // appareils : c'est une machine à plusieurs cartes, ou un pont qui renvoie
+  // l'écho. On regroupe donc par IP et on ne garde qu'une entrée. La MAC
+  // retenue est celle dont le fabricant est identifié en priorité — plus
+  // parlante qu'une OUI inconnue — et à défaut la première vue.
   const byIp = new Map<string, { mac: string; vendor?: string; alt: string[] }>();
 
   for (const line of out.split("\n")) {
@@ -118,7 +103,7 @@ function parseArpScan(out: string): ScannedHost[] {
     if (!m) continue;
     const ip = m[1];
     const mac = m[2].toUpperCase();
-    // Strip the "(DUP: n)" label that arp-scan sticks after the vendor.
+    // On retire l'étiquette « (DUP: n) » que arp-scan colle après le fabricant.
     const vendorRaw = (m[3] || "").replace(/\s*\(DUP:\s*\d+\)\s*$/i, "").trim();
     const vendor = vendorRaw && !/^\(unknown\)$/i.test(vendorRaw) ? vendorRaw : undefined;
 
@@ -127,22 +112,22 @@ function parseArpScan(out: string): ScannedHost[] {
       byIp.set(ip, { mac, vendor, alt: [] });
     } else {
       cur.alt.push(mac);
-      // Replace the retained MAC only if the new one has a known vendor where
-      // the current one didn't.
+      // On remplace la MAC retenue seulement si la nouvelle a un fabricant
+      // connu là où l'actuelle n'en avait pas.
       if (vendor && !cur.vendor) { cur.mac = mac; cur.vendor = vendor; }
     }
   }
 
   return [...byIp.entries()].map(([ip, e]) => ({
     ip, mac: e.mac, vendor: e.vendor, ports: [],
-    // The other MACs for the same IP are kept for information: they are
-    // secondary NICs of the same device, not separate machines.
+    // Les autres MAC de la même IP sont conservées pour information : ce sont
+    // des cartes secondaires du même appareil, pas des machines à part.
     altMacs: e.alt.length ? [...new Set(e.alt)] : undefined,
   }));
 }
 
-// Kernel neighbor table: doesn't trigger discovery but returns everything the
-// host has learned recently.
+// Table de voisinage du noyau : ne provoque pas de découverte mais restitue
+// tout ce que l'hôte a appris récemment.
 async function neighbourTable(subnet: string): Promise<ScannedHost[]> {
   try {
     const out = await run("ip neigh show", 8_000);
@@ -155,7 +140,7 @@ async function neighbourTable(subnet: string): Promise<ScannedHost[]> {
   } catch { return []; }
 }
 
-// Last resort: ask the network equipment what it sees.
+// Dernier recours : demander à l'équipement réseau ce qu'il voit.
 async function routerArpTable(): Promise<ScannedHost[]> {
   try {
     const { mainRouter } = await import("../adapters");
@@ -168,8 +153,182 @@ async function routerArpTable(): Promise<ScannedHost[]> {
   } catch { return []; }
 }
 
+
+// L'équipement réseau connu est une source de découverte à part entière, au
+// même titre que le balayage : il connaît des appareils que le scan ne verra
+// jamais — endormis, filtrants, ou sur un segment qu'on ne balaie pas — et il
+// est le seul à savoir sur quel port physique et derrière quelle borne chacun
+// se trouve. On l'interroge donc en parallèle du scan, pas en dernier recours.
+export interface TopologieVue {
+  swPort?: number;
+  swMac?: string;
+  apMac?: string;
+  essid?: string;
+  radio?: string;
+  rssi?: number;
+  medium?: "wired" | "wireless";
+  blocked?: boolean;
+  // ── Équipements d'infrastructure rapportés par le contrôleur ──
+  /** Rôle déclaré par le constructeur : router, switch ou ap. */
+  infraKind?: "router" | "switch" | "ap";
+  /** MAC de l'équipement amont, telle que le contrôleur la rapporte. */
+  uplinkMac?: string;
+  uplinkPort?: number;
+  uplinkMedium?: "wired" | "wireless";
+  /** Vrai pour un équipement du constructeur, pas un client. */
+  infra?: boolean;
+  /** Vrai pour la box de l'opérateur, vue depuis le WAN de la passerelle. */
+  operateur?: boolean;
+  /** MAC de la passerelle dont cette adresse est une interface de VLAN. */
+  passerelleDe?: string;
+  vlanDeclare?: number;
+  nomReseau?: string;
+  /** Adresse WAN d'une passerelle — informative, jamais son adresse LAN. */
+  wanIp?: string;
+  modele?: string;
+}
+
+async function equipementClients(): Promise<{ hotes: ScannedHost[]; vues: Map<string, TopologieVue>; infra: number }> {
+  const vues = new Map<string, TopologieVue>();
+  let infra = 0;
+  try {
+    const { mainRouter } = await import("../adapters");
+    const { adapter, ctx } = await mainRouter();
+    if (!adapter.clients) return { hotes: [], vues, infra };
+
+    const clients = await adapter.clients(ctx);
+    const hotes: ScannedHost[] = [];
+
+    // L'infrastructure du constructeur d'abord : la passerelle, les
+    // commutateurs et les bornes ne sont pas des clients et n'apparaissent
+    // nulle part ailleurs. Sans eux, la carte n'a pas de colonne vertébrale.
+    if (adapter.infrastructure) {
+      try {
+        const equipements = await adapter.infrastructure(ctx);
+        for (const e of equipements) {
+          if (!e.ip) continue;
+          hotes.push({
+            ip: e.ip, mac: e.mac,
+            hostname: e.name, vendor: "Ubiquiti", ports: [],
+          });
+          vues.set(e.ip, {
+            infra: true, infraKind: e.kind, modele: e.model,
+            uplinkMac: e.uplinkMac, uplinkPort: e.uplinkPort,
+            uplinkMedium: e.uplinkMedium, wanIp: e.wanIp,
+            medium: e.uplinkMedium,
+          });
+          infra++;
+          // La box de l'opérateur est en amont de la passerelle. Le contrôleur
+          // en donne l'adresse ; on la recense pour que la liaison montante
+          // existe sur la carte au lieu de s'arrêter à la passerelle.
+          const box = e.wanGateway;
+          if (box && /^\d{1,3}(\.\d{1,3}){3}$/.test(box) && !vues.has(box)) {
+            hotes.push({ ip: box, ports: [] });
+            vues.set(box, { operateur: true, infraKind: "router", medium: "wired" });
+          }
+        }
+
+        // Les adresses que la passerelle porte sur chaque VLAN.
+        //
+        // Elles étaient inscrites à l'inventaire comme des appareils à part
+        // entière, rattachés à la passerelle. C'était déjà mieux que de les
+        // laisser pendre au premier voisin venu, mais ça restait faux : ce ne
+        // sont pas des machines, c'est le même boîtier vu depuis chaque
+        // segment. Un routeur ne doit pas figurer quatre fois parce qu'il y a
+        // quatre réseaux. On les lit — la carte a besoin de savoir que ces
+        // adresses lui appartiennent — et on ne crée aucune fiche.
+        if (adapter.networks) {
+          const passerelle = equipements.find((e) => e.kind === "router");
+          const reseaux = await adapter.networks(ctx).catch(() => []);
+          for (const r of reseaux) {
+            if (!r.passerelle) continue;
+            const dejaLa = vues.get(r.passerelle);
+            if (dejaLa?.infra) continue;          // c'est la fiche de l'équipement
+            vues.set(r.passerelle, {
+              ...(dejaLa || {}),
+              passerelleDe: passerelle?.mac,
+              vlanDeclare: r.vlan, nomReseau: r.nom,
+              infraKind: "router", medium: "wired",
+            });
+          }
+        }
+      } catch {
+        // Adaptateur muet sur ce point : on continue avec les seuls clients.
+      }
+    }
+
+    for (const c of clients) {
+      if (!c.ip) continue;
+      const mac = c.mac ? c.mac.toUpperCase() : undefined;
+      hotes.push({
+        ip: c.ip, mac, hostname: c.hostname, vendor: c.vendor, ports: [],
+      });
+      vues.set(c.ip, {
+        swPort: c.swPort, swMac: c.swMac ? c.swMac.toUpperCase() : undefined,
+        apMac: c.apMac ? c.apMac.toUpperCase() : undefined,
+        essid: c.essid, radio: c.radio, rssi: c.rssi,
+        medium: c.medium, blocked: c.blocked,
+      });
+    }
+    return { hotes, vues, infra };
+  } catch {
+    // Aucun équipement connecté, ou API muette : le scan se suffit à lui-même.
+    return { hotes: [], vues, infra: 0 };
+  }
+}
+
+
+// ── Plages balayées ─────────────────────────────────────────────────────────
+// Un seul sous-réseau ne suffit pas dès que le réseau s'étale : le DHCP peut
+// distribuer sur une plage, l'infrastructure vivre sur une autre, et un
+// équipement resté sur son adressage d'usine sur une troisième. On tient donc
+// une liste, balayée l'une après l'autre pour ménager le réseau.
+
+export interface PlageScan {
+  cidr: string;
+  label?: string;
+  enabled?: boolean;
+}
+
+/** Les plages configurées, ou à défaut le sous-réseau historique du .env. */
+export async function plagesActives(): Promise<PlageScan[]> {
+  try {
+    const reglage = await prisma.setting.findUnique({ where: { key: "scan.ranges" } });
+    const brut = reglage?.value as any;
+    if (Array.isArray(brut) && brut.length) {
+      const retenues = brut
+        .filter((p: any) => p && typeof p.cidr === "string" && p.enabled !== false)
+        .map((p: any) => ({ cidr: p.cidr.trim(), label: p.label, enabled: true }))
+        .filter((p: PlageScan) => /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(p.cidr));
+      if (retenues.length) return retenues;
+    }
+  } catch { /* base indisponible : on retombe sur le .env */ }
+  return [{ cidr: config.scan.subnet, label: "Par défaut", enabled: true }];
+}
+
+/** Nombre de bits du prefixe, 24 par defaut si la notation est absente. */
+function prefixLength(subnet: string): number {
+  const p = parseInt(subnet.split("/")[1] || "24", 10);
+  return Number.isFinite(p) ? p : 24;
+}
+
 export async function arpScan(subnet: string = config.scan.subnet): Promise<ScannedHost[]> {
-  subnet = plageSure(subnet);
+  // Au-dela d'un /22, un balayage ARP emet des dizaines de milliers de trames
+  // et met des heures. Les tables de voisinage donnent le meme resultat utile
+  // — tout ce qui a communique recemment — sans emettre un seul paquet.
+  const prefix = prefixLength(subnet);
+  if (prefix < 22) {
+    await logEvent(
+      "warn",
+      "scanner",
+      `${subnet} est trop large pour un balayage ARP (/${prefix}). ` +
+        "Lecture des tables de voisinage a la place.",
+    );
+    const neigh = await neighbourTable(subnet);
+    if (neigh.length) return neigh;
+    return await routerArpTable();
+  }
+
   const iface = await ifaceForSubnet(subnet);
   const attempts = [
     iface ? `arp-scan -I ${iface} -q ${subnet}` : null,
@@ -184,28 +343,37 @@ export async function arpScan(subnet: string = config.scan.subnet): Promise<Scan
         if (cmd !== attempts[0]) await logEvent("info", "scanner", `arp-scan via repli : ${cmd}`);
         return hosts;
       }
-    } catch { /* try the next variant */ }
+    } catch (e: any) {
+      // Un depassement de delai signale une cible trop large, pas une commande
+      // invalide : reessayer une autre variante ne ferait qu'empiler les
+      // processus sur la meme plage impossible.
+      if (e?.timedOut) break;
+    }
   }
 
   const neigh = await neighbourTable(subnet);
   if (neigh.length) {
-    await logEvent("info", "scanner", `arp-scan unavailable, ${neigh.length} neighbors read from the kernel`);
+    await logEvent("info", "scanner", `arp-scan indisponible, ${neigh.length} voisins lus dans le noyau`);
     return neigh;
   }
 
   const fromRouter = await routerArpTable();
   if (fromRouter.length) {
-    await logEvent("info", "scanner", `arp-scan unavailable, ${fromRouter.length} entries read from the router`);
+    await logEvent("info", "scanner", `arp-scan indisponible, ${fromRouter.length} entrées lues sur le routeur`);
     return fromRouter;
   }
 
-  await logEvent("warn", "scanner", "No layer 2 discovery: neither arp-scan, nor kernel neighbors, nor router");
+  await logEvent("warn", "scanner", "Aucune découverte couche 2 : ni arp-scan, ni voisinage noyau, ni routeur");
   return [];
 }
 
 // ─── nmap ping sweep ─────────────────────────────────────────────────────────
 export async function nmapPingSweep(subnet: string = config.scan.subnet): Promise<ScannedHost[]> {
-  subnet = plageSure(subnet);
+  // Meme borne que pour l'ARP : un /8 represente 16 millions d'hotes.
+  if (prefixLength(subnet) < 22) {
+    await logEvent("warn", "scanner", `${subnet} trop large pour un ping sweep, ignore.`);
+    return [];
+  }
   const cmd = `nmap -sn -n -PE -PA80,443 -PS22,80,443 -T4 --max-retries 1 ${subnet} -oG -`;
   try {
     const out = await run(cmd, 60_000);
@@ -223,7 +391,6 @@ export async function nmapPingSweep(subnet: string = config.scan.subnet): Promis
 
 // ─── nmap deep scan: ports, service, OS guess ────────────────────────────────
 export async function nmapDeepScan(ip: string): Promise<ScannedHost> {
-  ip = ipSur(ip);
   const cmd = `nmap -F -sV -O --osscan-guess -T4 --max-retries 2 --host-timeout 60s -n ${ip}`;
   const out = await run(cmd, 90_000);
   const host: ScannedHost = { ip, ports: [] };
@@ -276,7 +443,6 @@ export async function mdnsBrowse(): Promise<Record<string, { name?: string; serv
 // ─── NetBIOS — Windows machine names ────────────────────────────────────────
 export async function netbiosLookup(ip: string): Promise<string | null> {
   try {
-    ip = ipSur(ip);
     const out = await run(`nmblookup -A ${ip} 2>/dev/null || true`, 6_000);
     // Look for the NetBIOS name (00) <ACTIVE>
     const m = out.match(/(\S+)\s+<00>\s+-\s+\S?\s*<ACTIVE>/);
@@ -287,8 +453,6 @@ export async function netbiosLookup(ip: string): Promise<string | null> {
 // ─── SNMP sysDescr ──────────────────────────────────────────────────────────
 export async function snmpProbe(ip: string, community = "public"): Promise<{ sysDescr?: string; sysName?: string }> {
   try {
-    ip = ipSur(ip);
-    community = communauteSure(community);
     const out = await run(`snmpget -v 2c -c ${community} -t 2 -r 0 ${ip} 1.3.6.1.2.1.1.1.0 1.3.6.1.2.1.1.5.0 2>/dev/null || true`, 5_000);
     const sysDescr = out.match(/SNMPv2-MIB::sysDescr\.0 = STRING:\s+(.+)/)?.[1]?.trim();
     const sysName = out.match(/SNMPv2-MIB::sysName\.0 = STRING:\s+(.+)/)?.[1]?.trim();
@@ -298,8 +462,8 @@ export async function snmpProbe(ip: string, community = "public"): Promise<{ sys
 
 // ─── Heuristic device-type classifier ───────────────────────────────────────
 
-// The system's default gateway address. Used to recognize the router even when
-// no device has yet been marked as such in the database.
+// Adresse de la passerelle par défaut du système. Sert à reconnaître le
+// routeur même quand aucun appareil n'a encore été marqué comme tel en base.
 let cachedGateway: string | null | undefined;
 async function defaultGateway(): Promise<string | null> {
   if (cachedGateway !== undefined) return cachedGateway;
@@ -345,7 +509,7 @@ function mergeHost(base: ScannedHost, deep?: ScannedHost, mdns?: { name?: string
 }
 
 // ─── Persist to DB ──────────────────────────────────────────────────────────
-async function persistHost(h: ScannedHost): Promise<string | null> {
+async function persistHost(h: ScannedHost, vue?: TopologieVue): Promise<string | null> {
   if (!h.mac && !h.ip) return null;
 
   // Match strategy: prefer MAC, but fall back to IP so that a host whose MAC
@@ -358,8 +522,8 @@ async function persistHost(h: ScannedHost): Promise<string | null> {
     existing = await prisma.device.findFirst({ where: { ip: h.ip } });
   }
 
-  // A device is the gateway if it carries the default-route address, or if it
-  // has already been marked as the main router in the database.
+  // Un appareil est la passerelle s'il porte l'adresse de la route par défaut,
+  // ou s'il a déjà été marqué comme routeur principal dans la base.
   const gw = await defaultGateway();
   const flagged = await prisma.device.findFirst({
     where: { ip: h.ip, isMainRouter: true }, select: { id: true },
@@ -367,19 +531,40 @@ async function persistHost(h: ScannedHost): Promise<string | null> {
   const isGateway = (!!gw && gw === h.ip) || !!flagged;
 
   const cls = classifyType(h, isGateway);
+  // Ce que le constructeur déclare l'emporte sur la reconnaissance par
+  // empreinte : un contrôleur sait que sa boîte est un commutateur, la
+  // reconnaissance ne fait que le supposer.
+  const typeReel = vue?.infra || vue?.operateur || vue?.passerelleDe
+    ? (vue.infraKind || cls.type)
+    : cls.type;
   const data: any = {
     ip: h.ip,
     mac: h.mac,
     hostname: h.hostname,
     vendor: h.vendor,
     os: h.os,
-    type: cls.type,
+    type: typeReel,
     status: "online" as const,
     lastSeen: new Date(),
     metadata: {
       mdnsName: h.mdnsName,
       mdnsServices: h.mdnsServices,
       netbios: h.netbios,
+      // Ce que l'équipement réseau rapporte : port physique, borne, signal.
+      // C'est la seule source de vérité sur le rattachement, et c'est ce qui
+      // permet ensuite de déduire la présence d'un commutateur non géré.
+      ...(vue ? {
+        swPort: vue.swPort, swMac: vue.swMac, apMac: vue.apMac,
+        essid: vue.essid, radio: vue.radio, rssi: vue.rssi,
+        medium: vue.medium,
+        // Équipements du constructeur : rôle et raccordement amont mesurés.
+        infra: vue.infra, infraKind: vue.infraKind, modele: vue.modele,
+        uplinkMac: vue.uplinkMac, uplinkPort: vue.uplinkPort,
+        uplinkMedium: vue.uplinkMedium, operateur: vue.operateur,
+        wanIp: vue.wanIp,
+        passerelleDe: vue.passerelleDe, vlanDeclare: vue.vlanDeclare,
+        nomReseau: vue.nomReseau,
+      } : {}),
       typeConfidence: cls.confidence,
       typeReasons: cls.reasons,
       typeRunnerUp: cls.runnerUp,
@@ -439,6 +624,31 @@ async function persistHost(h: ScannedHost): Promise<string | null> {
 }
 
 // ─── Master orchestration ───────────────────────────────────────────────────
+/**
+ * Balaie toutes les plages configurées, l'une après l'autre.
+ *
+ * Le séquentiel est délibéré : lancer plusieurs balayages ARP simultanés sature
+ * la carte réseau et fausse les résultats. Une plage à la fois, c'est plus long
+ * mais c'est fiable, et le réseau ne s'en aperçoit pas.
+ */
+export async function fullScanAll(): Promise<{ hostsFound: number; runId: string }> {
+  const plages = await plagesActives();
+  let total = 0;
+  let dernierRun = "";
+
+  for (const p of plages) {
+    const r = await fullScan(p.cidr);
+    total += r.hostsFound;
+    dernierRun = r.runId;
+  }
+
+  if (plages.length > 1) {
+    await logEvent("info", "scanner",
+      `${plages.length} plages balayées · ${total} hôte(s) au total`);
+  }
+  return { hostsFound: total, runId: dernierRun };
+}
+
 export async function fullScan(subnet?: string): Promise<{ hostsFound: number; runId: string }> {
   const target = subnet || config.scan.subnet;
   const run = await prisma.scanRun.create({ data: { type: "full", subnet: target, status: "running" } });
@@ -446,21 +656,60 @@ export async function fullScan(subnet?: string): Promise<{ hostsFound: number; r
   eventBus.emit("scan:started", { runId: run.id, subnet: target });
 
   try {
-    // Phase 1: ARP + ping in parallel
-    const [arp, ping, mdnsMap] = await Promise.all([
+    // Phase 1 — découverte. Trois sources interrogées en parallèle et traitées
+    // au même rang : le balayage ARP, le balayage ping, et l'équipement réseau
+    // lui-même. Aucune n'est un simple recours : l'ARP voit ce qui a parlé
+    // récemment, le ping ce qui répond, et l'équipement ce qu'il porte — y
+    // compris les appareils muets que les deux autres ratent.
+    const [arp, ping, mdnsMap, equipement] = await Promise.all([
       arpScan(target),
       nmapPingSweep(target),
       mdnsBrowse(),
+      equipementClients(),
     ]);
 
-    // Merge unique IPs
     const byIp = new Map<string, ScannedHost>();
-    for (const h of arp) byIp.set(h.ip, h);
-    for (const h of ping) {
-      if (byIp.has(h.ip)) Object.assign(byIp.get(h.ip)!, { hostname: h.hostname || byIp.get(h.ip)!.hostname });
-      else byIp.set(h.ip, h);
+    const fusionner = (h: ScannedHost) => {
+      const exist = byIp.get(h.ip);
+      if (!exist) { byIp.set(h.ip, { ...h }); return; }
+      // On complète sans écraser : chaque source apporte ce qu'elle sait.
+      exist.mac = exist.mac || h.mac;
+      exist.hostname = exist.hostname || h.hostname;
+      exist.vendor = exist.vendor || h.vendor;
+    };
+    for (const h of arp) fusionner(h);
+    for (const h of ping) fusionner(h);
+    for (const h of equipement.hotes) fusionner(h);
+
+    // La racine de la carte : la fiche que le contrôleur rapporte pour la
+    // passerelle, avec sa MAC et son modèle. À défaut — contrôleur injoignable,
+    // équipement d'une autre marque — on retombe sur la passerelle du système,
+    // qui vaut mieux qu'une carte sans racine.
+    const racine = [...equipement.vues.entries()]
+      .find(([, v]) => v.infra && v.infraKind === "router")?.[0];
+    const passerelle = await defaultGateway();
+    if (!racine && passerelle && !byIp.has(passerelle)) {
+      byIp.set(passerelle, { ip: passerelle, ports: [] });
     }
+
+    // Les autres adresses de la passerelle ne sont pas des appareils. Le
+    // balayage ARP les trouve forcément — elles répondent, elles sont sur le
+    // fil — donc il ne suffit pas de ne plus les ajouter : il faut les écarter
+    // de ce qui a été découvert, et effacer les fiches déjà créées.
+    const garder = racine || passerelle || null;
+    const passerelles = await adressesDePasserelle();
+    if (garder) passerelles.delete(garder);
+    if (passerelles.size) {
+      for (const ip of passerelles) byIp.delete(ip);
+      await purgerPasserelles(garder);
+    }
+
     const hosts = Array.from(byIp.values());
+    if (equipement.hotes.length) {
+      await logEvent("info", "scanner",
+        `Équipement réseau : ${equipement.hotes.length - equipement.infra} client(s) ` +
+        `et ${equipement.infra} équipement(s) d'infrastructure rapporté(s)`);
+    }
 
     eventBus.emit("scan:progress", { runId: run.id, phase: "discovery", hostsFound: hosts.length });
 
@@ -484,7 +733,7 @@ export async function fullScan(subnet?: string): Promise<{ hostsFound: number; r
     // Persist
     const ids: string[] = [];
     for (const h of enriched) {
-      const id = await persistHost(h);
+      const id = await persistHost(h, equipement.vues.get(h.ip));
       if (id) ids.push(id);
     }
 
@@ -516,7 +765,6 @@ export async function fullScan(subnet?: string): Promise<{ hostsFound: number; r
 
 export async function pingHost(ip: string): Promise<{ alive: boolean; latencyMs?: number }> {
   try {
-    ip = ipSur(ip);
     const out = await run(`ping -c 2 -W 1 ${ip}`, 5_000);
     const m = out.match(/min\/avg\/max\/(?:mdev|stddev)\s*=\s*[\d.]+\/([\d.]+)/);
     return { alive: true, latencyMs: m ? parseFloat(m[1]) : undefined };

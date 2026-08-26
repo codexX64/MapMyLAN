@@ -2,55 +2,24 @@
 
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
 
 const prisma = new PrismaClient();
 
-// Obviously weak passwords: rejected for the administrator account.
-const MOTS_FAIBLES = new Set([
-  "admin", "password", "changeme", "change-me", "motdepasse", "mapmylan",
-  "administrator", "root", "1234", "12345678", "azerty", "qwerty",
-]);
-
 async function main() {
+  // Si DEFAULT_ADMIN_PASSWORD est renseigné, on l'applique — c'est le mode de
+  // reprise en main après un oubli. Sinon on ne crée personne : l'interface
+  // affichera son écran de création au premier lancement, ce qui évite d'avoir
+  // un mot de passe en clair sur le disque.
   const adminUser = process.env.DEFAULT_ADMIN_USER || "admin";
-  const envPass = process.env.DEFAULT_ADMIN_PASSWORD;
+  const adminPass = process.env.DEFAULT_ADMIN_PASSWORD || "";
 
-  const existant = await prisma.user.findUnique({ where: { username: adminUser } });
-
-  // A password supplied by the environment must be strong. "admin/admin" on an
-  // interface that drives the network firewall is a one-request takeover:
-  // scanners try it within the first minute.
-  if (envPass !== undefined && envPass !== "") {
-    if (envPass.length < 12 || MOTS_FAIBLES.has(envPass.toLowerCase())) {
-      console.error("\n  DEFAULT_ADMIN_PASSWORD is too weak (≥ 12 characters, not a common value).");
-      console.error("  Generate one:  openssl rand -base64 18\n");
-      process.exit(1);
-    }
-    const hash = await bcrypt.hash(envPass, 10);
-    await prisma.user.upsert({
-      where: { username: adminUser },
-      update: { password: hash },   // explicit takeover from .env
-      create: { username: adminUser, password: hash, role: "admin" },
-    });
-    console.log(`✔ Admin user ready: ${adminUser} (password set from .env)`);
-  } else if (!existant) {
-    // No password supplied and no account: we create one with a random secret,
-    // shown only once. Never a default "admin/admin".
-    const genere = randomBytes(15).toString("base64url");
-    const hash = await bcrypt.hash(genere, 10);
-    await prisma.user.create({ data: { username: adminUser, password: hash, role: "admin" } });
-    console.log("\n  ┌──────────────────────────────────────────────────────────────┐");
-    console.log("  │  Administrator account created                               │");
-    console.log(`  │  Username: ${adminUser.padEnd(50)}│`);
-    console.log(`  │  Password: ${genere.padEnd(50)}│`);
-    console.log("  │  Write it down: it will not be shown again. Change it after  │");
-    console.log("  │  the first login.                                            │");
-    console.log("  └──────────────────────────────────────────────────────────────┘\n");
-  } else {
-    // Account already present, no password enforced: we touch nothing.
-    console.log(`✔ Admin user ready: ${adminUser} (unchanged)`);
-  }
+  const hash = await bcrypt.hash(adminPass, 10);
+  await prisma.user.upsert({
+    where: { username: adminUser },
+    update: {},
+    create: { username: adminUser, password: hash, role: "admin" },
+  });
+  console.log(`✔ Admin user ready: ${adminUser}`);
 
   // Default security rules (only created once)
   const ruleCount = await prisma.securityRule.count();

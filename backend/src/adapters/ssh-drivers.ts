@@ -1,9 +1,9 @@
-// SSH-driven adapters.
+// Adaptateurs pilotés en SSH.
 //
-// Each one wraps its vendor's dialect: how to block, how to lift a block, how
-// to isolate, and how to read who is connected. The generic driver acts as a
-// safety net: it applies standard iptables and reads /proc/net/arp, which
-// covers most Linux-based devices.
+// Chacun encapsule le dialecte de son constructeur : la façon de bloquer, de
+// lever un blocage, d'isoler, et de lire qui est connecté. Le pilote générique
+// sert de filet : il applique de l'iptables standard et lit /proc/net/arp, ce
+// qui couvre la plupart des équipements sous Linux.
 
 import { RouterAdapter, AdapterContext, Target, ClientEntry, gatewayOf } from "./types";
 
@@ -21,14 +21,14 @@ async function runAll(ctx: AdapterContext, cmds: string[]): Promise<string> {
   return out.trim();
 }
 
-// Linux ARP table: « IP HW type Flags HW address Mask Device »
+// Table ARP Linux : « IP HW type Flags HW address Mask Device »
 function parseProcArp(text: string): ClientEntry[] {
   return text.split("\n").slice(1).map(l => l.trim().split(/\s+/))
     .filter(p => p.length >= 6 && p[3] !== "00:00:00:00:00:00")
     .map(p => ({ ip: p[0], mac: p[3].toUpperCase(), port: p[5], medium: "wired" as const }));
 }
 
-// dnsmasq DHCP leases: « expiry mac ip hostname clientid »
+// Baux DHCP dnsmasq : « expiry mac ip hostname clientid »
 function parseLeases(text: string): ClientEntry[] {
   return text.split("\n").map(l => l.trim().split(/\s+/))
     .filter(p => p.length >= 4)
@@ -38,7 +38,7 @@ function parseLeases(text: string): ClientEntry[] {
 const linuxTest = async (ctx: AdapterContext) => {
   const r = await ctx.exec("uname -a; cat /proc/version 2>/dev/null | head -1");
   const info = (r.stdout || r.stderr || "").trim().split("\n").slice(0, 2).join(" · ");
-  return { ok: !!info, info: info || undefined, error: info ? undefined : "No response" };
+  return { ok: !!info, info: info || undefined, error: info ? undefined : "Aucune réponse" };
 };
 
 const linuxClients = async (ctx: AdapterContext): Promise<ClientEntry[]> => {
@@ -290,10 +290,10 @@ export const edgeos: RouterAdapter = {
   reboot: ctx => runAll(ctx, ["sudo reboot"]),
 };
 
-// ─── Generic Linux / iptables ─────────────────────────────────────────────
+// ─── Générique Linux / iptables ───────────────────────────────────────────
 export const generic: RouterAdapter = {
   id: "generic",
-  label: "Generic · Linux / iptables",
+  label: "Générique · Linux / iptables",
   transport: "ssh",
   capabilities: ["ban", "unban", "quarantine", "clients", "arp"],
   needs: ["password"],

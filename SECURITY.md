@@ -1,108 +1,109 @@
-# Reporting a vulnerability
+# Signaler une faille
 
-Please **do not open a public issue** for a vulnerability.
+Merci de **ne pas ouvrir d'issue publique** pour une vulnérabilité.
 
-Instead, write to the address listed on the
-[CodexX64](https://github.com/CodexX64) profile, or use GitHub's private
-reporting form under the *Security → Report a vulnerability* tab.
+Écrivez plutôt à l'adresse indiquée sur le profil
+[CodexX64](https://github.com/CodexX64), ou passez par le formulaire privé de
+GitHub, onglet *Security → Report a vulnerability*.
 
-Where possible, include the version, the reproduction conditions, and the impact
-you estimate. You will receive a response within a week.
+Précisez si possible la version, les conditions de reproduction et l'impact que
+vous estimez. Une réponse est apportée sous une semaine.
 
-## Scope
+## Portée
 
-MapMyLAN handles network equipment credentials and can cut off devices' access.
-The following are of particular concern:
+MapMyLAN manipule des identifiants d'équipement réseau et peut interrompre
+l'accès d'appareils. Sont particulièrement concernés :
 
-- authentication bypass, in any form;
-- access to stored equipment credentials;
-- execution of defensive actions without authorization;
-- command injection through the SSH adapters;
-- privilege escalation between roles.
+- le contournement de l'authentification, sous toutes ses formes ;
+- l'accès aux identifiants d'équipement stockés ;
+- l'exécution d'actions de défense sans autorisation ;
+- l'injection de commandes par les adaptateurs SSH ;
+- l'élévation de privilèges entre rôles.
 
-## Out of scope
+## Hors portée
 
-- Attacks that require physical access to the host machine.
-- Self-signed equipment certificates, which are unavoidable on a local network.
-- Exposing the bare application on the Internet: it is not designed for that,
-  and the documentation says so.
+- Les attaques exigeant un accès physique à la machine hôte.
+- L'auto-signature du certificat des équipements, inévitable en réseau local.
+- L'exposition de l'application nue sur Internet : elle n'est pas conçue pour
+  cela, et la documentation le précise.
 
-## What the project guarantees
+## Ce que le projet garantit
 
-No software can claim to be free of vulnerabilities. What is guaranteed is how
-reports are handled and how fixes are published.
+Aucun logiciel ne peut prétendre être exempt de vulnérabilités. Ce qui est
+garanti, c'est le traitement des signalements et la publication des correctifs.
 
-## Security — status of fixes
+## Sécurité — état des correctifs
 
-The weaknesses identified while assembling this repository have been fixed in the
-code. What follows describes what is in place, and what is not.
+Les faiblesses relevées lors de la constitution de ce dépôt ont été corrigées
+dans le code. Ce qui suit décrit ce qui est en place, et ce qui ne l'est pas.
 
-### Fixed
+### Corrigé
 
-| Item | Before | Now |
+| Point | Auparavant | Désormais |
 |---|---|---|
-| Password change | accessible without a token, identifier taken from the body | requires a token, operates on the bearer's account |
-| Hashing | bcrypt — truncates at 72 bytes, fits in 4 KiB | Argon2id, 32 MiB and 3 passes, transparent migration |
-| Content policy | disabled | enabled, sources restricted to the application |
-| Attempt limiter | blind behind a proxy | `trust proxy` set, two separate ceilings |
-| Account lockout | absent | progressive: 1 min after 5 failures, 15 min after 10 |
-| Token revocation | impossible before expiry | version carried by the token, incremented on every change |
-| Account enumeration | distinct response times | comparable timing, identical message |
-| Request size | 5 MB | 512 KB |
+| Changement de mot de passe | accessible sans jeton, identifiant pris dans le corps | exige un jeton, travaille sur le compte porteur |
+| Hachage | bcrypt — tronque à 72 octets, tient dans 4 Kio | Argon2id, 32 Mio et 3 passes, migration transparente |
+| Politique de contenu | désactivée | active, sources restreintes à l'application |
+| Limiteur de tentatives | aveugle derrière un proxy | `trust proxy` posé, deux plafonds distincts |
+| Verrouillage de compte | absent | progressif : 1 min après 5 échecs, 15 min après 10 |
+| Révocation des jetons | impossible avant expiration | version portée par le jeton, incrémentée à chaque changement |
+| Énumération des comptes | temps de réponse distinct | temps comparable, message identique |
+| Taille de requête | 5 Mo | 512 Ko |
 
-A password change invalidates all open sessions: a password changed because it
-is believed compromised must not leave tokens issued beforehand alive.
+Le changement de mot de passe invalide toutes les sessions ouvertes : un mot de
+passe changé parce qu'on le croit compromis ne doit pas laisser vivre les jetons
+émis avant.
 
-### Not covered
+### Non couvert
 
-These items call for an operational decision, not a line of code.
+Ces points demandent une décision d'exploitation, pas une ligne de code.
 
-- **Public exposure.** The application is not designed to be reached bare from
-  the Internet. Place it behind authenticated access.
-- **Transport encryption.** Handled by the proxy in front of it, not by the
-  application.
-- **Backing up `MASTER_KEY`.** Losing it makes equipment credentials
-  unrecoverable.
-- **Second factor.** Available but not enabled by default.
+- **Exposition publique.** L'application n'est pas conçue pour être atteinte nue
+  depuis Internet. Placez-la derrière un accès authentifié.
+- **Chiffrement du transport.** Assuré par le proxy qui la précède, pas par
+  l'application.
+- **Sauvegarde de `MASTER_KEY`.** Sa perte rend les identifiants d'équipement
+  irrécupérables.
+- **Second facteur.** Disponible mais non activé par défaut.
 
-### What cannot be guaranteed
+### Ce qui ne peut pas être garanti
 
-No software is free of vulnerabilities, and claiming otherwise would be
-dishonest. What is established here is that the project's known weaknesses have
-been addressed, and that each fix has been verified. An unknown flaw remains
-possible: that is true of all software, including software that is continuously
-audited.
+Aucun logiciel n'est exempt de vulnérabilités, et prétendre le contraire serait
+malhonnête. Ce qui est établi ici, c'est que les faiblesses connues du projet
+ont été traitées, et que chaque correctif a été vérifié. Une faille inconnue
+reste possible : c'est le cas de tout logiciel, y compris de ceux qui sont
+audités en continu.
 
-## Exploitable flaws — remediation
+## Failles exploitables — traitement
 
-### Fixed
+### Corrigées
 
-| Flaw | What it allowed | Countermeasure |
+| Faille | Ce qu'elle permettait | Parade |
 |---|---|---|
-| Command injection via the address | A device announcing `192.0.2.1; command` caused code to run on the router, as root | Strict validation of the IP and MAC before construction, plus a guard at the execution point that rejects any chaining character |
-| Injection via the hostname | Names come from mDNS, NetBIOS, and DHCP — announced by the device. Injection into the logs, the interface, the database | Sanitized at the scanner's input: control characters, direction marks, and invisible spaces stripped, length bounded |
-| Server-side request forgery | The API address was free-form: the backend could be pointed at an internal service or a cloud metadata endpoint | The address must designate the registered equipment, with no path, no parameter, no credentials |
-| Missing or guessable secrets | An empty `JWT_SECRET` allowed any token to be forged | Refusal to start, with the generation commands displayed |
-| Vulnerable dependencies | Seven high-severity flaws, including an SMTP command injection | Updates applied, no high or critical remaining |
+| Injection de commande par l'adresse | Un appareil annonçant `192.0.2.1; commande` faisait exécuter du code sur le routeur, en root | Validation stricte de l'IP et de la MAC avant construction, plus un garde au point d'exécution qui refuse tout caractère d'enchaînement |
+| Injection par le nom d'hôte | Les noms viennent de mDNS, NetBIOS et DHCP — annoncés par l'appareil. Injection dans les journaux, l'interface, la base | Assainissement à l'entrée du scanner : contrôles, marques de direction et espaces invisibles écartés, longueur bornée |
+| Requête forgée côté serveur | L'adresse d'API était libre : le backend pouvait être dirigé vers un service interne ou un point de métadonnées d'hébergeur | L'adresse doit désigner l'équipement enregistré, sans chemin, sans paramètre, sans identifiants |
+| Secrets absents ou devinables | Un `JWT_SECRET` vide permettait de forger n'importe quel jeton | Refus de démarrer, avec les commandes de génération affichées |
+| Dépendances vulnérables | Sept failles élevées, dont une injection de commande SMTP | Mises à jour appliquées, plus aucune élevée ni critique |
 
-Protection against command injection is placed at **two levels**: at the source,
-where the address is recognized as such or rejected, and at the execution point,
-where any command containing a chaining character is rejected. Placing the check
-at the single point of passage covers the twenty-four actions of the nine
-drivers; placing it in each driver would have let through the one that gets
-forgotten.
+La protection contre l'injection de commande est posée **à deux niveaux** : à la
+source, où l'adresse est reconnue comme telle ou refusée, et au point
+d'exécution, où toute commande contenant un caractère d'enchaînement est
+rejetée. Placer le contrôle au seul point de passage couvre les vingt-quatre
+actions des neuf pilotes ; le poser dans chaque pilote aurait laissé passer
+celui qu'on oublie.
 
-### Not fixable
+### Non corrigeables
 
-These items are not defects but a choice, an environmental constraint, or an
-operational decision.
+Ces points ne relèvent pas d'un défaut mais d'un choix, d'une contrainte
+d'environnement ou d'une décision d'exploitation.
 
-| Item | Why it remains | What contains it |
+| Point | Pourquoi il subsiste | Ce qui le contient |
 |---|---|---|
-| SSH console | Running commands is its very purpose. Removing it would mean removing the feature | Reserved for the administrator role; every action is logged |
-| Equipment TLS verification | Routers present self-signed certificates. Requiring it would prevent any connection | Only affects the local network; fingerprint pinning is still to be done |
-| Container on host networking | ARP scanning does not work otherwise: it is a constraint of the protocol | Reduced surface, dependencies kept up to date |
-| Stolen administrator session | An administrator account can legitimately do anything | Second factor available, tokens revocable, lockout after failures |
-| Loss of `MASTER_KEY` | Encryption at rest only makes sense if the key lives elsewhere | Backup is the operator's responsibility |
-| Direct public exposure | The application assumes controlled access upstream | To be placed behind an authenticated tunnel or a VPN |
-| Unknown vulnerability | No software is free of them | Dependencies kept up to date, reduced surface, documented reporting |
+| Console SSH | Exécuter des commandes est sa fonction même. La supprimer reviendrait à retirer la fonctionnalité | Réservée au rôle administrateur ; toute action est journalisée |
+| Vérification TLS des équipements | Les routeurs présentent des certificats auto-signés. L'exiger empêcherait toute connexion | Ne concerne que le réseau local ; l'épinglage d'empreinte reste à faire |
+| Conteneur en réseau hôte | Le balayage ARP ne fonctionne pas autrement : c'est une contrainte du protocole | Surface réduite, dépendances tenues à jour |
+| Session administrateur volée | Un compte administrateur peut légitimement tout faire | Second facteur disponible, jetons révocables, verrouillage après échecs |
+| Perte de `MASTER_KEY` | Le chiffrement au repos n'a de sens que si la clé vit ailleurs | Sauvegarde à la charge de l'exploitant |
+| Exposition publique directe | L'application suppose un accès contrôlé en amont | À placer derrière un tunnel authentifié ou un VPN |
+| Vulnérabilité inconnue | Aucun logiciel n'en est exempt | Dépendances tenues à jour, surface réduite, signalement documenté |

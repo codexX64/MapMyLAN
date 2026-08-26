@@ -1,39 +1,40 @@
-// Automatic background removal for device photos.
+// Détourage automatique des photos d'appareils.
 //
-// The photos we fetch for a router or a switch almost always come from a
-// manufacturer datasheet: solid background, white or very light. A flood fill
-// from the four corners is then enough, and avoids bundling a segmentation
-// model of several dozen megabytes for such a simple case.
+// Les photos que l'on récupère pour un routeur ou un commutateur viennent
+// presque toujours d'une fiche constructeur : fond uni, blanc ou très clair.
+// Un remplissage par diffusion depuis les quatre coins suffit alors, et évite
+// d'embarquer un modèle de segmentation de plusieurs dizaines de mégaoctets
+// pour un cas aussi simple.
 //
-// Nothing is sent anywhere: everything happens in the browser, on a canvas. An
-// already-cut-out image is recognized and left as is.
+// Rien n'est envoyé ailleurs : tout se passe dans le navigateur, sur un canevas.
+// Une image déjà détourée est reconnue et laissée telle quelle.
 
 export interface OptionsDetourage {
-  /** Color spread tolerated around the background, 0–150. Higher = more aggressive. */
+  /** Écart couleur toléré autour du fond, 0–150. Plus haut = plus agressif. */
   tolerance?: number;
-  /** Softens the edge over n pixels to avoid the cut-with-a-cutter look. */
+  /** Adoucit le bord sur n pixels pour éviter l'effet découpé au cutter. */
   adoucissement?: number;
-  /** Crops to the content once the background is removed. */
+  /** Recadre sur le contenu une fois le fond retiré. */
   recadrer?: boolean;
-  /** Margin kept around the content, in pixels. */
+  /** Marge conservée autour du contenu, en pixels. */
   marge?: number;
 }
 
 export interface ResultatDetourage {
-  /** Cut-out PNG, as a data URI. */
+  /** PNG détouré, en data-URI. */
   dataUrl: string;
   largeur: number;
   hauteur: number;
-  /** Share of the image that became transparent, 0–1. */
+  /** Part de l'image devenue transparente, 0–1. */
   retire: number;
-  /** True if the image arrived already cut out: we touched nothing. */
+  /** Vrai si l'image arrivait déjà détourée : on n'a rien touché. */
   dejaDetouree: boolean;
 }
 
-/** Does the image already carry meaningful transparency? */
+/** L'image porte-t-elle déjà de la transparence utile ? */
 function possedeTransparence(data: Uint8ClampedArray): boolean {
   let transparents = 0;
-  // We sample: no need to walk through millions of pixels.
+  // On échantillonne : inutile de parcourir des millions de pixels.
   for (let i = 3; i < data.length; i += 4 * 17) {
     if (data[i] < 250) transparents++;
   }
@@ -41,23 +42,23 @@ function possedeTransparence(data: Uint8ClampedArray): boolean {
   return transparents / echantillons > 0.04;
 }
 
-/** Rough perceptual distance between two colors. */
+/** Distance perceptuelle grossière entre deux couleurs. */
 function ecart(
   r1: number, g1: number, b1: number,
   r2: number, g2: number, b2: number,
 ): number {
-  // Weighting close to the eye's sensitivity: green counts double.
+  // Pondération proche de la sensibilité de l'œil : le vert compte double.
   const dr = r1 - r2, dg = g1 - g2, db = b1 - b2;
   return Math.sqrt(dr * dr * 0.9 + dg * dg * 1.6 + db * db * 0.5);
 }
 
 /**
- * Removes the background of an image.
+ * Retire le fond d'une image.
  *
- * The algorithm starts from the four corners and propagates step by step as
- * long as the color stays close to that of the background. Unlike a simple
- * global threshold, this preserves the light areas *inside* the device — a
- * white router front panel does not disappear.
+ * L'algorithme part des quatre coins et propage de proche en proche tant que
+ * la couleur reste proche de celle du fond. Contrairement à un simple seuil
+ * global, cela préserve les zones claires *à l'intérieur* de l'appareil —
+ * une façade blanche de routeur ne disparaît pas.
  */
 export async function detourer(
   source: string | Blob,
@@ -71,16 +72,17 @@ export async function detourer(
   const img = await chargerImage(source);
   const W = img.naturalWidth || img.width;
   const H = img.naturalHeight || img.height;
-  if (!W || !H) throw new Error("Unreadable image.");
+  if (!W || !H) throw new Error("Image illisible.");
 
-  // Guard against a "decompression bomb": a PNG of a few kilobytes can declare
-  // 30000×30000 pixels and reserve several gigabytes for the canvas/ImageData
-  // allocation, freezing the tab. DevicePhoto's byte limit doesn't catch this
-  // case (the compressed file is tiny). So we bound the dimensions themselves.
-  const COTE_MAX = 10000;              // 10,000 px per side
-  const PIXELS_MAX = 40 * 1000 * 1000; // 40 megapixels
+  // Garde-fou anti « bombe de décompression » : un PNG de quelques kilo-octets
+  // peut déclarer 30000×30000 pixels et réserver plusieurs gigaoctets à
+  // l'allocation du canvas/ImageData, gelant l'onglet. La limite en octets de
+  // DevicePhoto ne voit pas ce cas (le fichier compressé est minuscule). On borne
+  // donc les dimensions elles-mêmes.
+  const COTE_MAX = 10000;              // 10 000 px par côté
+  const PIXELS_MAX = 40 * 1000 * 1000; // 40 mégapixels
   if (W > COTE_MAX || H > COTE_MAX || W * H > PIXELS_MAX) {
-    throw new Error(`Image too large (${W}×${H}). Maximum ${COTE_MAX} px per side, ${PIXELS_MAX / 1_000_000} Mpx.`);
+    throw new Error(`Image trop grande (${W}×${H}). Maximum ${COTE_MAX} px par côté, ${PIXELS_MAX / 1_000_000} Mpx.`);
   }
 
   const cv = document.createElement("canvas");
@@ -92,7 +94,7 @@ export async function detourer(
   const px = imageData.data;
 
   if (possedeTransparence(px)) {
-    // Already cut out: we just crop, at most.
+    // Déjà détourée : on se contente éventuellement de recadrer.
     const sortie = recadrer ? recadrerSurContenu(ctx, cv, marge) : cv;
     return {
       dataUrl: sortie.toDataURL("image/png"),
@@ -101,15 +103,15 @@ export async function detourer(
     };
   }
 
-  // Background color: median of the four corners, to withstand a stray pixel.
+  // Couleur de fond : médiane des quatre coins, pour résister à un pixel isolé.
   const coins = [
     lire(px, W, 0, 0), lire(px, W, W - 1, 0),
     lire(px, W, 0, H - 1), lire(px, W, W - 1, H - 1),
   ];
   const fond = medianeCouleur(coins);
 
-  // Flood fill from the edges. We push positions onto a stack rather than use
-  // recursion: an image of several megapixels would overflow the call stack.
+  // Diffusion depuis les bords. On empile les positions plutôt que d'employer
+  // la récursion : une image de plusieurs mégapixels ferait déborder la pile.
   const vu = new Uint8Array(W * H);
   const pile: number[] = [];
   for (let x = 0; x < W; x++) { pile.push(x, 0); pile.push(x, H - 1); }
@@ -159,11 +161,11 @@ function medianeCouleur(couleurs: [number, number, number][]): [number, number, 
 }
 
 /**
- * Softens the boundary between the subject and the void.
+ * Adoucit la frontière entre le sujet et le vide.
  *
- * Without this, the outline is sharp to the pixel and the device looks cut out
- * with scissors. We lower the opacity of the kept pixels that sit near an
- * erased pixel, proportionally to the number of transparent neighbors.
+ * Sans cela, le contour est net au pixel près et l'appareil paraît découpé aux
+ * ciseaux. On dégrade l'opacité des pixels conservés situés au voisinage d'un
+ * pixel effacé, proportionnellement au nombre de voisins transparents.
  */
 function adoucirBord(
   px: Uint8ClampedArray, vu: Uint8Array,
@@ -176,7 +178,7 @@ function adoucirBord(
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const idx = y * W + x;
-      if (original[idx]) continue;          // already transparent
+      if (original[idx]) continue;          // déjà transparent
 
       let vides = 0, total = 0;
       for (let dy = -r; dy <= r; dy++) {
@@ -194,7 +196,7 @@ function adoucirBord(
   }
 }
 
-/** Crops the canvas to the non-transparent area. */
+/** Recadre le canevas sur la zone non transparente. */
 function recadrerSurContenu(
   ctx: CanvasRenderingContext2D,
   cv: HTMLCanvasElement,
@@ -214,7 +216,7 @@ function recadrerSurContenu(
       }
     }
   }
-  // Fully erased image: we return the original rather than an empty canvas.
+  // Image entièrement effacée : on rend l'originale plutôt qu'un canevas vide.
   if (x1 < 0) return cv;
 
   x0 = Math.max(0, x0 - marge); y0 = Math.max(0, y0 - marge);
@@ -232,14 +234,14 @@ function chargerImage(source: string | Blob): Promise<HTMLImageElement> {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
-    img.onerror = () => rejeter(new Error("Could not load the image."));
+    img.onerror = () => rejeter(new Error("Impossible de charger l'image."));
     img.src = typeof source === "string" ? source : URL.createObjectURL(source);
   });
 }
 
 /**
- * Reduces a cut-out image to a square thumbnail, ready to store.
- * The subject is centered and keeps its proportions.
+ * Réduit une image détourée à une vignette carrée, prête à stocker.
+ * Le sujet est centré et conserve ses proportions.
  */
 export async function vignette(dataUrl: string, cote = 256): Promise<string> {
   const img = await chargerImage(dataUrl);

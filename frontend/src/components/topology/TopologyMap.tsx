@@ -1,10 +1,15 @@
-// Editable topology map.
-// - Drag devices freely (positions persist)
-// - Right-click → context menu (create link, edit zone, delete)
-// - Drag from a device's edge to another device → manual link
-// - Add zone rectangles with custom names/colors
-// - Click device → opens DeviceDrawer
-// - Cisco icons used ONLY for the Enterprise theme; other themes use generic icons
+// Carte manipulable.
+//
+// - déplacer un appareil à la souris (la position est enregistrée) ;
+// - molette pour zoomer, glisser le fond pour se déplacer ;
+// - clic droit sur un appareil : menu, création de liaison, suppression ;
+// - zones rectangulaires nommées, déplaçables et redimensionnables ;
+// - plan d'architecte en fond, importé depuis le poste ;
+// - clic sur un appareil : sa fiche s'ouvre.
+//
+// L'apparence des nœuds suit la maquette : une plaque carrée, le picto au
+// centre, le genre en capitales, le nom, l'adresse. Les couleurs viennent des
+// classes de styles/maquette.css, donc de la palette du thème.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../../stores/app";
@@ -18,6 +23,12 @@ interface Props { theme: Theme; }
 interface Pos { x: number; y: number }
 
 const W = 2400, H = 1600;
+
+// Le plan de travail fait 2400 unités de large, la maquette 980 : sans
+// agrandissement, une plaque de 74 unités et son libellé de 11,5 seraient
+// réduits de moitié à l'écran. Les positions enregistrées, elles, ne changent
+// pas — seul le dessin du nœud est mis à l'échelle.
+const ECHELLE_NOEUD = 2.2;
 
 // Zone palette and stroke patterns
 export const ZONE_PALETTE = [
@@ -52,8 +63,8 @@ const MAP_TYPE_EMOJI: Record<string, string> = {
 };
 
 // Per-type style: color + dash pattern + width + animate flow
-// The stroke tells the medium, not the color: solid for copper, dotted for
-// wireless. The color stays neutral, only the selected link takes the accent.
+// Le trait dit le médium, pas la couleur : plein pour du cuivre, pointillé pour
+// de l'onde. La couleur reste neutre, seul le lien sélectionné prend l'accent.
 const LINK_STYLES: Record<string, { color: (t: any) => string; dash: string; width: number; animate?: boolean }> = {
   ethernet: { color: t => t.faint || t.muted, dash: "0",       width: 1.4, animate: false },
   wifi:     { color: t => t.faint || t.muted, dash: "2 5",     width: 1.4, animate: false },
@@ -61,8 +72,8 @@ const LINK_STYLES: Record<string, { color: (t: any) => string; dash: string; wid
   trunk:    { color: t => t.txtSoft || t.txt, dash: "0",       width: 2.4, animate: false },
   wan:      { color: t => t.warn,             dash: "8 4",     width: 1.6, animate: false },
   docker:   { color: t => t.faint || t.muted, dash: "4 3",     width: 1.2, animate: false },
-  // Two faces of the same box: an almost-erased stroke, it signals the kinship
-  // without pretending to represent a cable.
+  // Deux faces d'un même boîtier : trait presque effacé, il signale la parenté
+  // sans prétendre représenter un câble.
   sibling:  { color: t => t.border || t.faint, dash: "1 5",     width: 1.1, animate: false },
 };
 
@@ -75,7 +86,7 @@ export function TopologyMap({ theme: t }: Props) {
   // ── State ──
   const [positions, setPositions] = useState<Record<string, Pos>>({});
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(0.7);
+  const [zoom, setZoom] = useState(1);
   const [linkType, setLinkType] = useState("ethernet");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // True if the user actually moved the cursor while dragging — used to
@@ -93,40 +104,102 @@ export function TopologyMap({ theme: t }: Props) {
   const [mousePos, setMousePos] = useState<Pos>({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const fichierRef = useRef<HTMLInputElement | null>(null);
+
+  // Plan d'architecte posé sous la topologie. Il n'a pas de contrepartie
+  // serveur : il est conservé dans ce navigateur, sous forme d'URL de données.
+  const [plan, setPlan] = useState<string | null>(() => {
+    try { return localStorage.getItem("mapmylan_plan"); } catch { return null; }
+  });
+  const [planOpacite, setPlanOpacite] = useState<number>(() => {
+    const v = Number(localStorage.getItem("mapmylan_plan_opacite"));
+    return Number.isFinite(v) && v > 0 ? v : 55;
+  });
+
+  /**
+   * Cadre la vue sur ce qui existe : on cherche l'emprise des appareils, on
+   * choisit l'agrandissement qui la fait tenir, et on la ramène au centre.
+   * Le point (x,y) du plan se projette en W/2 + zoom·(x − W/2) + pan, d'où
+   * le déplacement calculé ci-dessous.
+   */
+  const ajusterVue = () => {
+    const pts = Object.values(positions);
+    if (!pts.length) { setZoom(1); setPan({ x: 0, y: 0 }); return; }
+    const marge = 130 * ECHELLE_NOEUD;
+    const xs = pts.map(q => q.x), ys = pts.map(q => q.y);
+    const minX = Math.min(...xs) - marge, maxX = Math.max(...xs) + marge;
+    const minY = Math.min(...ys) - marge, maxY = Math.max(...ys) + marge;
+    const k = Math.max(0.25, Math.min(2.6, Math.min(W / (maxX - minX), H / (maxY - minY))));
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    setZoom(k);
+    setPan({ x: k * (W / 2 - cx), y: k * (H / 2 - cy) });
+  };
+
+  // Cadrage automatique à la première ouverture : on ne montre pas un coin
+  // vide d'un plan de travail de 2400 unités alors que le parc tient dans un
+  // mouchoir. Ensuite, c'est l'utilisateur qui décide.
+  const dejaCadre = useRef(false);
+  useEffect(() => {
+    if (dejaCadre.current) return;
+    if (!Object.keys(positions).length) return;
+    dejaCadre.current = true;
+    ajusterVue();
+  }, [positions]);
+
+  const chargerPlan = (f?: File | null) => {
+    if (!f) return;
+    const lecteur = new FileReader();
+    lecteur.onload = () => {
+      const url = String(lecteur.result || "");
+      setPlan(url);
+      try { localStorage.setItem("mapmylan_plan", url); }
+      catch { /* image trop lourde pour le stockage : elle reste en mémoire */ }
+    };
+    lecteur.readAsDataURL(f);
+  };
+  const retirerPlan = () => {
+    setPlan(null);
+    try { localStorage.removeItem("mapmylan_plan"); } catch { /* rien à faire */ }
+  };
 
   // ── Initialize positions from devices' saved posX/posY, fallback to layered layout ──
   useEffect(() => {
     setPositions((cur) => {
       const next = { ...cur };
-      // Tier of a device. We account for the type (a gateway is at the top,
-      // a workstation at the bottom) AND for the 10.0.C.N addressing convention:
-      // the third octet tells the category, and its tens digit indicates the
-      // wifi face of the same device. Absent a meaningful type, the octet decides.
+      // Étage d'un appareil.
+      //
+      // Le type prime : une passerelle en haut, un commutateur ou une borne
+      // juste en dessous, les machines ensuite. Quand le type ne dit rien, on
+      // se rabat sur le segment — les appareils d'un même sous-réseau se
+      // retrouvent sur la même ligne, quel que soit le plan d'adressage.
+      const segments: string[] = [];
+      const segmentDe = (d: any): number => {
+        const m = /^(\d+\.\d+\.\d+)\./.exec(d.ip || "");
+        const cle = m ? m[1] : "?";
+        let i = segments.indexOf(cle);
+        if (i < 0) { segments.push(cle); i = segments.length - 1; }
+        return i;
+      };
       const tierOf = (d: any): number => {
         const ty = d.customType || d.type;
         if (ty === "firewall") return 0;
         if (ty === "router" || d.isMainRouter) return 1;
         if (ty === "switch" || ty === "ap") return 2;
-        const m = /^10\.0\.(\d+)\./.exec(d.ip || "");
-        if (m) {
-          const oct = +m[1];
-          const cat = oct >= 10 ? Math.floor(oct / 10) : oct; // wifi brought back to its category
-          if (cat === 0) return 2;      // network infra
-          if (cat === 1) return 5;      // client workstations
-          if (cat === 2) return 3;      // dockers
-          if (cat === 3) return 3;      // inference
-          return 4;                     // the rest
-        }
-        return 4;
+        if (ty === "server" || ty === "nas" || ty === "vm" || ty === "docker") return 3;
+        // ni équipement réseau ni serveur : on répartit par segment, en
+        // alternant les deux derniers étages pour ne pas tout empiler.
+        return 4 + (segmentDe(d) % 2);
       };
 
       const layers: Record<number, any[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [] };
       for (const d of devices) layers[tierOf(d)].push(d);
 
-      // We order each tier by last octet, so that devices of the same machine
-      // (same N, wired and wifi faces) end up next to each other.
+      // On range chaque étage par dernier octet, pour que les appareils d'une
+      // même machine (même N, faces filaire et wifi) se retrouvent voisins.
       const lastOctet = (ip: string) => { const p = (ip || "").split("."); return +p[3] || 0; };
-      const layerY = [140, 300, 470, 660, 900, 1120];
+      // Les étages sont espacés d'une hauteur de nœud entière : plaque,
+      // genre, nom et adresse compris, sinon deux rangées se chevauchent.
+      const layerY = [150, 430, 710, 990, 1270, 1520];
       for (const lvl of Object.keys(layers)) {
         const items = layers[+lvl].sort((a, b) => lastOctet(a.ip) - lastOctet(b.ip));
         items.forEach((d, i) => {
@@ -410,41 +483,65 @@ export function TopologyMap({ theme: t }: Props) {
   }
 
   return (
-    <div ref={containerRef} style={{ position: "relative", width: "100%", height: "100%", background: t.bg, overflow: "hidden", cursor: linkingFrom ? "crosshair" : draggingId ? "grabbing" : panStart ? "grabbing" : "default" }}
+    <div ref={containerRef} style={{ position: "relative", width: "100%", height: "100%", background: "transparent", overflow: "hidden", cursor: linkingFrom ? "crosshair" : draggingId ? "grabbing" : panStart ? "grabbing" : "default" }}
       onMouseDown={onCanvasMouseDown}
       onMouseMove={onMouseMove} onMouseUp={(e) => onMouseUp(e)} onClick={onCanvasClick}>
 
-      {/* Toolbar */}
-      <div style={{ position: "absolute", top: 12, left: 12, zIndex: 30, display: "flex", gap: 6 }}>
-        <ToolBtn t={t} onClick={() => api.autoBuildTopology().then(refreshTopology)}>↻ Auto-rebuild</ToolBtn>
-        <ToolBtn t={t} onClick={() => { setZoom(0.7); setPan({ x: 0, y: 0 }); }}>⊙ Reset view</ToolBtn>
-        <span style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: t.panel || t.surface, border: `1px solid ${t.border}`, borderRadius: t.radius, fontSize: 11, fontFamily: t.monoFont, color: t.muted }}>
-          Link type:
+      {/* Outils de la carte */}
+      <div className="planoutils" style={{
+        position: "absolute", top: 0, left: 0, right: 0, zIndex: 30,
+        background: "var(--surface)",
+      }}>
+        <button className="po" onClick={(e) => { e.stopPropagation(); api.autoBuildTopology().then(refreshTopology); }}>
+          Reconstruire
+        </button>
+        <button className="po" onClick={(e) => { e.stopPropagation(); ajusterVue(); }}>
+          Recentrer
+        </button>
+        <span className="po" style={{ cursor: "default" }}>
+          Liaison
           <select value={linkType} onChange={(e) => setLinkType(e.target.value)}
-            style={{ background: "transparent", border: "none", color: t.txt, fontSize: 11, fontFamily: t.monoFont, cursor: "pointer", outline: "none" }}>
-            {["ethernet", "wifi", "vpn", "trunk", "wan", "docker"].map(lt => <option key={lt} value={lt}>{lt}</option>)}
+            style={{ background: "transparent", border: "none", color: "var(--ink)", font: "inherit", cursor: "pointer", outline: "none" }}>
+            {[["ethernet", "filaire"], ["wifi", "sans fil"], ["vpn", "tunnel"],
+              ["trunk", "agrégée"], ["wan", "sortie"], ["docker", "conteneur"]]
+              .map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </span>
-        <ToolBtn t={t} onClick={() => setAdding(true)}>+ Device</ToolBtn>
-        <ToolBtn t={t} onClick={() => {
+        <button className="po" onClick={(e) => { e.stopPropagation(); setAdding(true); }}>+ Appareil</button>
+        <button className="po" onClick={(e) => {
+          e.stopPropagation();
           const cx = -pan.x / zoom + W / 2;
           const cy = -pan.y / zoom + H / 2;
           setEditingZone({
-            isNew: true,
-            id: "",
-            name: "New Zone",
-            color: "#38bdf8",
-            x: cx - 200, y: cy - 100,
-            width: 400, height: 200,
-            opacity: 0.10,
-            strokeStyle: "dashed",
-            strokeWidth: 2,
+            isNew: true, id: "", name: "Nouvelle zone", color: ZONE_PALETTE[0],
+            x: cx - 200, y: cy - 100, width: 400, height: 200,
+            opacity: 0.10, strokeStyle: "dashed", strokeWidth: 2,
           });
-        }}>+ Zone</ToolBtn>
-      </div>
+        }}>+ Zone</button>
 
-      <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 30, color: t.muted, fontSize: 10.5, fontFamily: t.monoFont, lineHeight: 1.6 }}>
-        Left-drag = move · Right-drag = create link · Click = open details · Wheel = zoom · {Math.round(zoom * 100)}%
+        <input ref={fichierRef} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={(e) => chargerPlan(e.target.files?.[0])}/>
+        <button className="po" onClick={(e) => { e.stopPropagation(); fichierRef.current?.click(); }}>
+          {plan ? "Changer le plan" : "Importer un plan"}
+        </button>
+        {plan && (
+          <>
+            <label className="po opa" onClick={(e) => e.stopPropagation()}>
+              Plan
+              <input type="range" min={10} max={100} value={planOpacite}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setPlanOpacite(v);
+                  try { localStorage.setItem("mapmylan_plan_opacite", String(v)); } catch { /* rien */ }
+                }}/>
+            </label>
+            <button className="po" onClick={(e) => { e.stopPropagation(); retirerPlan(); }}>Retirer le plan</button>
+          </>
+        )}
+
+        <span className="posep"/>
+        <span className="poinfo">glisser pour déplacer · molette pour zoomer</span>
+        <span className="poinfo">{Math.round(zoom * 100)} %</span>
       </div>
 
       {/* Main SVG */}
@@ -461,6 +558,14 @@ export function TopologyMap({ theme: t }: Props) {
         <rect width={W} height={H} fill="url(#grid)"/>
 
         <g ref={worldGroupRef} transform={`translate(${pan.x} ${pan.y}) scale(${zoom}) translate(${(W - W * zoom) / (2 * zoom)} ${(H - H * zoom) / (2 * zoom)})`}>
+
+          {/* Plan d'architecte : il suit le zoom et le déplacement, comme le
+              reste, sinon les appareils ne resteraient pas sur leurs pièces. */}
+          {plan && (
+            <image href={plan} x={0} y={0} width={W} height={H}
+              preserveAspectRatio="xMidYMid meet"
+              opacity={planOpacite / 100} style={{ pointerEvents: "none" }}/>
+          )}
 
           {/* Zones (background) — drag to move, dbl-click to edit, corner handles to resize */}
           {topology.zones.map((z: any) => {
@@ -619,72 +724,69 @@ export function TopologyMap({ theme: t }: Props) {
               stroke={t.acc} strokeWidth={2} strokeDasharray="4 4" opacity={0.7}/>
           )}
 
-          {/* Devices */}
+          {/* Appareils — plaques de la maquette */}
           {devices.map((d) => {
             const p = positions[d.id]; if (!p) return null;
-            const c = deviceColor(d);
-            const sz = useCisco ? 80 : 60;
+            const T = 74, r = T / 2;
             const isHover = hoverId === d.id;
             const isLinkSrc = linkingFrom === d.id;
+
+            // Trois lectures d'un même nœud, comme dans la maquette :
+            //   core — l'équipement principal, plaque pleine ;
+            //   flag — ce qui inquiète : risque élevé, blocage, isolement ;
+            //   ded  — hors ligne, contour en pointillé.
+            const classes = [
+              "unit",
+              d.isMainRouter ? "core" : "",
+              (d.dangerScore > 70 || d.status === "banned" || d.status === "quarantined") ? "flag" : "",
+              d.status === "offline" ? "ded" : "",
+            ].filter(Boolean).join(" ");
+
+            const genre = String(d.customType || d.type || "inconnu").toUpperCase();
+            const nom = (d.customName || d.hostname || d.ip || "").slice(0, 24);
+            const couleurGlyphe = d.isMainRouter ? "var(--paper)"
+              : (d.dangerScore > 70 || d.status === "banned" || d.status === "quarantined") ? "var(--alarm)"
+              : "var(--ink-soft)";
+
             return (
               <g key={d.id}
+                className={classes}
                 data-device-node="1"
-                transform={`translate(${p.x} ${p.y})`}
+                transform={`translate(${p.x} ${p.y}) scale(${ECHELLE_NOEUD})`}
                 onMouseDown={(e) => onMouseDownDevice(e, d.id)}
                 onMouseEnter={() => setHoverId(d.id)}
                 onMouseLeave={() => setHoverId(null)}
                 onClick={(e) => { e.stopPropagation(); onDeviceClick(d.id); }}
                 onContextMenu={(e) => e.preventDefault()}
-                style={{ cursor: draggingId === d.id ? "grabbing" : "pointer" }}>
-                {/* danger pulse */}
-                {d.dangerScore > 60 && (
-                  <circle cx={0} cy={0} r={28} fill="none" stroke={`${t.err}50`} strokeWidth={2}>
-                    <animate attributeName="r" values="28;55" dur="1.5s" repeatCount="indefinite"/>
-                    <animate attributeName="opacity" values="0.7;0" dur="1.5s" repeatCount="indefinite"/>
-                  </circle>
+                style={{ cursor: draggingId === d.id ? "grabbing" : "pointer", opacity: d.status === "offline" ? .72 : 1 }}>
+
+                {/* halo au survol ou pendant le tracé d'une liaison */}
+                {(isHover || isLinkSrc) && (
+                  <rect x={-r - 5} y={-r - 5} width={T + 10} height={T + 10} rx={23}
+                    fill="none" stroke="var(--accent)" strokeWidth={1.5} opacity={isLinkSrc ? .9 : .45}/>
                 )}
-                {/* hover/link halo */}
-                {(isHover || isLinkSrc) && <circle cx={0} cy={0} r={sz / 2 + 4} fill="none" stroke={c} strokeWidth={1.5} opacity={isLinkSrc ? 0.8 : 0.5}/>}
 
-                {/* Background disc */}
-                <circle cx={0} cy={0} r={sz / 2 - 2} fill={`${c}12`} stroke={c} strokeWidth={1.5} opacity={d.status === "offline" ? 0.4 : 1}/>
+                <rect className="plate" x={-r} y={-r} width={T} height={T} rx={19}/>
 
-                {/* Icon */}
-                <foreignObject x={-sz / 2} y={-sz / 2} width={sz} height={sz} style={{ pointerEvents: "none" }}>
-                  <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: sz * 0.55 }}>
-                    {useCisco
-                      ? <CiscoIcon type={d.customType || d.type} size={sz - 6} color={c} dim={d.status === "offline"} pulse={d.dangerScore > 70}/>
-                      : (t.useEmoji
-                          ? <span style={{ filter: d.status === "offline" ? "grayscale(1) opacity(0.5)" : undefined }}>{MAP_TYPE_EMOJI[d.customType || d.type] || "❓"}</span>
-                          : <DeviceIcon type={d.customType || d.type} size={sz - 6} color={c} dim={d.status === "offline"} pulse={d.dangerScore > 70}/>
-                        )}
+                <foreignObject x={-r} y={-r} width={T} height={T} style={{ pointerEvents: "none" }}>
+                  <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <DeviceIcon type={d.customType || d.type} size={34} color={couleurGlyphe}
+                      dim={d.status === "offline"} pulse={false}/>
                   </div>
                 </foreignObject>
 
-                {/* Label */}
-                <text x={0} y={sz / 2 + 16} textAnchor="middle"
-                  fill={t.txt}
-                  fontSize={12} fontFamily={t.monoFont} fontWeight={d.isMainRouter ? 700 : 400}>
-                  {(d.customName || d.hostname || d.ip).slice(0, 22)}
-                </text>
-                <text x={0} y={sz / 2 + 30} textAnchor="middle"
-                  fill={t.muted} fontSize={9.5} fontFamily={t.monoFont}>
-                  {d.ip}
-                </text>
+                <text className="kd"  y={r + 17} textAnchor="middle">{genre}</text>
+                <text className="nm"  y={r + 32} textAnchor="middle">{nom}</text>
+                <text className="ipx" y={r + 45} textAnchor="middle">{d.ip}</text>
 
-                {/* Danger badge */}
+                {/* Pastille de risque : seulement quand elle apprend quelque chose. */}
                 {d.dangerScore > 30 && !d.isMainRouter && (
-                  <g transform={`translate(${sz / 2 - 8} ${-sz / 2 + 6})`}>
-                    <circle cx={0} cy={0} r={11} fill={d.dangerScore > 70 ? t.err : t.warn} stroke={t.bg} strokeWidth={1.5}/>
-                    <text x={0} y={3.5} textAnchor="middle" fill="white" fontSize={9} fontFamily="monospace" fontWeight={700}>{d.dangerScore}</text>
-                  </g>
-                )}
-
-                {/* Whitelist badge */}
-                {(d.whitelisted || d.isMainRouter) && (
-                  <g transform={`translate(${-sz / 2 + 8} ${-sz / 2 + 6})`}>
-                    <circle cx={0} cy={0} r={9} fill={t.ok} stroke={t.bg} strokeWidth={1.5}/>
-                    <text x={0} y={3} textAnchor="middle" fill="white" fontSize={9} fontWeight={800}>✓</text>
+                  <g transform={`translate(${r - 7} ${-r + 7})`}>
+                    <circle cx={0} cy={0} r={11}
+                      fill={d.dangerScore > 70 ? "var(--alarm)" : "var(--warn)"}
+                      stroke="var(--surface)" strokeWidth={1.5}/>
+                    <text x={0} y={3.5} textAnchor="middle" fill="#fff"
+                      fontSize={9.5} fontFamily="var(--mono)" fontWeight={500}>{Math.round(d.dangerScore)}</text>
                   </g>
                 )}
               </g>
@@ -708,6 +810,13 @@ export function TopologyMap({ theme: t }: Props) {
                     ? `${d.type} · ${Math.round(d.metadata.typeConfidence * 100)}%`
                     : d.type)],
               ["Status", d.status],
+              // Rattachement physique, tel que l'équipement réseau le rapporte.
+              ...(d.metadata?.swPort !== undefined
+                ? [["Port", `commutateur · port ${d.metadata.swPort}`]] : []),
+              ...(d.metadata?.apMac
+                ? [["Borne", d.metadata.essid
+                    ? `${d.metadata.essid}${d.metadata.radio ? " · " + d.metadata.radio : ""}${d.metadata.rssi != null ? " · " + d.metadata.rssi + " dBm" : ""}`
+                    : d.metadata.apMac]] : []),
               ["Danger", `${d.dangerScore}/100`], ["Trust", `${d.trustScore}/100`],
             ].map(([k, v]) => (
               <div key={k as string} style={{ display: "flex", justifyContent: "space-between", padding: "1px 0" }}>

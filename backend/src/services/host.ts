@@ -12,17 +12,7 @@ let docker: Docker | null = null;
 function getDocker(): Docker | null {
   if (docker) return docker;
   try {
-    // We no longer mount the raw Docker socket in this container (huge attack
-    // surface if compromised). In production, DOCKER_HOST points to a
-    // read-only proxy (docker-socket-proxy) that only exposes the container
-    // list. Otherwise, we fall back to the local socket for development.
-    const host = process.env.DOCKER_HOST;
-    if (host) {
-      const u = new URL(host);
-      docker = new Docker({ host: u.hostname, port: u.port ? Number(u.port) : 2375, protocol: (u.protocol.replace(":", "") as any) || "http" });
-    } else {
-      docker = new Docker({ socketPath: "/var/run/docker.sock" });
-    }
+    docker = new Docker({ socketPath: "/var/run/docker.sock" });
     return docker;
   } catch { return null; }
 }

@@ -11,17 +11,38 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  password  String
-  role      String   @default("admin")
-  createdAt DateTime @default(now())
-  lastLogin DateTime?
-  // Incremented on each revocation: invalidates all already-issued tokens.
-  tokenVersion Int      @default(0)
-  // Temporary lockout after a series of failures.
-  failedLogins Int      @default(0)
+  id          String   @id @default(cuid())
+  username    String   @unique
+  password    String
+  role        String   @default("admin")
+  createdAt   DateTime @default(now())
+  lastLogin   DateTime?
+  // Second facteur : secret partagé avec l'application d'authentification.
+  totpSecret  String?
+  totpEnabled Boolean  @default(false)
+  // Force le changement à la prochaine connexion : mot de passe temporaire,
+  // remise à zéro par un administrateur, ou compte fraîchement créé.
+  mustChangePassword Boolean @default(false)
+  // Incrémentée à chaque révocation : invalide tous les jetons déjà émis.
+  tokenVersion Int       @default(0)
+  // Verrouillage temporaire après une série d'échecs.
+  failedLogins Int       @default(0)
   lockedUntil  DateTime?
+}
+
+// Demande de réinitialisation en cours. Deux facteurs indépendants sont exigés :
+// le code de l'application et celui envoyé sur Telegram. Expire vite, essais
+// plafonnés.
+model PasswordReset {
+  id            String   @id @default(cuid())
+  userId        String
+  telegramCode  String
+  telegramSent  Boolean  @default(false)
+  attempts      Int      @default(0)
+  consumed      Boolean  @default(false)
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+  @@index([userId])
 }
 
 model Device {
@@ -170,6 +191,14 @@ model Vlan {
   color       String   @default("#38bdf8")
   isolated    Boolean  @default(false)
   createdAt   DateTime @default(now())
+
+  /// Adresse que la passerelle porte sur ce VLAN, relevée sur l'équipement.
+  /// Sert à écarter cette adresse quand on en réserve une : la donner à une
+  /// machine coupe le réseau du segment entier.
+  gateway     String?
+  /// Identifiant du réseau chez le constructeur. Une réservation d'adresse
+  /// doit dire de quel réseau l'adresse relève, pas seulement laquelle.
+  networkId   String?
 }
 
 model SshDevice {
@@ -181,10 +210,10 @@ model SshDevice {
   passwordEnc   String?
   privateKeyEnc String?
   passphraseEnc String?
-  // Adapter identifier: unifi, asus-merlin, openwrt, routeros,
+  // Identifiant de l'adaptateur : unifi, asus-merlin, openwrt, routeros,
   // pfsense, cisco-ios, zyxel, edgeos, generic.
   vendor        String   @default("generic")
-  // Control channel: ssh for most, api for UniFi.
+  // Voie de pilotage : ssh pour la plupart, api pour UniFi.
   transport     String   @default("ssh")
   apiBaseUrl    String?
   site          String?
@@ -316,4 +345,111 @@ model HostMetric {
   uptimeSec   Int
   createdAt   DateTime @default(now())
   @@index([createdAt])
+}
+
+// Boîte mail configurée dans les réglages.
+//
+// Le mot de passe est chiffré au repos par services/crypto.ts, qui empaquette
+// IV + tag + chiffré dans une seule chaîne base64 avec la clé MASTER_KEY —
+// même mécanisme que pour les identifiants SSH et les canaux de notification,
+// plutôt qu'un second schéma de chiffrement pour la même garantie.
+model Mailbox {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  provider     String   @default("other")
+  role         String   @default("both")   // both | send | receive
+  imapHost     String?
+  imapPort     Int?
+  imapSecurity String?                     // ssl | starttls | none
+  smtpHost     String?
+  smtpPort     Int?
+  smtpSecurity String?
+  passwordEnc  String?
+  active       Boolean  @default(true)
+  lastTestAt   DateTime?
+  lastTestOk   Boolean?
+  lastTestInfo String?
+  createdAt    DateTime @default(now())
+}
+
+/// Un flux sortant observé sur la passerelle.
+///
+/// Une ligne par quadruplet source/destination/port/protocole : un hôte bavard
+/// ne fait pas gonfler la table indéfiniment, et on garde la première et la
+/// dernière apparition, ce qui suffit à raconter l'historique.
+model TrafficFlow {
+  id         String   @id @default(cuid())
+  srcIp      String
+  dstIp      String
+  port       Int      @default(0)
+  proto      String   @default("tcp")
+
+  firstSeen  DateTime @default(now())
+  lastSeen   DateTime @default(now())
+  /// Cumul depuis la première observation. Double : un Int déborderait à 2 Go.
+  bytes      Float    @default(0)
+  packets    Float    @default(0)
+  /// Nombre de relevés où ce flux est apparu.
+  hits       Int      @default(1)
+
+  /// Ce que le DNS inverse et le registre ont rendu, tel quel.
+  host       String?
+  domain     String?
+  operator   String?
+  logo       String?
+  /// Pays d'enregistrement du préfixe, pas une géolocalisation.
+  country    String?
+
+  /// « sortant » : une machine du parc est allée vers l'extérieur.
+  /// « entrant » : l'extérieur est venu jusqu'à une machine du parc.
+  direction  String   @default("sortant")
+  /// Signalé par une règle explicite, jamais par une intuition. La raison est
+  /// écrite juste en dessous : sans elle, un point rouge n'apprend rien.
+  suspect    Boolean  @default(false)
+  raison     String?
+
+  @@unique([srcIp, dstIp, port, proto])
+  @@index([lastSeen])
+  @@index([dstIp])
+}
+
+/// Une clé d'accès (WebAuthn) inscrite par un utilisateur.
+///
+/// Déclarée ici et pas seulement créée en SQL : le conteneur lance
+/// « prisma db push » au démarrage, et db push traite toute table absente du
+/// schéma comme une dérive à supprimer. Table vide, il la supprime en
+/// silence ; table pleine, il refuse et sort en erreur — c'est ce qui a mis
+/// le backend en boucle de redémarrage. Toute table ajoutée doit donc figurer
+/// ici, sans exception.
+///
+/// Aucune relation déclarée vers User : la table existe déjà en base sans
+/// clé étrangère, et en ajouter une ferait diverger le schéma de la base.
+model Passkey {
+  id           String    @id
+  userId       String
+  /// Identifiant de la clé rendu par l'authentificateur, en base64url.
+  credentialId String    @unique
+  /// Clé publique, en base64url. Aucun secret : la partie privée ne quitte
+  /// jamais l'appareil.
+  publicKey    String
+  /// Compteur anti-rejeu. BigInt : certains authentificateurs comptent large.
+  counter      BigInt    @default(0)
+  /// « usb », « internal », « hybrid »… tels que le navigateur les rapporte.
+  transports   String?
+  /// Nom donné par l'utilisateur, pour reconnaître la clé dans la liste.
+  label        String?
+  createdAt    DateTime  @default(now())
+  lastUsed     DateTime?
+
+  @@index([userId])
+}
+
+/// Réglages de sécurité propres à un compte.
+model UserSecurity {
+  userId         String  @id
+  /// Un administrateur peut exiger un second facteur ; il ne peut pas en
+  /// poser un à la place de l'intéressé.
+  mfaRequired    Boolean @default(false)
+  /// Discussion Telegram à laquelle envoyer le code, si ce facteur est choisi.
+  telegramChatId String?
 }

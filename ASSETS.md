@@ -1,79 +1,75 @@
-# ASSETS.md — Inventory of assets and data (GOV-002)
+# ASSETS.md — Inventaire des actifs et des données (GOV-002)
 
-Reference inventory for MapMyLAN: exposed routes, data stores and their
-sensitivity, third-party services and the keys used, and the location of every
-secret. To be kept up to date with each new feature.
+Inventaire de référence de MapMyLAN : routes exposées, magasins de données et leur
+sensibilité, services tiers et clés employées, et emplacement de chaque secret.
+À tenir à jour à chaque ajout de fonctionnalité.
 
-_Last revised: 2026-08-18 (security audit)._
+_Dernière révision : 2026-08-18 (audit de sécurité)._
 
-## 1. Exposed surfaces
+## 1. Surfaces exposées
 
-| Surface | Detail |
+| Surface | Détail |
 |---------|--------|
-| Frontend | Static SPA served by nginx (published port `8090:80`). Security headers + CSP set by nginx. |
-| API | `/api/*`, proxied by nginx to the backend `:4000`. Every route except `/api/health` and `/api/auth/login` requires a session. |
-| Real time | WebSocket `/ws` (socket.io), authenticated by the session cookie (signature + token version check). |
-| Database | PostgreSQL, published on `127.0.0.1:5432` only. |
-| Cache | Redis, published on `127.0.0.1:6379` only. |
-| Docker socket | Never mounted into the backend: read-only access via `docker-socket-proxy` (`127.0.0.1:2375`, `CONTAINERS=1` only). |
+| Frontend | SPA statique servie par nginx (port publié `8090:80`). En-têtes de sécurité + CSP posés par nginx. |
+| API | `/api/*`, proxifiée par nginx vers le backend `:4000`. Toutes les routes sauf `/api/health` et `/api/auth/login` exigent une session. |
+| Temps réel | WebSocket `/ws` (socket.io), authentifié par le cookie de session (vérif. signature + version de jeton). |
+| Base de données | PostgreSQL, publié sur `127.0.0.1:5432` uniquement. |
+| Cache | Redis, publié sur `127.0.0.1:6379` uniquement. |
+| Socket Docker | Jamais monté dans le backend : accès en lecture seule via `docker-socket-proxy` (`127.0.0.1:2375`, `CONTAINERS=1` seul). |
 
-### API routes (prefix `/api`)
+### Routes API (préfixe `/api`)
 
-| Mount | Auth | Role required |
+| Montage | Auth | Rôle requis |
 |---------|------|-------------|
-| `/auth` (`login`, `logout`, `change-password`) | public / session | — |
-| `/devices` | session | mutations open to authenticated users |
+| `/auth` (`login`, `logout`, `change-password`) | publique / session | — |
+| `/devices` | session | mutations ouvertes aux utilisateurs authentifiés |
 | `/vlans` | session | — |
-| `/ssh` | session | `admin` (create/delete), `admin`+`operator` (exec) |
+| `/ssh` | session | `admin` (création/suppression), `admin`+`operator` (exec) |
 | `/topology` | session | — |
 | `/host` | session | — |
-| `/commands` | session | `admin` (create/edit/delete/trigger) |
-| `/bot-commands` | session | `admin` (create/edit/delete/execute) |
+| `/commands` | session | `admin` (création/modif/suppression/déclenchement) |
+| `/bot-commands` | session | `admin` (création/modif/suppression/exécution) |
 | `/router` | session | `admin` |
-| `/` (system: stats, settings, notifications, rules, alerts, logs, setup) | session | `admin` on sensitive writes |
+| `/` (system : stats, settings, notifications, rules, alerts, logs, setup) | session | `admin` sur les écritures sensibles |
 
-## 2. Data stores and sensitivity
+## 2. Magasins de données et sensibilité
 
-| Prisma model | Content | Sensitivity |
+| Modèle Prisma | Contenu | Sensibilité |
 |---------------|---------|-------------|
-| `User` | credentials (Argon2id hash + pepper), role, token version, lockout | **High** (authentication) |
-| `SshDevice` | equipment host/port/user + **encrypted** secrets (`passwordEnc`, `privateKeyEnc`, `passphraseEnc`, AES-256-GCM) | **Critical** (router access) |
-| `Device`, `Interface`, `Port`, `CveMatch`, `DeviceHistory` | network inventory (IP, MAC, names, CVE) | Medium (personal data under GDPR: mapping of a network) |
-| `TopologyLink`, `Zone`, `Vlan` | topology and segmentation | Low |
-| `Alert`, `LogEntry`, `ScanRun`, `HostMetric` | events, logs, metrics | Low→Medium (logs contain no secrets) |
-| `Setting`, `NotificationConfig` | settings; `NotificationConfig` holds notification keys (Telegram token, SMTP, Twilio) | **High** (third-party keys) |
-| `BotCommand`, `NotificationCommand`, `SecurityRule` | admin-defined automations (including `exec_ssh`) | High (can trigger actions) |
+| `User` | identifiants (empreinte Argon2id + poivre), rôle, version de jeton, verrouillage | **Élevée** (authentification) |
+| `SshDevice` | hôte/port/utilisateur d'équipement + secrets **chiffrés** (`passwordEnc`, `privateKeyEnc`, `passphraseEnc`, AES-256-GCM) | **Critique** (accès routeur) |
+| `Device`, `Interface`, `Port`, `CveMatch`, `DeviceHistory` | inventaire réseau (IP, MAC, noms, CVE) | Moyenne (données personnelles au sens RGPD : cartographie d'un réseau) |
+| `TopologyLink`, `Zone`, `Vlan` | topologie et segmentation | Faible |
+| `Alert`, `LogEntry`, `ScanRun`, `HostMetric` | événements, journaux, métriques | Faible→Moyenne (les journaux ne contiennent pas de secret) |
+| `Setting`, `NotificationConfig` | réglages ; `NotificationConfig` porte des clés de notification (token Telegram, SMTP, Twilio) | **Élevée** (clés tierces) |
+| `BotCommand`, `NotificationCommand`, `SecurityRule` | automatisations définies par l'admin (dont `exec_ssh`) | Élevée (peuvent déclencher des actions) |
 
-## 3. Third-party services and keys used
+## 3. Services tiers et clés employées
 
-| Service | Use | Key / secret | Where |
+| Service | Usage | Clé / secret | Où |
 |---------|-------|--------------|-----|
-| Telegram Bot API | notifications + command bot | bot token | `NotificationConfig` (database), called server-side only |
-| SMTP (nodemailer) | alert emails | SMTP credentials | `NotificationConfig` |
-| Twilio | alert SMS | SID + auth token | `NotificationConfig` |
-| Network equipment (SSH/UniFi) | scan, defense, provisioning | encrypted credentials | `SshDevice` (`*Enc`, AES-256-GCM) |
-| SYNAPSE (homelab edition only) | sending internal events | `SYNAPSE_TOKEN` (Bearer) | environment variable; URL restricted to the internal network |
+| Telegram Bot API | notifications + bot de commandes | token de bot | `NotificationConfig` (base), appelé serveur-side uniquement |
+| SMTP (nodemailer) | courriels d'alerte | identifiants SMTP | `NotificationConfig` |
+| Twilio | SMS d'alerte | SID + auth token | `NotificationConfig` |
+| Équipements réseau (SSH/UniFi) | scan, défense, provisioning | identifiants chiffrés | `SshDevice` (`*Enc`, AES-256-GCM) |
+| SYNAPSE (édition homelab uniquement) | envoi d'événements internes | `SYNAPSE_TOKEN` (Bearer) | variable d'environnement ; URL restreinte au réseau interne |
 
-No third-party key is exposed to the browser. No secret `VITE_*` variable is
-compiled into the bundle.
+Aucune clé tierce n'est exposée au navigateur. Aucune variable `VITE_*` secrète n'est compilée dans le bundle.
 
-## 4. Secrets and their location
+## 4. Secrets et leur emplacement
 
-| Secret | Role | Location | Rotation |
+| Secret | Rôle | Emplacement | Rotation |
 |--------|------|-------------|----------|
-| `JWT_SECRET` | signing session tokens | environment (`.env`) | invalidates all sessions |
-| `MASTER_KEY` | derives the AES key for equipment credentials | environment | loss = credentials unrecoverable |
-| `PASSWORD_PEPPER` | HMAC pepper for passwords | environment (outside the database) | changes the hash of every password |
-| `POSTGRES_PASSWORD` | database access | environment | — |
-| `DEFAULT_ADMIN_PASSWORD` | regaining control of the admin account | environment (empty in normal operation) | to be cleared again after use |
-| `SYNAPSE_TOKEN` | ingestion Bearer (homelab) | environment | per service |
+| `JWT_SECRET` | signature des jetons de session | environnement (`.env`) | invalide toutes les sessions |
+| `MASTER_KEY` | dérive la clé AES des identifiants d'équipement | environnement | perte = identifiants irrécupérables |
+| `PASSWORD_PEPPER` | poivre HMAC des mots de passe | environnement (hors base) | change l'empreinte de tous les mots de passe |
+| `POSTGRES_PASSWORD` | accès base | environnement | — |
+| `DEFAULT_ADMIN_PASSWORD` | reprise en main du compte admin | environnement (vide en fonctionnement normal) | à revider après usage |
+| `SYNAPSE_TOKEN` | Bearer d'ingestion (homelab) | environnement | par service |
 
-All live in the environment / a secrets manager, never in the repository.
-`.gitignore` excludes `.env`, `.env.*`, `*.pem`, `*.key`, dumps, and logs.
+Tous vivent dans l'environnement / un gestionnaire de secrets, jamais dans le dépôt.
+`.gitignore` exclut `.env`, `.env.*`, `*.pem`, `*.key`, dumps et journaux.
 
-## 5. Trust boundaries (reminder)
+## 5. Frontières de confiance (rappel)
 
-browser → nginx (CDN/edge) → backend → database; backend → third-party APIs;
-providers (Telegram webhook) → endpoints; imported files → processing → other
-browsers. Each arrow is a point of validation/authentication/authorization,
-regardless of what the sender promises.
+navigateur → nginx (CDN/edge) → backend → base ; backend → API tierces ; fournisseurs (webhook Telegram) → endpoints ; fichiers importés → traitement → autres navigateurs. Chaque flèche est un point de validation/authentification/autorisation, indépendamment de ce que promet l'émetteur.

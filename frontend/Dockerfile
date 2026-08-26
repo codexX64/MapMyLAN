@@ -1,9 +1,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
-# Reproducible build from the lockfile (SEC-DEP-001). npm 10 (shipped with
-# node:20) fixes the rollup optional-deps bug that once forced discarding the
-# lockfile; we can therefore go back to `npm ci`, which is deterministic.
+# Build reproductible depuis le lockfile (SEC-DEP-001). npm 10 (fourni par
+# node:20) corrige le bug d'optional-deps rollup qui imposait naguère de jeter le
+# lockfile ; on peut donc revenir à `npm ci`, déterministe.
 RUN npm ci
 COPY . .
 RUN npm run build

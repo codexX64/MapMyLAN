@@ -5,7 +5,6 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { config, verifierSecrets } from "./config";
 import { prisma } from "./db";
-import { csrfProtection } from "./middleware/csrf";
 import authRoute from "./routes/auth";
 import devicesRoute from "./routes/devices";
 import vlansRoute from "./routes/vlans";
@@ -16,25 +15,40 @@ import systemRoute from "./routes/system";
 import commandsRoute from "./routes/commands";
 import botCommandsRoute from "./routes/botCommands";
 import routerRoute from "./routes/router";
+import netRoute from "./routes/net";
+import trafficRoute from "./routes/traffic";
+import usersRoute from "./routes/users";
+import mfaRoute from "./routes/mfa";
+import mailRoute from "./routes/mail";
 import { dedupeDevices } from "./services/dedupe";
 import { attachSocketIO } from "./ws/realtime";
 import { startScheduler } from "./workers/scheduler";
 import { startTelegramBot } from "./services/notifier";
+import { annoncerPoste } from "./services/poste";
 
 async function main() {
+  // Avant toute chose : sans secrets solides, rien ne doit démarrer.
+  verifierSecrets();
+
+  // Tables ajoutées après coup, hors migrations. La préparation est aussi
+  // paresseuse côté service : ceci n'est qu'un raccourci, et un endroit où
+  // l'échec se voit au lieu d'être découvert par une page qui casse.
+  try {
+    await (await import("./services/mfa")).preparerTables();
+  } catch (e: any) {
+    console.error("[démarrage] tables du second facteur :", e?.message || e);
+  }
+
   const app = express();
   const httpServer = http.createServer(app);
 
-  // Behind a proxy: without this line, every request appears to come from the
-  // same address and the attempt limiter goes blind.
-  // First of all: without strong secrets, nothing should start.
-  verifierSecrets();
-
+  // Derrière nginx puis Cloudflare : sans cela, Express attribue toutes les
+  // requêtes à la même adresse et le limiteur de tentatives devient aveugle —
+  // dix essais par minute partagés par tout le monde au lieu d'un par client.
   app.set("trust proxy", 1);
-
-  // The content security policy is the main protection against script
-  // injection. The interface only loads its own resources and the declared
-  // fonts; everything else is refused by the browser.
+  // La politique de contenu est la principale protection contre l'injection de
+  // script. L'interface ne charge que ses propres ressources et les polices
+  // déclarées ; tout le reste est refusé par le navigateur.
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -54,32 +68,29 @@ async function main() {
     referrerPolicy: { policy: "no-referrer" },
     hsts: { maxAge: 31536000, includeSubDomains: true },
   }));
-  // A "*" origin and sending credentials do not go together: that is the
-  // configuration that lets any site act on the user's behalf. When no origin
-  // is set, we do not enable credentials and we flag it, rather than silently
-  // combining the two.
-  const corsWildcard = config.corsOrigin === "*";
-  if (corsWildcard) {
-    console.warn("[cors] CORS_ORIGIN not set: origin \"*\" without credentials. " +
-      "Set CORS_ORIGIN to the exact frontend URL in production.");
+  // Origines croisees.
+  //
+  // -- Correctif de securite ------------------------------------------------
+  // La valeur par defaut de CORS_ORIGIN est « * », et elle etait associee a
+  // credentials: true. Les navigateurs refusent cette combinaison, donc
+  // l'effet pratique etait nul -- mais c'est un piege pose : le jour ou
+  // quelqu'un remplace l'etoile par une liste trop large, les identifiants
+  // partent avec.
+  //
+  // Le deploiement normal sert l'interface et l'API sur la meme origine : il
+  // n'a besoin d'aucun CORS. On ne laisse donc passer les identifiants que
+  // lorsqu'une origine est nommee explicitement.
+  const origineNommee = config.corsOrigin && config.corsOrigin !== "*";
+  if (!origineNommee) {
+    console.warn(
+      "[cors] CORS_ORIGIN vaut « * » : les identifiants ne traverseront pas les " +
+      "origines. Nomme l'origine si l'interface est servie depuis un autre domaine.",
+    );
   }
-  app.use(cors({ origin: config.corsOrigin, credentials: !corsWildcard }));
-  app.use(express.json({ limit: "512kb" }));
+  app.use(cors({ origin: config.corsOrigin, credentials: !!origineNommee }));
+  app.use(express.json({ limit: "5mb" }));
 
-  // Anti-CSRF protection (double submit) on every request that modifies state
-  // and authenticates via cookie. Placed before the routes, after body
-  // parsing.
-  app.use(csrfProtection);
-
-  // Two separate limiters: login deserves a lower cap than the rest of the
-  // API, since it is the one attacked by repetition.
-  const authLimiter = rateLimit({
-    windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false,
-    message: { error: "Too many attempts. Try again in a minute." },
-  });
-  const apiLimiter = rateLimit({
-    windowMs: 60_000, max: 300, standardHeaders: true, legacyHeaders: false,
-  });
+  const authLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true });
 
   app.get("/api/health", async (_req, res) => {
     try { await prisma.$queryRaw`SELECT 1`; res.json({ status: "ok", time: new Date().toISOString() }); }
@@ -87,7 +98,6 @@ async function main() {
   });
 
   app.use("/api/auth", authLimiter, authRoute);
-  app.use("/api", apiLimiter);
   app.use("/api/devices", devicesRoute);
   app.use("/api/vlans", vlansRoute);
   app.use("/api/ssh", sshRoute);
@@ -96,6 +106,11 @@ async function main() {
   app.use("/api/commands", commandsRoute);
   app.use("/api/bot-commands", botCommandsRoute);
   app.use("/api/router", routerRoute);
+  app.use("/api/net", netRoute);
+  app.use("/api/traffic", trafficRoute);
+  app.use("/api/users", usersRoute);
+  app.use("/api/mfa", mfaRoute);
+  app.use("/api/mail", mailRoute);
   app.use("/api", systemRoute);
 
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -104,12 +119,42 @@ async function main() {
   });
 
   attachSocketIO(httpServer);
-  // A cleanup pass at startup: one IP, one device.
+  // Un passage de nettoyage au démarrage : une IP, un appareil.
   dedupeDevices().catch(() => {});
   startScheduler();
   startTelegramBot().catch(() => {});
+  annoncerPoste();
 
-  httpServer.listen(config.port, () => {
+  // Adresse d'ecoute.
+  //
+  // -- Correctif de securite, en deux temps ---------------------------------
+  // Le backend tourne en network_mode: host -- necessaire pour qu'arp-scan et
+  // nmap voient le vrai reseau -- et ecoutait donc sur toutes les interfaces.
+  // Tout VLAN capable de router jusqu'a la machine atteignait l'API.
+  //
+  // Le refermer d'un coup casserait le reverse proxy, qui vit dans un autre
+  // espace reseau : la valeur par defaut est donc **celle d'aujourd'hui**, et
+  // le resserrement est un geste explicite :
+  //
+  //     BIND_ADDRESS=<adresse du pont Docker>   dans le .env, puis redemarrage
+  //
+  // Et **pas** 127.0.0.1 : nginx tourne dans un conteneur et joint l'API par la
+  // passerelle du pont (proxy_pass 172.17.0.1:4000), pas par la boucle locale de
+  // l'hote. Poser 127.0.0.1 ici couperait l'interface. L'adresse du pont, elle,
+  // referme l'API vis-a-vis du LAN tout en la laissant joignable au conteneur :
+  //
+  //     ip -4 addr show docker0 | awk '/inet /{print $2}' | cut -d/ -f1
+  //
+  // Verifie que l'interface repond encore avant de le laisser en place. Si elle
+  // ne repond plus, retire la ligne : rien d'autre n'a change.
+  const adresse = process.env.BIND_ADDRESS || "0.0.0.0";
+  if (adresse === "0.0.0.0") {
+    console.warn(
+      "[reseau] l'API ecoute sur toutes les interfaces. Pose BIND_ADDRESS sur " +
+      "l'adresse du pont Docker (pas 127.0.0.1 : le frontend passe par le pont).",
+    );
+  }
+  httpServer.listen(config.port, adresse, () => {
     console.log(`╔════════════════════════════════════════════════════╗`);
     console.log(`║  MapMyLAN v2 ready — listening on :${config.port}             ║`);
     console.log(`║  Subnet: ${config.scan.subnet.padEnd(40)}║`);

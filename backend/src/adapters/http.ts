@@ -1,6 +1,6 @@
-// Small dependency-free HTTP client, able to tolerate a self-signed
-// certificate — the case for every local network device — and to keep session
-// cookies across calls.
+// Petit client HTTP sans dépendance, capable de tolérer un certificat
+// autosigné — le cas de tous les équipements réseau locaux — et de conserver
+// les cookies de session entre deux appels.
 
 import https from "node:https";
 import http from "node:http";
@@ -80,7 +80,7 @@ export class HttpSession {
           }));
         },
       );
-      req.on("timeout", () => { req.destroy(new Error("Request timed out")); });
+      req.on("timeout", () => { req.destroy(new Error("Délai dépassé")); });
       req.on("error", reject);
       if (payload) req.write(payload);
       req.end();

@@ -6,7 +6,6 @@ import { prisma } from "../db";
 import { mainRouter } from "../adapters";
 import { createAlert, logEvent } from "./logger";
 import { eventBus } from "../ws/realtime";
-import { validerCible } from "./valider";
 
 async function deviceById(id: string) {
   const d = await prisma.device.findUnique({ where: { id } });
@@ -14,20 +13,15 @@ async function deviceById(id: string) {
   return d;
 }
 
-// The vendor dialects live in src/adapters: this file no longer decides *how*
-// we block, only *whether* we're allowed to block and what we record
-// afterward.
+// Les dialectes constructeurs vivent dans src/adapters : ce fichier ne décide
+// plus *comment* on bloque, seulement *si* on a le droit de bloquer et ce qu'on
+// enregistre ensuite.
 async function act(kind: "ban" | "quarantine" | "unban", dev: any): Promise<{ output: string; vendor: string }> {
   const { row, adapter, ctx } = await mainRouter();
   if (!adapter.capabilities.includes(kind as any)) {
-    throw new Error(`${adapter.label} cannot perform "${kind}" from MapMyLAN`);
+    throw new Error(`${adapter.label} ne sait pas faire « ${kind} » depuis MapMyLAN`);
   }
-  // The target's address is interpolated into the driver's commands (iptables,
-  // pfctl, uci…). The `gardeCommande` safeguard blocks command chaining, but
-  // lets spaces through: an IP containing `-j ACCEPT` would inject arguments
-  // into the rule. So here we require the exact format before any command is
-  // built — deny by default.
-  const target = validerCible({ ip: dev.ip, mac: dev.mac || undefined });
+  const target = { ip: dev.ip, mac: dev.mac || undefined };
   const output = await adapter[kind](ctx, target);
   await prisma.sshDevice.update({ where: { id: row.id }, data: { lastConnected: new Date() } }).catch(() => {});
   return { output, vendor: adapter.id };

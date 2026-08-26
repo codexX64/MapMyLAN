@@ -1,6 +1,6 @@
 // Forced onboarding wizard. Cannot be skipped — the main router IP step is mandatory.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../api/client";
 import { useStore } from "../stores/app";
 
@@ -15,11 +15,27 @@ const STEPS = [
   { id: "done",    label: "Done" },
 ];
 
+// Les identifiants doivent correspondre exactement à ceux des adaptateurs du
+// serveur, sinon la connexion échoue silencieusement. UniFi parle à l'API
+// locale en HTTPS ; tous les autres passent en SSH.
+const VENDORS = [
+  { value: "unifi",       label: "Ubiquiti · UniFi",     note: "API locale HTTPS" },
+  { value: "asus-merlin", label: "Asus · Merlin",        note: "SSH" },
+  { value: "openwrt",     label: "OpenWrt",              note: "SSH" },
+  { value: "routeros",    label: "MikroTik · RouterOS",  note: "SSH" },
+  { value: "pfsense",     label: "pfSense / OPNsense",   note: "SSH" },
+  { value: "cisco-ios",   label: "Cisco IOS",            note: "SSH" },
+  { value: "zyxel",       label: "Zyxel",                note: "SSH" },
+  { value: "edgeos",      label: "Ubiquiti · EdgeOS",    note: "SSH" },
+  { value: "generic",     label: "Autre (SSH générique)", note: "SSH" },
+];
+const estApi = (v: string) => v === "unifi";
+
 export function OnboardingPage() {
   const setSetupComplete = useStore((s) => s.setSetupComplete);
   const [step, setStep] = useState(0);
   const [data, setData] = useState<any>({
-    router: { name: "Main Router", host: "", port: 22, username: "admin", password: "", privateKey: "", passphrase: "", useKey: false, vendor: "asus-merlin" },
+    router: { name: "Routeur principal", host: "", port: 22, username: "admin", password: "", privateKey: "", passphrase: "", useKey: false, vendor: "unifi", apiBaseUrl: "", site: "default" },
     sshTested: false,
     telegram: { enabled: false, token: "", chatId: "" },
     email: { enabled: false, provider: "gmail", address: "", password: "" },
@@ -47,6 +63,9 @@ export function OnboardingPage() {
     const r = data.router;
     return {
       name: r.name, host: r.host, port: r.port, username: r.username, vendor: r.vendor,
+      transport: estApi(r.vendor) ? "api" : "ssh",
+      apiBaseUrl: estApi(r.vendor) ? (r.apiBaseUrl || `https://${r.host}`) : undefined,
+      site: estApi(r.vendor) ? (r.site || "default") : undefined,
       ...(r.useKey
         ? { privateKey: r.privateKey, passphrase: r.passphrase || undefined }
         : { password: r.password }),
@@ -96,10 +115,30 @@ export function OnboardingPage() {
   return (
     <div style={{
       minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: "radial-gradient(ellipse at top, rgba(56,189,248,0.06) 0%, transparent 60%), #07090f",
+      background: "#07090f", position: "relative",
       fontFamily: "'Outfit', sans-serif", padding: 20, overflow: "auto",
     }}>
+      {/* Deux halos dérivent lentement en fond : l'écran respire sans jamais
+          attirer l'œil pendant la saisie. */}
+      <style>{`
+        @keyframes ob-a { 0%,100% { transform: translate(-6%,-8%) scale(1) } 50% { transform: translate(7%,6%) scale(1.18) } }
+        @keyframes ob-b { 0%,100% { transform: translate(8%,6%) scale(1.12) } 50% { transform: translate(-7%,-6%) scale(1) } }
+      `}</style>
+      <div aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+        <div style={{
+          position: "absolute", top: "-25%", left: "-15%", width: "75%", height: "85%",
+          background: "radial-gradient(circle, rgba(56,189,248,0.10), transparent 65%)",
+          animation: "ob-a 28s ease-in-out infinite",
+        }}/>
+        <div style={{
+          position: "absolute", bottom: "-30%", right: "-15%", width: "70%", height: "80%",
+          background: "radial-gradient(circle, rgba(129,140,248,0.09), transparent 65%)",
+          animation: "ob-b 36s ease-in-out infinite",
+        }}/>
+      </div>
+
       <div style={{
+        position: "relative", zIndex: 1,
         width: "100%", maxWidth: 620, background: "rgba(255,255,255,0.04)",
         border: "1px solid rgba(255,255,255,0.08)", borderRadius: 22, padding: 32,
         backdropFilter: "blur(24px)", boxShadow: "0 30px 80px rgba(56,189,248,0.18)",
@@ -144,21 +183,53 @@ export function OnboardingPage() {
         {step === 1 && (
           <Step title="Main router" subtitle="Required — this device will never be auto-banned and will execute defense actions">
             {[
-              { k: "name", l: "Name" },
-              { k: "host", l: "IP address", placeholder: "192.168.1.1" },
-              { k: "port", l: "SSH port", type: "number" },
-              { k: "username", l: "Username" },
+              { k: "name", l: "Nom" },
+              { k: "host", l: "Adresse IP", placeholder: "192.0.2.1" },
+              { k: "port", l: estApi(data.router.vendor) ? "Port de l'API" : "Port SSH", type: "number" },
+              { k: "username", l: "Identifiant" },
             ].map((f) => (
               <Field key={f.k} label={f.l} type={f.type} placeholder={f.placeholder}
                 value={(data.router as any)[f.k]}
                 onChange={(v) => upd("router", { [f.k]: f.type === "number" ? parseInt(v) : v })}/>
             ))}
-            <SelectField label="Vendor / firmware" value={data.router.vendor} onChange={(v) => upd("router", { vendor: v })}
-              options={["asus-merlin", "mikrotik", "openwrt", "pfsense", "cisco", "unifi", "generic"]}/>
+            <SelectField label="Constructeur" value={data.router.vendor}
+              onChange={(v) => {
+                // Le port suit le transport, tant que l'utilisateur n'a pas
+                // saisi une valeur à lui : 443 pour l'API UniFi, 22 en SSH.
+                const actuel = data.router.port;
+                const parDefaut = actuel === 22 || actuel === 443;
+                upd("router", {
+                  vendor: v,
+                  ...(parDefaut ? { port: estApi(v) ? 443 : 22 } : {}),
+                });
+              }}
+              options={VENDORS}/>
 
-            {/* Auth toggle */}
+            {/* UniFi s'authentifie par identifiant et mot de passe sur son API
+                locale : proposer une clé privée n'aurait aucun sens. */}
+            {/* Adresse du contrôleur et site : nécessaires seulement si le
+                contrôleur ne vit pas sur la passerelle elle-même. Laissés vides,
+                ils sont déduits de l'adresse IP ci-dessus. */}
+            {estApi(data.router.vendor) && (
+              <>
+                <Field label="Adresse du contrôleur (optionnel)"
+                  placeholder={`https://${data.router.host || "192.0.2.1"}`}
+                  value={data.router.apiBaseUrl}
+                  onChange={(v: string) => upd("router", { apiBaseUrl: v })}/>
+                <Field label="Site" placeholder="default"
+                  value={data.router.site}
+                  onChange={(v: string) => upd("router", { site: v })}/>
+              </>
+            )}
+            {estApi(data.router.vendor) && (
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 9, margin: "10px 0", padding: "10px 12px", background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.25)", borderRadius: 8, fontSize: 12, color: "#cbd5e1", lineHeight: 1.5 }}>
+                <span style={{ marginTop: 1 }}>ⓘ</span>
+                <span>Compte <b>local</b> de l'UniFi OS, créé dans Settings → Admins &amp; Users. Les identifiants du compte Ubiquiti en ligne sont refusés par l'API locale.</span>
+              </div>
+            )}
+            {!estApi(data.router.vendor) && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0 8px", padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 8 }}>
-              <span style={{ color: "#cbd5e1", fontSize: 12, flex: 1 }}>Use SSH private key</span>
+              <span style={{ color: "#cbd5e1", fontSize: 12, flex: 1 }}>Utiliser une clé privée SSH</span>
               <button type="button" onClick={() => upd("router", { useKey: !data.router.useKey })} style={{
                 width: 38, height: 20, borderRadius: 10, padding: 2,
                 background: data.router.useKey ? "#38bdf8" : "rgba(255,255,255,0.15)",
@@ -167,6 +238,7 @@ export function OnboardingPage() {
                 <span style={{ display: "block", width: 16, height: 16, background: "white", borderRadius: "50%", marginLeft: data.router.useKey ? 18 : 0, transition: "margin-left 0.2s" }}/>
               </button>
             </div>
+            )}
 
             {!data.router.useKey
               ? <Field label="Password" type="password" value={data.router.password} onChange={(v) => upd("router", { password: v })}/>
@@ -306,14 +378,109 @@ function Field({ label, value, onChange, type = "text", placeholder }: any) {
     </div>
   );
 }
+// Le <select> natif impose le rendu du système : flèche dessinée par l'OS,
+// panneau blanc qui ignore le fond sombre. Sur cet assistant, c'était la pièce
+// qui jurait. Celui-ci s'ouvre en panneau, montre une ligne secondaire par
+// option, et se pilote au clavier.
 function SelectField({ label, value, onChange, options }: any) {
+  const [ouvert, setOuvert] = useState(false);
+  const [vise, setVise] = useState(-1);
+  const boite = useRef<HTMLDivElement>(null);
+
+  const liste: { value: string; label: string; note?: string }[] =
+    options.map((o: any) => (typeof o === "string" ? { value: o, label: o } : o));
+  const choisi = liste.find(o => o.value === value);
+
+  useEffect(() => {
+    if (!ouvert) return;
+    const dehors = (e: MouseEvent) => {
+      if (boite.current && !boite.current.contains(e.target as Node)) setOuvert(false);
+    };
+    document.addEventListener("mousedown", dehors);
+    return () => document.removeEventListener("mousedown", dehors);
+  }, [ouvert]);
+
+  useEffect(() => {
+    if (ouvert) setVise(Math.max(0, liste.findIndex(o => o.value === value)));
+  }, [ouvert]);
+
+  const clavier = (e: any) => {
+    if (!ouvert && (e.key === "Enter" || e.key === " " || e.key === "ArrowDown")) {
+      e.preventDefault(); setOuvert(true); return;
+    }
+    if (!ouvert) return;
+    if (e.key === "Escape") { e.preventDefault(); setOuvert(false); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); setVise(i => Math.min(liste.length - 1, i + 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setVise(i => Math.max(0, i - 1)); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const o = liste[vise];
+      if (o) { onChange(o.value); setOuvert(false); }
+    }
+  };
+
   return (
     <div style={{ marginBottom: 12 }}>
       <label style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 5, fontFamily: "monospace" }}>{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#f1f5f9", borderRadius: 8, padding: "9px 12px", fontSize: 13, outline: "none", fontFamily: "monospace" }}>
-        {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
-      </select>
+      <div ref={boite} style={{ position: "relative" }}>
+        <button type="button" onClick={() => setOuvert(v => !v)} onKeyDown={clavier}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 9,
+            background: "rgba(255,255,255,0.05)",
+            border: `1px solid ${ouvert ? "rgba(56,189,248,0.55)" : "rgba(255,255,255,0.1)"}`,
+            color: "#f1f5f9", borderRadius: 8, padding: "9px 11px 9px 12px", fontSize: 13,
+            outline: "none", cursor: "pointer", textAlign: "left",
+            transition: "border-color .15s",
+          }}>
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {choisi?.label || value}
+          </span>
+          <span style={{
+            color: "#64748b", display: "flex",
+            transform: ouvert ? "rotate(180deg)" : "none", transition: "transform .18s",
+          }}>
+            <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor"
+              strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 9.5 12 15.5 18 9.5"/>
+            </svg>
+          </span>
+        </button>
+
+        {ouvert && (
+          <div style={{
+            position: "absolute", top: "calc(100% + 5px)", left: 0, right: 0, zIndex: 300,
+            background: "#12161f", border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 10, boxShadow: "0 18px 44px -18px rgba(0,0,0,.8)",
+            padding: 5, maxHeight: 260, overflowY: "auto",
+            animation: "ob-drop .16s cubic-bezier(.2,.7,.3,1)",
+          }}>
+            <style>{`@keyframes ob-drop {
+              from { opacity: 0; transform: translateY(-5px) }
+              to   { opacity: 1; transform: none }
+            }`}</style>
+            {liste.map((o, i) => {
+              const actif = o.value === value;
+              return (
+                <button key={o.value} type="button"
+                  onMouseEnter={() => setVise(i)}
+                  onClick={() => { onChange(o.value); setOuvert(false); }}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 10,
+                    padding: "8px 10px", borderRadius: 7, border: "none", textAlign: "left",
+                    background: i === vise ? "rgba(255,255,255,0.07)" : "transparent",
+                    color: actif ? "#f1f5f9" : "#cbd5e1", fontSize: 13, cursor: "pointer",
+                  }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontWeight: actif ? 600 : 400 }}>{o.label}</span>
+                    {o.note && <span style={{ display: "block", fontSize: 11, color: "#64748b", marginTop: 1 }}>{o.note}</span>}
+                  </span>
+                  {actif && <span style={{ color: "#38bdf8", fontSize: 12 }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

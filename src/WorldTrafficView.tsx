@@ -1,22 +1,23 @@
-// World traffic.
+// Trafic mondial.
 //
-// An orthographic globe drawn in pure canvas, with no dependency: the
-// continents are a compressed, embedded grid of points, each flow leaving the
-// home is a real great-circle arc toward the service's coordinates, and the
-// logo shown next to each log line is fetched from the service's domain — that's
-// the only "scraping" that takes place, and no image is stored in the project.
+// Un globe orthographique dessiné en canvas pur, sans dépendance : les
+// continents sont une grille de points comprimée et embarquée, chaque flux
+// sortant de la maison est un arc de grand cercle réel vers les coordonnées du
+// service, et le logo affiché à côté de chaque ligne du journal est récupéré
+// depuis le domaine du service — c'est le seul "scraping" qui a lieu, aucune
+// image n'est stockée dans le projet.
 //
-// Reuses MapMyLAN's tokens exactly (paper, ink, accent, icons) so this view
-// doesn't visually stand apart from the rest of the app.
+// Reprend exactement les tokens de MapMyLAN (papier, encre, accent, pictos)
+// pour que cette vue ne se distingue pas visuellement du reste de l'app.
 
 import { useEffect, useRef, useState } from "react";
 import { Icon, deviceIcon } from "../../lib/icons";
 import { translate as tr } from "../../lib/i18n";
 
-// ── Earth grid ──────────────────────────────────────────────────────────────
-// 73 rows × 180 columns (2° step), compressed into [symbol, length] pairs over
-// a strictly alphanumeric alphabet — a backslash in the string would break the
-// JS literal and blank out the page, hence this choice.
+// ── Grille terrestre ──────────────────────────────────────────────────────
+// 73 lignes × 180 colonnes (pas de 2°), comprimée en paires [symbole, longueur]
+// sur un alphabet strictement alphanumérique — un antislash dans la chaîne
+// romprait le littéral JS et viderait la page, d'où ce choix.
 const GRILLE_COMP =
   "MZMZMTS0MZM6T8MZMDS0MZM2TdMZMCS0MZM0TgMZMBS0MYTiMUT6MzS0MZThMNTkMsS0MZTgMHTLM8S0M9T9MGTdMETZS0M7TqM7T9MaT9MnT6M8TZT3S0M6TLM8T8MmT9M3TZT7S0M6TNM7T5M8T1McT9M0TZT4M6S0M7TOM6T3MnTaM0TZT2M8S0MfTHMxT9M0TXMeS0MmTBMqTeM0TVMhS0MnTBMpTdM2TTMiS0MoTAMmT1M0TbM5TSMiS0MpTAMlT1M0TbM5TRMjS0MqTyMpTbM5TQMkS0MrTvMtTcM2TPMlS0MrTuMuTdM1TOMmS0MrTsMwT3M2T7M4TJMnS0MrTqMuT5M6T5M6T2M0T1M8TrM5T0MhS0MsTpMuT4M9T0MdT5M5ToMqS0MsToMvT3MkTbM5TlM8T0MiS0MtTmMzT7MfT9M6TkM7T0MjS0MuTlMxTbMdT9M6TkM4T0MmS0MvTjMxTdMdT8M6TkM3T0MnS0MwThMxTlM7T6M3T3M2ThMsS0MxT8M2T4MwTnM8T4M2T6M1TfMtS0MyT6M4T2MxToM9T2M2ToMtS0MzT3M7T0MxTpM9T0M3TaM0TcMuS0MZMkTpMfTlMwS0MZMjTrMfT6M4T5MzS0MZMjTrMfT5M6T4MzS0MGT4MxTrMgT2M8T5MyS0MIT3MwTsMfT2M9T4MyS0MKT2MwTsMfT1MaT3MyS0MLT2M1T7MmTsM1T0MbT1MaT1MAS0MMTdMlTtMpT1MAS0MNTdMlTsMpT1MAS0MOTdMkT0M7TjMZM2S0MOTdMtTiMZM3S0MOTdMtThMZM4S0MOTgMqTfMZM6S0MNTjMoTfMZM6S0MOTjMnTfMZM6S0MPTkMmTeMZM6S0MPTjMnTdMZM7S0MQTiMnTdMIT2M0T2MhS0MRTgMoTcM2T2MBT9MgS0MRTgMoTcM2T2MATaMgS0MSTeMqTaM3T2MzTcMfS0MSTeMqTaM4T1MxTfMeS0MSTeMqT9M5T1MvTiMdS0MSTcMtT8MDTjMcS0MSTaMvT8MDTjMcS0MSTaMwT6METjMcS0MST9MxT6METjMcS0MST9MyT4MFTiMdS0MST8MzT1MKT1M7T6MdS0MRT8MZMyT5M9T0M2S0MRT6MZMBT2MbT1M1S0MRT4MZMST1M1S0MRT4MZMST0M2S0MQT4MZMST0M3S0MQT4MZMQT1M4S0MQT3MZMYS0MRT2MZMYS0MRT1MZMZS0MRT0MZMZM0S0MZMZMTS0MZMZMTS0MZMZMT";
 const ALPHA = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -51,7 +52,7 @@ function terre(): Pt3[] {
   return pts;
 }
 
-// ── Services: real domain → logo scraped automatically ────────────────────
+// ── Services : domaine réel → logo scrappé automatiquement ────────────────
 const SERVICES = [
   { n: "Google", d: "google.com", lat: 37.4, lon: -122.1, ville: "Mountain View" },
   { n: "Apple", d: "apple.com", lat: 37.3, lon: -122.0, ville: "Cupertino" },
@@ -82,33 +83,33 @@ const SERVICES = [
   { n: "Free", d: "free.fr", lat: 48.9, lon: 2.3, ville: "Paris" },
   { n: "Alibaba", d: "alibaba.com", lat: 30.3, lon: 120.2, ville: "Hangzhou" },
   { n: "Tuya Cloud", d: "tuya.com", lat: 30.3, lon: 120.2, ville: "Hangzhou" },
-  { n: "Yandex", d: "yandex.com", lat: 55.8, lon: 37.6, ville: "Moscow" },
-  { n: "Naver", d: "naver.com", lat: 37.6, lon: 127.0, ville: "Seoul" },
+  { n: "Yandex", d: "yandex.com", lat: 55.8, lon: 37.6, ville: "Moscou" },
+  { n: "Naver", d: "naver.com", lat: 37.6, lon: 127.0, ville: "Séoul" },
   { n: "Fastly", d: "fastly.com", lat: -33.9, lon: 151.2, ville: "Sydney" },
 ];
 
 const APPAREILS = [
-  { n: "Workstation", ip: "198.51.100.131", t: "laptop" },
-  { n: "Docker Server", ip: "192.0.2.10", t: "server" },
-  { n: "Inference Server", ip: "192.0.2.30", t: "server" },
+  { n: "Poste de travail", ip: "198.51.100.131", t: "laptop" },
+  { n: "Serveur Docker", ip: "192.0.2.10", t: "server" },
+  { n: "Serveur d'inférence", ip: "192.0.2.30", t: "server" },
   { n: "Mobile", ip: "198.51.100.204", t: "phone" },
-  { n: "Gateway", ip: "192.0.2.1", t: "router" },
-  { n: "Wireless AP", ip: "192.0.2.2", t: "ap" },
-  { n: "smart-plug", ip: "198.51.100.23", t: "iot" },
-  { n: "outdoor-camera", ip: "198.51.100.41", t: "camera" },
-  { n: "nano-server", ip: "198.51.100.77", t: "pi" },
+  { n: "Passerelle", ip: "192.0.2.1", t: "router" },
+  { n: "Borne sans fil", ip: "192.0.2.2", t: "ap" },
+  { n: "prise-connectee", ip: "198.51.100.23", t: "iot" },
+  { n: "camera-exterieure", ip: "198.51.100.41", t: "camera" },
+  { n: "nano-serveur", ip: "198.51.100.77", t: "pi" },
 ];
 
 const MAISON = vec(48.86, 2.35);
 const PROTOS = ["HTTPS", "QUIC", "HTTPS", "TLS", "HTTPS", "DoH", "WSS"];
 
-// ── Logos: local badge, no network call ────────────────────────────────────
+// ── Logos : pastille locale, aucun appel réseau ───────────────────────────
 //
-// The old version loaded the favicon from Google (s2/favicons), which sent a
-// third party the list of displayed domains and the visitor's IP address —
-// exactly the opposite of the "nothing leaves the browser" promise. We now draw
-// an initial-letter badge, tinted deterministically from the name: readable,
-// consistent, and strictly local.
+// L'ancienne version chargeait le favicon depuis Google (s2/favicons), ce qui
+// envoyait à un tiers la liste des domaines affichés et l'adresse IP du visiteur
+// — exactement à rebours de la promesse « rien ne quitte le navigateur ». On
+// dessine désormais une pastille à l'initiale, teintée de façon déterministe à
+// partir du nom : lisible, cohérente, et strictement locale.
 function couleurDeterministe(nom: string): string {
   let h = 0;
   for (let i = 0; i < nom.length; i++) h = (h * 31 + nom.charCodeAt(i)) >>> 0;
@@ -134,7 +135,7 @@ function LogoService({ svc, size = 22 }: { svc: (typeof SERVICES)[number]; size?
   );
 }
 
-// ── The component ─────────────────────────────────────────────────────────
+// ── Le composant ────────────────────────────────────────────────────────
 interface Flux {
   pts: Pt3[];
   t0: number;
@@ -170,7 +171,7 @@ export function WorldTrafficView({ t }: { t: any }) {
   const debitRef = useRef(0);
   const idRef = useRef(0);
 
-  // ── one-off CSS injection: local variables for LogoService ─────────────
+  // ── injection CSS ponctuelle : variables locales pour LogoService ──────
   useEffect(() => {
     const s = document.createElement("style");
     s.textContent = `:root{--mml-well:${t.well};--mml-muted:${t.muted}}
@@ -179,7 +180,7 @@ export function WorldTrafficView({ t }: { t: any }) {
     return () => { document.head.removeChild(s); };
   }, [t.well, t.muted]);
 
-  // ── great-circle arc, lifted above the surface ──────────────────────────
+  // ── arc de grand cercle, soulevé au-dessus de la surface ────────────────
   function arc(a: Pt3, b: Pt3, n = 46): Pt3[] {
     const dot = Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y + a.z * b.z));
     const ang = Math.acos(dot);
@@ -207,7 +208,7 @@ export function WorldTrafficView({ t }: { t: any }) {
     return { x: CX + tx * R, y: CY - qy * R, z: qz };
   }
 
-  // ── drawing ─────────────────────────────────────────────────────────────
+  // ── dessin ────────────────────────────────────────────────────────────
   function dessine() {
     const cv = cvRef.current;
     if (!cv) return;
@@ -313,7 +314,7 @@ export function WorldTrafficView({ t }: { t: any }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t]);
 
-  // ── traffic simulation ──────────────────────────────────────────────
+  // ── simulation du trafic ────────────────────────────────────────────
   useEffect(() => {
     let vivant = true;
     function evenement() {
@@ -370,7 +371,7 @@ export function WorldTrafficView({ t }: { t: any }) {
 
   return (
     <div style={{ display: "flex", height: "100%", minHeight: 560, gap: 16, padding: "0 0 16px" }}>
-      {/* log */}
+      {/* journal */}
       <div style={panneau(t, 320)}>
         <PanelHead t={t} titre={tr("world.log")} valeur={`${lignes.length ? Math.min(9, lignes.length) : 0}/s`}/>
         <div style={{ flex: 1, overflowY: "auto", padding: "5px 0" }}>
@@ -392,7 +393,7 @@ export function WorldTrafficView({ t }: { t: any }) {
               </div>
               <div style={{ textAlign: "right", flex: "none" }}>
                 <div style={{ fontFamily: t.monoFont, fontSize: 10.5, color: t.txtSoft }}>
-                  {l.ko > 1024 ? (l.ko / 1024).toFixed(1) + " MB" : l.ko + " KB"}
+                  {l.ko > 1024 ? (l.ko / 1024).toFixed(1) + " Mo" : l.ko + " Ko"}
                 </div>
                 <div style={{ fontFamily: t.monoFont, fontSize: 9.5, color: t.faint, marginTop: 1 }}>{l.proto}</div>
               </div>
@@ -428,7 +429,7 @@ export function WorldTrafficView({ t }: { t: any }) {
         </div>
       </div>
 
-      {/* rankings */}
+      {/* classements */}
       <div style={panneau(t, 280)}>
         <PanelHead t={t} titre={tr("world.services")} valeur={String(statsSvc.current.size)}/>
         <div style={{ padding: "9px 13px 13px", borderBottom: `1px solid ${t.hairSoft}` }}>
@@ -441,7 +442,7 @@ export function WorldTrafficView({ t }: { t: any }) {
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ fontSize: 12, color: t.txtSoft, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nom}</span>
                     <span style={{ fontFamily: t.monoFont, fontSize: 10.5, color: t.muted, flex: "none" }}>
-                      {v > 1024 ? (v / 1024).toFixed(1) + " MB" : v + " KB"}
+                      {v > 1024 ? (v / 1024).toFixed(1) + " Mo" : v + " Ko"}
                     </span>
                   </div>
                   <div style={{ height: 2, background: t.well, borderRadius: 2, marginTop: 4, overflow: "hidden" }}>
@@ -465,7 +466,7 @@ export function WorldTrafficView({ t }: { t: any }) {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                   <span style={{ fontSize: 12, color: t.txtSoft, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nom}</span>
                   <span style={{ fontFamily: t.monoFont, fontSize: 10.5, color: t.muted, flex: "none" }}>
-                    {v > 1024 ? (v / 1024).toFixed(1) + " MB" : v + " KB"}
+                    {v > 1024 ? (v / 1024).toFixed(1) + " Mo" : v + " Ko"}
                   </span>
                 </div>
                 <div style={{ height: 2, background: t.well, borderRadius: 2, marginTop: 4, overflow: "hidden" }}>

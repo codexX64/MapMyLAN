@@ -6,11 +6,30 @@ import twilio from "twilio";
 import { prisma } from "../db";
 import { decryptJSON, encryptJSON } from "./crypto";
 import { logEvent } from "./logger";
+import { envoyerPoste } from "./poste";
 
+/**
+ * La configuration d'un canal, ou `null` s'il est coupé.
+ *
+ * `enabled` est rendu avec le reste, et c'est le point de ce commentaire.
+ * L'activation vit dans une colonne de la ligne, pas dans le blob chiffré :
+ * une fonction qui ne rendait que le blob laissait donc `cfg.enabled` à
+ * `undefined`, et tout appelant qui le testait concluait « canal éteint » sur
+ * un canal parfaitement allumé.
+ *
+ * Ça ne se voyait pas parce que l'écran d'installation glissait par hasard un
+ * `enabled` *dans* la configuration. L'éditeur de canaux, lui, ne le fait pas —
+ * pas plus que le script en ligne de commande. Configurer Telegram autrement
+ * que par l'installation initiale coupait donc silencieusement tout ce qui
+ * vérifiait `enabled`, à commencer par le code de réinitialisation.
+ *
+ * On rend la valeur plutôt que de corriger chaque appelant : la ligne existe et
+ * est active, sinon on serait déjà sorti sur `null`.
+ */
 export async function getConfig(channel: string): Promise<any | null> {
   const row = await prisma.notificationConfig.findUnique({ where: { channel } });
   if (!row || !row.enabled || !row.configEnc) return null;
-  return decryptJSON(row.configEnc);
+  return { ...decryptJSON(row.configEnc), enabled: true };
 }
 
 export async function setConfig(channel: string, enabled: boolean, cfg: any) {
@@ -114,6 +133,15 @@ export async function sendSMS(message: string, cfg?: any): Promise<{ ok: boolean
 // ─── Broadcast helper ─────────────────────────────────────────────────────
 export async function broadcastAlert(severity: string, title: string, body: string, details?: Record<string, string>) {
   const sev = severity.toLowerCase();
+
+  // Poste — relais maison. L'objet reste stable pour que les alertes
+  // répétées d'un même incident soient regroupées côté ticket.
+  envoyerPoste({
+    objet: title,
+    corps: body,
+    machine: details?.ip || details?.host || details?.machine,
+    details,
+  }).catch(e => logEvent("error", "poste", String(e?.message || e)));
   const tgMsg = `<b>[${severity.toUpperCase()}]</b> ${title}\n${body}${details ? "\n\n" + Object.entries(details).map(([k, v]) => `<code>${k}</code>: ${v}`).join("\n") : ""}`;
 
   if (sev === "critical" || sev === "high") {

@@ -1,11 +1,20 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
+import { config } from "../config";
 import { setConfig, sendTelegram, sendEmail, sendSMS, startTelegramBot } from "../services/notifier";
 import { authRequired, requireRole } from "../middleware/auth";
+import { testerPoste } from "../services/poste";
 
 const router = Router();
 router.use(authRequired);
+
+// ── Poste : essai de la liaison ──
+// Renvoie la reponse brute du relais, sans reformulation, pour diagnostic.
+router.post("/poste/test", requireRole("admin"), async (_req, res) => {
+  const r = await testerPoste();
+  res.status(r.ok ? 200 : 502).json(r);
+});
 
 // ── Notifications ──
 router.get("/notifications", async (_req, res) => {
@@ -102,7 +111,12 @@ router.get("/stats", async (_req, res) => {
     prisma.vlan.count(),
     prisma.alert.count({ where: { acknowledged: false } }),
   ]);
-  res.json({ total, online, offline, suspect, banned, quarantined, vlans, alerts });
+  // Alimentent le dock et la barre d'état de la disposition atelier.
+  const openPorts = await prisma.port.count({ where: { state: "open" } }).catch(() => 0);
+  res.json({
+    total, online, offline, suspect, banned, quarantined, vlans, alerts,
+    openPorts, subnet: config.scan.subnet,
+  });
 });
 
 // ── Security rules ──

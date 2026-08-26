@@ -32,20 +32,19 @@ services:
       timeout: 3s
       retries: 5
 
-  # Read-only proxy in front of the Docker socket.
+  # Proxy en lecture seule devant le socket Docker.
   #
-  # The backend needs to list containers (host stats), but mounting
-  # /var/run/docker.sock directly would give it full control of the Docker
-  # daemon — and therefore of the machine — at the first slip-up. So we
-  # interpose this minimal proxy: it alone touches the socket, and it only
-  # allows reading containers. Everything else (creation, exec, images,
-  # secrets…) is denied.
+  # Le backend a besoin de lister les conteneurs (stats d'hôte), mais lui monter
+  # /var/run/docker.sock directement lui donnerait le contrôle total du démon
+  # Docker — donc de la machine — au premier pépin. On interpose donc ce proxy
+  # minimaliste : seul lui touche le socket, et il n'autorise que la lecture des
+  # conteneurs. Tout le reste (création, exec, images, secrets…) est refusé.
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:0.2.0
     restart: unless-stopped
     environment:
-      CONTAINERS: 1        # GET /containers (read) — the only real need
-      POST: 0              # no writes
+      CONTAINERS: 1        # GET /containers (lecture) — le seul besoin réel
+      POST: 0              # aucune écriture
       IMAGES: 0
       NETWORKS: 0
       VOLUMES: 0
@@ -55,8 +54,8 @@ services:
       INFO: 0
       SYSTEM: 0
     ports:
-      # Exposed on the loopback only: the backend (host network) reaches it
-      # via 127.0.0.1, no one else.
+      # Exposé sur la boucle locale uniquement : le backend (réseau hôte) l'atteint
+      # via 127.0.0.1, personne d'autre.
       - "127.0.0.1:2375:2375"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -71,11 +70,11 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    # Host network: essential so that arp-scan and nmap see the real LAN.
-    # This is a design choice of a network scanner, framed here by the
-    # principle of least privilege: we drop ALL capabilities, then grant back
-    # only the two needed for raw sockets (arp-scan/nmap), and we forbid
-    # privilege escalation.
+    # Réseau hôte : indispensable pour qu'arp-scan et nmap voient le vrai LAN.
+    # C'est un choix de conception d'un scanner réseau, encadré ici par le
+    # principe du moindre privilège : on retire TOUTES les capacités, puis on
+    # rend uniquement les deux nécessaires aux sockets bruts (arp-scan/nmap), et
+    # on interdit l'escalade de privilèges.
     network_mode: host
     cap_drop:
       - ALL
@@ -85,10 +84,10 @@ services:
     security_opt:
       - no-new-privileges:true
     volumes:
-      # /proc and /sys read-only for host monitoring.
+      # /proc et /sys en lecture seule pour la supervision de l'hôte.
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      # No more mounting the Docker socket: we go through the read-only proxy.
+      # Plus de montage du socket Docker : on passe par le proxy en lecture seule.
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
@@ -104,8 +103,22 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN}
       HOST_PROC: /host/proc
       HOST_SYS: /host/sys
-      # Container stats via the read-only proxy (never the raw socket).
+      # Stats conteneurs via le proxy en lecture seule (jamais le socket brut).
       DOCKER_HOST: tcp://127.0.0.1:2375
+      # Adresse d'ecoute de l'API. Le backend tourne en reseau hote : sans
+      # cette variable il ecoute sur toutes les interfaces, donc sur le LAN.
+      # Attention : nginx joint l'API par la passerelle du pont Docker, pas par
+      # la boucle locale. Poser 127.0.0.1 ici couperait l'interface. La valeur
+      # qui referme sans rien casser est l'adresse du pont — voir .env.example.
+      BIND_ADDRESS: ${BIND_ADDRESS:-0.0.0.0}
+      # Relais de courrier sortant. Vides = envoi desactive, le reste tourne.
+      POSTE_URL: ${POSTE_URL:-}
+      POSTE_FROM: ${POSTE_FROM:-}
+      POSTE_ALIAS: ${POSTE_ALIAS:-}
+      POSTE_SEND_KEY: ${POSTE_SEND_KEY:-}
+      # Prefixe du plan d'adressage, pour le regroupement des interfaces.
+      # Vide = aucun regroupement propose.
+      GROUPING_PREFIX: ${GROUPING_PREFIX:-}
     depends_on:
       postgres:
         condition: service_healthy

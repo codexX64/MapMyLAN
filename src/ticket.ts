@@ -1,30 +1,32 @@
-// Emitting alerts as structured tickets.
+// Émission des alertes au format ticket structuré.
 //
-// A human-readable alert and a machine-actionable ticket don't ask for the same
-// thing. The sentence "unknown-c8f2 appeared on the network" reads well but
-// forces the recipient to interpret it: extract the host, guess the severity,
-// decide whether it's a duplicate. The structured format delivers those
-// elements separately, and the ticketing system just has to file them away.
+// Une alerte lisible par un humain et un ticket exploitable par une machine ne
+// demandent pas la même chose. La phrase « unknown-c8f2 est apparu sur le
+// réseau » se lit bien mais oblige le destinataire à l'interpréter : extraire
+// l'hôte, deviner la gravité, décider si c'est un doublon. Le format structuré
+// livre ces éléments séparés, et le système de billetterie n'a plus qu'à les
+// ranger.
 //
-// The schema follows the "ticket/v1" specification: only the title is required,
-// everything else carries a default value. Two transports carry it — email,
-// where the JSON travels in the body, and a direct HTTP call. Ticket
-// construction is shared between the two: only the sending differs.
+// Le schéma suit la spécification « ticket/v1 » : seul le titre est requis,
+// tout le reste porte une valeur par défaut. Deux transports le véhiculent —
+// le courriel, où le JSON voyage dans le corps, et l'appel direct en HTTP.
+// La construction du ticket est commune aux deux : seul l'envoi diffère.
 
 import { createHash } from "crypto";
 
-// ── Vocabulary ──────────────────────────────────────────────────────────────
+// ── Vocabulaire ─────────────────────────────────────────────────────────────
 export type Urgence = "p1" | "p2" | "p3" | "p4";
 export type Impact = "bloquant" | "degrade" | "mineur";
 export type Portee = "site" | "service" | "groupe" | "utilisateur";
 export type TypeTicket = "incident" | "demande" | "maintenance" | "projet" | "info";
 
 /**
- * Criticality matrix.
+ * Matrice de criticité.
  *
- * Urgency isn't a judgment but a consequence: what is blocking at site scale
- * takes precedence over what is degraded for a single user. Deriving it keeps
- * an automated emitter from arbitrarily declaring itself top priority.
+ * L'urgence n'est pas un jugement mais une conséquence : ce qui est bloquant à
+ * l'échelle du site passe devant ce qui est dégradé pour un seul utilisateur.
+ * La déduire évite qu'un émetteur automatique se déclare arbitrairement en
+ * priorité maximale.
  */
 const MATRICE: Record<Impact, Record<Portee, Urgence>> = {
   bloquant: { site: "p1", service: "p1", groupe: "p2", utilisateur: "p3" },
@@ -36,16 +38,16 @@ export function urgenceDe(impact: Impact, portee: Portee): Urgence {
   return MATRICE[impact][portee];
 }
 
-// ── The events MapMyLAN knows how to produce ────────────────────────────────
+// ── Ce que MapMyLAN sait produire comme événements ──────────────────────────
 export type Evenement =
-  | "hote_inconnu"        // a never-before-seen device responds
-  | "port_ouvert"         // a port has opened on a known host
-  | "risque_eleve"        // the risk score exceeds the threshold
-  | "isolement"           // a rule has isolated a device
-  | "vulnerabilite"       // a known flaw matches an exposed service
-  | "equipement_injoignable"  // the gateway no longer responds
-  | "balayage_echec"      // the scan did not complete
-  | "resume";             // periodic summary
+  | "hote_inconnu"        // un appareil jamais vu répond
+  | "port_ouvert"         // un port s'est ouvert sur un hôte connu
+  | "risque_eleve"        // le score de risque dépasse le seuil
+  | "isolement"           // une règle a isolé un appareil
+  | "vulnerabilite"       // une faille connue correspond à un service exposé
+  | "equipement_injoignable"  // la passerelle ne répond plus
+  | "balayage_echec"      // le balayage n'a pas abouti
+  | "resume";             // récapitulatif périodique
 
 interface Profil {
   type: TypeTicket;
@@ -55,48 +57,49 @@ interface Profil {
 }
 
 /**
- * Each event carries its own intrinsic severity.
+ * Chaque événement porte sa propre gravité intrinsèque.
  *
- * An unreachable gateway cuts everyone off: blocking at site scale. A port
- * opening on a machine concerns that machine: minor, user scope. This table is
- * what avoids having to decide case by case at emission time.
+ * Une passerelle injoignable coupe tout le monde : bloquant à l'échelle du
+ * site. Un port qui s'ouvre sur une machine concerne cette machine : mineur,
+ * portée utilisateur. C'est cette table qui évite d'avoir à décider au cas par
+ * cas au moment de l'émission.
  */
 const PROFILS: Record<Evenement, Profil> = {
   hote_inconnu: {
     type: "incident", impact: "mineur", portee: "utilisateur",
-    titre: c => `Unknown device on the network — ${c.hote || c.ip}`,
+    titre: c => `Appareil inconnu sur le réseau — ${c.hote || c.ip}`,
   },
   port_ouvert: {
     type: "incident", impact: "mineur", portee: "utilisateur",
-    titre: c => `New open port on ${c.hote || c.ip}`,
+    titre: c => `Nouveau port ouvert sur ${c.hote || c.ip}`,
   },
   risque_eleve: {
     type: "incident", impact: "degrade", portee: "groupe",
-    titre: c => `High risk — ${c.hote || c.ip}`,
+    titre: c => `Risque élevé — ${c.hote || c.ip}`,
   },
   isolement: {
     type: "incident", impact: "degrade", portee: "utilisateur",
-    titre: c => `Device isolated — ${c.hote || c.ip}`,
+    titre: c => `Appareil isolé — ${c.hote || c.ip}`,
   },
   vulnerabilite: {
     type: "incident", impact: "degrade", portee: "service",
-    titre: c => `Exposed vulnerability on ${c.hote || c.ip}`,
+    titre: c => `Vulnérabilité exposée sur ${c.hote || c.ip}`,
   },
   equipement_injoignable: {
     type: "incident", impact: "bloquant", portee: "site",
-    titre: () => "Network device unreachable",
+    titre: () => "Équipement réseau injoignable",
   },
   balayage_echec: {
     type: "incident", impact: "degrade", portee: "service",
-    titre: () => "Network scan failed",
+    titre: () => "Le balayage réseau a échoué",
   },
   resume: {
     type: "info", impact: "mineur", portee: "site",
-    titre: c => `Summary — ${c.hotes ?? 0} hosts, ${c.alertes ?? 0} alerts`,
+    titre: c => `Récapitulatif — ${c.hotes ?? 0} hôtes, ${c.alertes ?? 0} alertes`,
   },
 };
 
-// ── Context provided by the caller ──────────────────────────────────────────
+// ── Contexte fourni par l'appelant ──────────────────────────────────────────
 export interface Contexte {
   hote?: string;
   ip?: string;
@@ -115,13 +118,13 @@ export interface Contexte {
   logs?: string;
   hotes?: number;
   alertes?: number;
-  /** Forces the urgency. To be used only if the matrix is plainly wrong. */
+  /** Force l'urgence. À n'employer que si la matrice se trompe manifestement. */
   urgence?: Urgence;
 }
 
 export interface Ticket {
-  /** Version marker. Its name is set by the router according to the
-   *  destination ticketing system, which uses it to recognize its format. */
+  /** Marqueur de version. Son nom est posé par l'aiguilleur selon la
+   *  billetterie destinataire, qui s'en sert pour reconnaître son format. */
   ticket: 1;
   type: TypeTicket;
   titre: string;
@@ -146,29 +149,30 @@ export interface Ticket {
   source: { systeme: string; ref: string };
 }
 
-// Sanitizes a string destined for a ticket or an email.
+// Assainit une chaîne destinée à un ticket ou à un courriel.
 //
-// `titre` and the like are built from hostnames announced on the network. These
-// values end up in the email subject (see preparerCourriel) and in headers: a
-// `\r\n` slipped into a hostname would inject an extra `Bcc:` header. So we
-// strip control characters and invisible marks before any truncation.
+// `titre` et consorts se construisent à partir de noms d'hôte annoncés sur le
+// réseau. Ces valeurs finissent dans l'objet du courriel (voir preparerCourriel)
+// et dans des en-têtes : un `\r\n` glissé dans un nom d'hôte injecterait un
+// en-tête `Bcc:` supplémentaire. On retire donc les caractères de contrôle et
+// les marques invisibles avant toute troncature.
 const S = (v: unknown, max = 512) =>
   typeof v === "string"
     ? v
-        // Control characters (including CR/LF/TAB): header-injection vector.
+        // Caractères de contrôle (dont CR/LF/TAB) : vecteur d'injection d'en-tête.
         .replace(/[\u0000-\u001f\u007f]/g, " ")
-        // Invisible spaces and bidirectional marks (name spoofing).
+        // Espaces invisibles et marques bidirectionnelles (déguisement de nom).
         .replace(/[\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "")
         .trim()
         .slice(0, max)
     : "";
 
 /**
- * Grouping key.
+ * Clé de regroupement.
  *
- * The same incident recurring must not produce a hundred tickets. The key
- * combines the nature of the event and its subject — not the timestamp, since
- * otherwise every occurrence would be unique and grouping would be pointless.
+ * Un même incident qui se répète ne doit pas produire cent tickets. La clé
+ * combine la nature de l'événement et son sujet — pas l'horodatage, sinon
+ * chaque occurrence serait unique et le regroupement ne servirait à rien.
  */
 export function cleRegroupement(ev: Evenement, c: Contexte): string {
   const sujet = c.mac || c.ip || c.hote || "global";
@@ -176,34 +180,34 @@ export function cleRegroupement(ev: Evenement, c: Contexte): string {
                : ev === "vulnerabilite" ? (c.cve || "")
                : "";
   const brut = [ev, sujet, detail].filter(Boolean).join(":");
-  // A short digest keeps the key readable while bounding its size.
+  // Une empreinte courte garde la clé lisible tout en bornant sa taille.
   return brut.length <= 128 ? brut
        : ev + ":" + createHash("sha256").update(brut).digest("hex").slice(0, 24);
 }
 
 export interface Reglages {
-  /** Site name, as it will appear in the ticket's zone. */
+  /** Nom du site, tel qu'il apparaîtra dans la zone du ticket. */
   site?: string;
-  /** Project the tickets should be attached to. */
+  /** Projet auquel rattacher les tickets. */
   projet?: string;
-  /** Name of the emitting system. */
+  /** Nom du système émetteur. */
   systeme?: string;
-  /** Address of the interface, for building the links. */
+  /** Adresse de l'interface, pour construire les liens. */
   baseUrl?: string;
 }
 
-/** Builds the ticket. Shared by both transports. */
+/** Construit le ticket. Commun aux deux transports. */
 export function construireTicket(
   ev: Evenement,
   c: Contexte,
   r: Reglages = {},
 ): Ticket {
   const p = PROFILS[ev];
-  // The urgency override serves only to correct the matrix downward. Letting it
-  // raise the level would let any emitter (or a context influenced by network
-  // data) declare itself P1 and bypass the alerting thresholds. So we keep the
-  // override only if it is less urgent than the computed value (higher numeric
-  // rank = less urgent).
+  // L'override d'urgence ne sert qu'à corriger la matrice vers le bas. L'autoriser
+  // à monter permettrait à n'importe quel émetteur (ou à un contexte influencé
+  // par des données réseau) de se déclarer P1 et de court-circuiter les seuils
+  // d'alerte. On ne retient donc l'override que s'il est moins urgent que le
+  // calcul (rang numérique plus élevé = moins urgent).
   const calc = urgenceDe(p.impact, p.portee);
   const RANG: Record<Urgence, number> = { p1: 1, p2: 2, p3: 3, p4: 4 };
   const urgence: Urgence = c.urgence && RANG[c.urgence] >= RANG[calc] ? c.urgence : calc;
@@ -211,25 +215,25 @@ export function construireTicket(
   const metriques: Ticket["metriques"] = [];
   if (typeof c.risque === "number") {
     metriques.push({
-      label: "Risk", valeur: String(c.risque), seuil: "70",
+      label: "Risque", valeur: String(c.risque), seuil: "70",
       etat: c.risque >= 70 ? "ko" : c.risque >= 40 ? "warn" : "ok",
     });
   }
   if (c.ports && c.ports.length) {
-    metriques.push({ label: "Open ports", valeur: String(c.ports.length), etat: "warn" });
+    metriques.push({ label: "Ports ouverts", valeur: String(c.ports.length), etat: "warn" });
   }
 
   const liens: Ticket["liens"] = [];
   if (r.baseUrl && c.ip) {
-    liens.push({ label: "Device details", url: `${r.baseUrl.replace(/\/+$/, "")}/devices?ip=${encodeURIComponent(c.ip)}` });
+    liens.push({ label: "Fiche de l'appareil", url: `${r.baseUrl.replace(/\/+$/, "")}/devices?ip=${encodeURIComponent(c.ip)}` });
   }
 
   return {
     ticket: 1,
     type: p.type,
-    titre: S(p.titre(c), 200) || "Network alert",
+    titre: S(p.titre(c), 200) || "Alerte réseau",
     urgence, impact: p.impact, portee: p.portee,
-    service: S(c.service || "network", 64),
+    service: S(c.service || "reseau", 64),
     composant: S(c.fabricant, 64),
     zone: {
       site: S(r.site, 64),
@@ -246,7 +250,7 @@ export function construireTicket(
     logs: S(c.logs, 8000),
     detecte_le: new Date().toISOString(),
     projet: S(r.projet, 64),
-    labels: ["network", ev.replace(/_/g, "-")],
+    labels: ["reseau", ev.replace(/_/g, "-")],
     metriques,
     liens,
     dedup_key: cleRegroupement(ev, c),
@@ -256,11 +260,11 @@ export function construireTicket(
 
 // ── Transports ──────────────────────────────────────────────────────────────
 export interface Destination {
-  /** Ticketing API address. Empty = email transport. */
+  /** Adresse de l'API de billetterie. Vide = transport par courriel. */
   url?: string;
-  /** Access key, sent in the agreed-upon header. */
+  /** Clé d'accès, transmise dans l'en-tête convenu. */
   cle?: string;
-  /** Name of the header carrying the key. Configurable per ticketing system. */
+  /** Nom de l'en-tête portant la clé. Configurable selon la billetterie. */
   entete?: string;
 }
 
@@ -273,50 +277,49 @@ export interface Resultat {
 }
 
 /**
- * Sends the ticket to the API.
+ * Envoie le ticket à l'API.
  *
- * Errors are distinguished rather than reduced to a single failure: a rejected
- * key, an exceeded quota, and a server outage call for three different
- * reactions.
+ * Les erreurs sont distinguées plutôt que réduites à un échec : une clé
+ * refusée, un quota dépassé et une panne du serveur appellent trois réactions
+ * différentes.
  */
-// Checks that a ticketing API address is safe to contact.
+// Vérifie qu'une adresse d'API de billetterie est sûre à contacter.
 //
-// The URL and the key are set in the settings: without a check, they turn the
-// backend into an SSRF relay (`http://169.254.169.254/…`, internal services)
-// that, on top of it, hands the key over in the clear on plain HTTP. We require
-// HTTPS, except toward a plainly private/local host, and we reject credentials
-// in the URL.
+// L'URL et la clé sont posées dans les réglages : sans contrôle, elles font du
+// backend un relais SSRF (`http://169.254.169.254/…`, services internes) qui, en
+// prime, livre la clé en clair sur du HTTP simple. On exige HTTPS, sauf vers un
+// hôte manifestement privé/local, et on refuse les identifiants dans l'URL.
 function estHotePrive(h: string): boolean {
   const host = h.replace(/^\[|\]$/g, "").toLowerCase();
   if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return true;
-  if (!host.includes(".")) return true; // Docker service name (no dot)
+  if (!host.includes(".")) return true; // nom de service Docker (sans point)
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (!m) return false;
   const [a, b] = [Number(m[1]), Number(m[2])];
-  // Private ranges and loopback only. 169.254.0.0/16 (link-local) is EXCLUDED
-  // on purpose: that's where the hosting provider's metadata service lives
-  // (169.254.169.254), a classic SSRF target.
+  // Plages privées et loopback uniquement. 169.254.0.0/16 (lien-local) est
+  // EXCLU à dessein : c'est là que vit le service de métadonnées d'hébergeur
+  // (169.254.169.254), cible classique de SSRF.
   return a === 10 || a === 127 || (a === 192 && b === 168) ||
          (a === 172 && b >= 16 && b <= 31);
 }
 
 function urlBilletterieSure(url: string): URL {
-  const u = new URL(url); // throws if invalid
-  if (u.username || u.password) throw new Error("API address: credentials in the URL are not allowed.");
+  const u = new URL(url); // lève si invalide
+  if (u.username || u.password) throw new Error("Adresse d'API : identifiants dans l'URL non admis.");
   if (u.protocol === "https:") return u;
   if (u.protocol === "http:" && estHotePrive(u.hostname)) return u;
-  throw new Error("API address: HTTPS required (HTTP tolerated only toward an internal host).");
+  throw new Error("Adresse d'API : HTTPS requis (HTTP toléré seulement vers un hôte interne).");
 }
 
 export async function envoyerApi(t: Ticket, d: Destination): Promise<Resultat> {
-  if (!d.url) return { ok: false, erreur: "No API address configured." };
+  if (!d.url) return { ok: false, erreur: "Aucune adresse d'API configurée." };
   const entete = d.entete || "X-Ticket-Key";
 
   let cible: URL;
   try {
     cible = urlBilletterieSure(d.url);
   } catch (e: any) {
-    return { ok: false, erreur: e?.message || "API address rejected." };
+    return { ok: false, erreur: e?.message || "Adresse d'API refusée." };
   }
 
   try {
@@ -325,7 +328,7 @@ export async function envoyerApi(t: Ticket, d: Destination): Promise<Resultat> {
       headers: {
         "Content-Type": "application/json",
         [entete]: d.cle || "",
-        // Replaying the same request must not create two tickets.
+        // Rejouer la même requête ne doit pas créer deux tickets.
         "Idempotency-Key": createHash("sha256")
           .update(t.dedup_key + "|" + t.detecte_le.slice(0, 16))
           .digest("hex").slice(0, 32),
@@ -336,35 +339,35 @@ export async function envoyerApi(t: Ticket, d: Destination): Promise<Resultat> {
 
     const corps = await rep.json().catch(() => ({}));
 
-    if (rep.status === 401) return { ok: false, erreur: "Key rejected by the ticketing system." };
+    if (rep.status === 401) return { ok: false, erreur: "Clé refusée par la billetterie." };
     if (rep.status === 429) {
       const attente = rep.headers.get("Retry-After");
-      return { ok: false, erreur: `Quota exceeded${attente ? `, retry in ${attente} s` : ""}.` };
+      return { ok: false, erreur: `Quota dépassé${attente ? `, réessayer dans ${attente} s` : ""}.` };
     }
     if (rep.status === 400) {
-      return { ok: false, erreur: `Ticket rejected: ${corps?.detail || corps?.erreur || "invalid format"}.` };
+      return { ok: false, erreur: `Ticket refusé : ${corps?.detail || corps?.erreur || "format invalide"}.` };
     }
-    if (!rep.ok) return { ok: false, erreur: `The ticketing system responded ${rep.status}.` };
+    if (!rep.ok) return { ok: false, erreur: `La billetterie a répondu ${rep.status}.` };
 
     return {
       ok: true,
       id: corps?.id,
       ref: corps?.ref,
-      // Status 200 signals a grouping, 201 a creation.
+      // Le code 200 signale un regroupement, 201 une création.
       regroupe: rep.status === 200 || corps?.dedup === true,
     };
   } catch (e: any) {
-    const nom = e?.name === "TimeoutError" ? "timed out" : (e?.message || "failure");
-    return { ok: false, erreur: `Could not reach: ${nom}.` };
+    const nom = e?.name === "TimeoutError" ? "délai dépassé" : (e?.message || "échec");
+    return { ok: false, erreur: `Contact impossible : ${nom}.` };
   }
 }
 
 /**
- * Prepares the equivalent email.
+ * Prépare le courriel équivalent.
  *
- * The JSON travels in the body, preceded by nothing: the specification provides
- * that a body starting with a brace be recognized as structured. The subject
- * stays readable for a human who opens the message.
+ * Le JSON voyage dans le corps, précédé de rien : la spécification prévoit
+ * qu'un corps commençant par une accolade soit reconnu comme structuré. L'objet
+ * reste lisible pour un humain qui ouvrirait le message.
  */
 export function preparerCourriel(t: Ticket): { objet: string; corps: string; entetes: Record<string, string> } {
   return {
@@ -374,15 +377,15 @@ export function preparerCourriel(t: Ticket): { objet: string; corps: string; ent
   };
 }
 
-/** Human-readable rendering, for recipients who don't expect any structure. */
+/** Rendu lisible, pour les destinataires qui n'attendent pas de structure. */
 export function rendreLisible(t: Ticket): string {
   const l: string[] = [t.titre];
   if (t.description) l.push("", t.description);
   if (t.zone.host || t.zone.ip) {
-    l.push("", `Device: ${[t.zone.host, t.zone.ip].filter(Boolean).join(" · ")}`);
+    l.push("", `Appareil : ${[t.zone.host, t.zone.ip].filter(Boolean).join(" · ")}`);
   }
   if (t.metriques.length) {
-    l.push("", ...t.metriques.map(m => `${m.label}: ${m.valeur}${m.seuil ? ` (threshold ${m.seuil})` : ""}`));
+    l.push("", ...t.metriques.map(m => `${m.label} : ${m.valeur}${m.seuil ? ` (seuil ${m.seuil})` : ""}`));
   }
   if (t.symptomes.length) l.push("", ...t.symptomes.map(s => `— ${s}`));
   return l.join("\n");

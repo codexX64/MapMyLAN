@@ -1,9 +1,29 @@
-// Adapter registry and resolution of the main device.
+// Registre des adaptateurs et résolution de l'équipement principal.
 
 import { prisma } from "../db";
 import { decrypt } from "../services/crypto";
 import { executeOnDevice, executeWith, testConnection } from "../services/ssh";
 import { ValeurRefusee } from "../services/valider";
+
+/**
+ * Dernier rempart avant l'exécution.
+ *
+ * Toutes les commandes des pilotes passent par `exec`. Y placer le contrôle
+ * couvre toutes les actions d'un coup, là où le poser dans chaque pilote
+ * laisserait passer celui qu'on oublie — et c'est toujours celui-là qui sert.
+ *
+ * Le contrôle est volontairement grossier : on ne cherche pas à comprendre la
+ * commande, seulement à constater qu'elle ne contient aucun des caractères par
+ * lesquels on en enchaîne une seconde. Les pilotes n'en produisent aucune.
+ */
+const ENCHAINEMENT = /[;&|`$\n\r<>]|\$\(|\|\|/;
+
+export function gardeCommande(command: string): string {
+  if (typeof command !== "string" || !command.length) throw new ValeurRefusee("Commande", command);
+  if (command.length > 4096) throw new ValeurRefusee("Commande — trop longue", command.length);
+  if (ENCHAINEMENT.test(command)) throw new ValeurRefusee("Commande — enchaînement refusé", command);
+  return command;
+}
 import { RouterAdapter, AdapterContext, RouterCreds, Capability } from "./types";
 import { SSH_ADAPTERS } from "./ssh-drivers";
 import { unifi } from "./unifi";
@@ -13,7 +33,7 @@ export const ADAPTERS: RouterAdapter[] = [unifi, ...SSH_ADAPTERS];
 export function getAdapter(id?: string | null): RouterAdapter {
   const found = ADAPTERS.find(a => a.id === id);
   if (found) return found;
-  // Legacy values stored before the adapter layer existed
+  // Anciennes valeurs enregistrées avant la couche adaptateurs
   const legacy: Record<string, string> = {
     asus: "asus-merlin", merlin: "asus-merlin", mikrotik: "routeros",
     cisco: "cisco-ios", opnsense: "pfsense", ubiquiti: "unifi",
@@ -22,7 +42,7 @@ export function getAdapter(id?: string | null): RouterAdapter {
       || ADAPTERS.find(a => a.id === "generic")!;
 }
 
-/** Identifies the vendor from an SSH banner or an HTTP response. */
+/** Reconnaît le constructeur à partir d'une bannière SSH ou d'une réponse HTTP. */
 export function detectAdapter(probe: string): RouterAdapter | null {
   return ADAPTERS.find(a => a.detect?.(probe)) || null;
 }
@@ -31,7 +51,7 @@ export function capabilitiesOf(id?: string | null): Capability[] {
   return getAdapter(id).capabilities;
 }
 
-/** Decrypts the stored credentials and builds the execution context. */
+/** Déchiffre les identifiants stockés et construit le contexte d'exécution. */
 export function contextFor(row: any): AdapterContext {
   const creds: RouterCreds = {
     host: row.host,
@@ -51,48 +71,19 @@ export function contextFor(row: any): AdapterContext {
   };
 }
 
-/**
- * Last line of defense before execution.
- *
- * Every driver command passes through `exec`. Putting the check here covers all
- * twenty-four actions at once, whereas placing it in each driver would let
- * through the one you forget — and that's always the one that gets exploited.
- *
- * The check is deliberately coarse: it doesn't try to understand the command,
- * only to confirm it contains none of the characters used to chain a second one
- * onto it. A legitimate network-administration command has no need for them;
- * the drivers produce none.
- */
-const ENCHAINEMENT = /[;&|`$\n\r<>]|\$\(|\|\|/;
-
-export function gardeCommande(command: string): string {
-  if (typeof command !== "string" || !command.length) {
-    throw new ValeurRefusee("Command", command);
-  }
-  if (command.length > 4096) {
-    throw new ValeurRefusee("Command — too long", command.length);
-  }
-  if (ENCHAINEMENT.test(command)) {
-    // Drivers that legitimately chain several commands declare them
-    // separately: see the arrays in `ssh-drivers`.
-    throw new ValeurRefusee("Command — chaining refused", command);
-  }
-  return command;
-}
-
 export async function mainRouterRow(): Promise<any | null> {
   return prisma.sshDevice.findFirst({ where: { isMainRouter: true } });
 }
 
-/** Adapter + context for the main device, or an explicit error. */
+/** Adaptateur + contexte de l'équipement principal, ou une erreur explicite. */
 export async function mainRouter(): Promise<{ row: any; adapter: RouterAdapter; ctx: AdapterContext }> {
   const row = await mainRouterRow();
-  if (!row) throw new Error("No main device configured — go to Router to add one.");
+  if (!row) throw new Error("Aucun équipement principal configuré — allez dans Routeur pour en ajouter un.");
   return { row, adapter: getAdapter(row.vendor), ctx: contextFor(row) };
 }
 
-/** SSH probe used by automatic detection. */
-/** Context for a configuration not yet persisted to the database. */
+/** Sonde SSH utilisée par la reconnaissance automatique. */
+/** Contexte pour une configuration pas encore enregistrée en base. */
 export function contextForCreds(creds: RouterCreds): AdapterContext {
   return {
     creds,

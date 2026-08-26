@@ -1,15 +1,8 @@
-// Icon set drawn for MapMyLAN.
-// Each path is mathematically re-centered within its 24x24 box: the real
-// bounding box is measured then translated, which avoids optical offsets in
-// the tiles. No sprite, no <use>: the paths are inline, which works around
-// the Safari bug on the viewBox of <symbol> elements.
-
-// Escapes text destined for a <title> injected into HTML.
-function escapeXml(s: string): string {
-  return String(s)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
+// Jeu de pictos dessiné pour MapMyLAN.
+// Chaque tracé est recentré mathématiquement dans sa boîte de 24x24 : la boîte
+// englobante réelle est mesurée puis translatée, ce qui évite les décalages
+// optiques dans les tuiles. Aucun sprite, aucun <use> : les tracés sont inline,
+// ce qui contourne le bug Safari sur le viewBox des <symbol>.
 
 const PATHS: Record<string, string> = {
   "overview": "<rect x=\"3.5\" y=\"3.5\" width=\"7.5\" height=\"7.5\" rx=\"2.2\"/><rect x=\"13\" y=\"3.5\" width=\"7.5\" height=\"7.5\" rx=\"2.2\"/><rect x=\"3.5\" y=\"13\" width=\"7.5\" height=\"7.5\" rx=\"2.2\"/><rect x=\"13\" y=\"13\" width=\"7.5\" height=\"7.5\" rx=\"2.2\"/>",
@@ -50,16 +43,36 @@ const PATHS: Record<string, string> = {
   "bot": "<g transform=\"translate(0.0 1.5)\"><rect x=\"4\" y=\"8\" width=\"16\" height=\"11\" rx=\"3\"/><path d=\"M12 4.2V8\"/><circle cx=\"12\" cy=\"3.2\" r=\"1.2\"/><path d=\"M9 12.6h.01M15 12.6h.01M9.6 16h4.8\"/></g>",
   "eye": "<path d=\"M2.6 12S6.4 5.8 12 5.8 21.4 12 21.4 12 17.6 18.2 12 18.2 2.6 12 2.6 12z\"/><circle cx=\"12\" cy=\"12\" r=\"2.7\"/>",
   "globe": "<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M3.5 12h17M12 3.5c2.4 2.6 3.6 5.4 3.6 8.5S14.4 18.4 12 20.5C9.6 18.4 8.4 15.6 8.4 12.5S9.6 6.1 12 3.5z\"/>",
+
+  // ─── Ajouts repris de la maquette ────────────────────────────────────
+  // Pictos que la maquette utilise et que le jeu d'origine n'avait pas :
+  // courrier, graphique, marque compacte, compte, clé, flèches, coche,
+  // empreinte, téléphone, portable, clé USB.
+  "mail": "<rect x=\"3\" y=\"5.5\" width=\"18\" height=\"13\" rx=\"2.4\"/><path d=\"M3.6 7 12 13l8.4-6\"/>",
+  "chart": "<path d=\"M4 19.4h16\"/><rect x=\"5.6\" y=\"11\" width=\"3.4\" height=\"6.2\" rx=\"1\"/><rect x=\"10.6\" y=\"6.4\" width=\"3.4\" height=\"10.8\" rx=\"1\"/><rect x=\"15.6\" y=\"8.8\" width=\"3.4\" height=\"8.4\" rx=\"1\"/>",
+  "logo-compact": "<g transform=\"scale(0.375)\"><path d=\"M 5.50 30.00 A 18.5 18.5 0 0 1 42.50 30.00 L 32.60 30.00 A 8.6 8.6 0 0 0 15.40 30.00 Z\" fill=\"currentColor\"/><path d=\"M 42.32 32.57 A 18.5 18.5 0 0 1 25.93 48.40 L 24.90 38.55 A 8.6 8.6 0 0 0 32.52 31.20 Z\" fill=\"currentColor\"/><circle cx=\"24.0\" cy=\"30.0\" r=\"4.9\" fill=\"currentColor\"/><path d=\"M 44.20 18.46 A 12.00 12.00 0 1 1 44.20 41.54 A 12.00 12.00 0 0 0 44.20 18.46 Z\" fill=\"currentColor\"/></g>",
+  "user": "<circle cx=\"12\" cy=\"8.2\" r=\"3.8\"/><path d=\"M4.8 20a7.2 7.2 0 0 1 14.4 0\"/>",
+  "key": "<circle cx=\"8\" cy=\"12\" r=\"4.2\"/><path d=\"M12.2 12H21M17.5 12v3.4M20 12v2.6\"/>",
+  "arrow": "<path d=\"M5 12h14M13 6l6 6-6 6\"/>",
+  "back": "<path d=\"M19 12H5M11 6l-6 6 6 6\"/>",
+  "check": "<path d=\"M4.5 12.5 9.5 17.5 19.5 7\"/>",
+  "finger": "<path d=\"M12 2.8a6.6 6.6 0 0 0-6.6 6.6v2.2\"/><path d=\"M8.6 9.4a3.4 3.4 0 0 1 6.8 0v4.2a5 5 0 0 1-1.4 3.5\"/><path d=\"M12 9.4v4.6a8 8 0 0 1-1.6 4.8\"/><path d=\"M18.6 9.4v3.4a11 11 0 0 1-.9 4.4\"/><path d=\"M5.4 15.6a9 9 0 0 0 .9 3.6\"/>",
+  "phone": "<rect x=\"6.6\" y=\"2.6\" width=\"10.8\" height=\"18.8\" rx=\"2.6\"/><path d=\"M10.8 5.4h2.4M12 18.4h.01\"/>",
+  "laptop": "<rect x=\"4\" y=\"5\" width=\"16\" height=\"10.4\" rx=\"1.8\"/><path d=\"M2.2 18.6h19.6\"/>",
+  "usbkey": "<rect x=\"3\" y=\"9\" width=\"13\" height=\"6\" rx=\"2\"/><path d=\"M16 11h5v2h-5z\"/><path d=\"M6.4 12h.01M9.4 12h.01\"/>",
 };
 
 export type IconName = keyof typeof PATHS;
 
-export function Icon({ name, size = 16, stroke = 1.6, style, title }: {
-  name: string; size?: number; stroke?: number; style?: any; title?: string;
+export function Icon({ name, size = 16, stroke = 1.6, style, title, className }: {
+  name: string; size?: number; stroke?: number; style?: any; title?: string; className?: string;
 }) {
   const d = PATHS[name] || PATHS.unknown;
   return (
     <svg
+      // « i » est la classe que la feuille de la maquette utilise pour régler
+      // le trait des pictos. On la porte toujours, sans empêcher d'en ajouter.
+      className={className ? `i ${className}` : "i"}
       viewBox="0 0 24 24"
       width={size}
       height={size}
@@ -69,15 +82,12 @@ export function Icon({ name, size = 16, stroke = 1.6, style, title }: {
         display: "block", flex: "none", stroke: "currentColor", strokeWidth: stroke,
         fill: "none", strokeLinecap: "round", strokeLinejoin: "round", ...style,
       }}
-      // `d` is an SVG path from our own icon table (safe). `title`, however,
-      // could come from a caller that puts device text into it: we escape it
-      // before injecting, otherwise a hostile name would become HTML.
-      dangerouslySetInnerHTML={{ __html: (title ? `<title>${escapeXml(title)}</title>` : "") + d }}
+      dangerouslySetInnerHTML={{ __html: (title ? `<title>${title}</title>` : "") + d }}
     />
   );
 }
 
-// Device type -> icon. Covers the 17 backend types.
+// Type d'appareil -> picto. Couvre les 17 types du backend.
 export const DEVICE_ICON: Record<string, string> = {
   router: "router", gateway: "router", firewall: "shield", switch: "switch",
   ap: "air", accesspoint: "air", server: "server", nas: "server",

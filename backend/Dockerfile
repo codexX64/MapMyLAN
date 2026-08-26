@@ -26,6 +26,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY package.json ./
+# Catalogue des fournisseurs de courrier : charge par require() depuis
+# process.cwd(), donc /app. Sans lui, routes/mail.ts leve au demarrage.
+COPY mail-providers.js ./
 EXPOSE 4000
 # db push instead of migrate (no migrations checked in)
 CMD ["sh", "-c", "npx prisma db push --skip-generate && npx prisma db seed && node dist/index.js"]

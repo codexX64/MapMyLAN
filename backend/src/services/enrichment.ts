@@ -19,19 +19,8 @@ import { prisma } from "../db";
 import { logEvent } from "./logger";
 import { eventBus } from "../ws/realtime";
 import { lookupMacExtended } from "../lib/oui";
-import { estIP } from "./valider";
 
 const execAsync = promisify(exec);
-
-// Every enrichment probe interpolates the device's IP into a shell command
-// (curl, nc, nmblookup, avahi-browse | grep). The IP may come from a device
-// created by hand or from a value observed on the network: without format
-// checking, `1.2.3.4; …` would execute arbitrary commands on the host. We
-// require a valid IP before any command is built.
-function ipSur(ip: unknown): string {
-  if (!estIP(ip)) throw new Error(`IP address refused (enrichment): ${JSON.stringify(String(ip)).slice(0, 60)}`);
-  return ip as string;
-}
 
 async function run(cmd: string, timeoutMs = 8000): Promise<string> {
   try {
@@ -44,8 +33,6 @@ interface Identity { vendor?: string; model?: string; os?: string; type?: string
 
 // ─── Source: HTTP banner ─────────────────────────────────────────────────
 async function probeHttp(ip: string, port: number, scheme: "http" | "https"): Promise<Identity | null> {
-  ip = ipSur(ip);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
   const url = `${scheme}://${ip}:${port}/`;
   try {
     const out = await run(`curl -sk -m 4 -I -A "MapMyLAN" ${url}`, 5000);
@@ -79,7 +66,6 @@ async function probeHttp(ip: string, port: number, scheme: "http" | "https"): Pr
 // ─── Source: SSH banner ──────────────────────────────────────────────────
 async function probeSsh(ip: string): Promise<Identity | null> {
   try {
-    ip = ipSur(ip);
     const out = await run(`echo "" | timeout 3 nc -w 2 ${ip} 22 2>/dev/null | head -1`, 4000);
     const m = out.match(/SSH-2\.0-(.+)/);
     if (!m) return null;
@@ -102,7 +88,6 @@ async function probeSsdp(ip: string): Promise<Identity | null> {
   const paths = ["/rootDesc.xml", "/description.xml", "/upnp/desc/dev_desc.xml", "/IGD.xml"];
   for (const p of paths) {
     try {
-      ipSur(ip);
       const out = await run(`curl -s -m 3 http://${ip}:5000${p} 2>/dev/null; curl -s -m 3 http://${ip}:8200${p} 2>/dev/null; curl -s -m 3 http://${ip}:1900${p} 2>/dev/null`, 5000);
       const friendly = out.match(/<friendlyName>([^<]+)</)?.[1];
       const manuf = out.match(/<manufacturer>([^<]+)</)?.[1];
@@ -118,7 +103,6 @@ async function probeSsdp(ip: string): Promise<Identity | null> {
 // ─── Source: mDNS ────────────────────────────────────────────────────────
 async function probeMdns(ip: string): Promise<Identity | null> {
   try {
-    ip = ipSur(ip);
     const out = await run(`avahi-browse -p -t -r -a 2>/dev/null | grep -i "${ip}" | head -20`, 6000);
     if (!out) return null;
     // mDNS service strings are very revealing
@@ -138,7 +122,6 @@ async function probeMdns(ip: string): Promise<Identity | null> {
 // ─── Source: NetBIOS ─────────────────────────────────────────────────────
 async function probeNetbios(ip: string): Promise<Identity | null> {
   try {
-    ip = ipSur(ip);
     const out = await run(`nmblookup -A ${ip} 2>/dev/null`, 5000);
     const name = out.match(/(\S+)\s+<00>\s+-\s+\S?\s*<ACTIVE>/)?.[1]?.trim();
     if (!name) return null;

@@ -1,9 +1,9 @@
-// Connection to the main network gear.
+// Connexion à l'équipement réseau principal.
 //
-// A single device drives active defense: it is the one that blocks, isolates
-// and reports what it sees on the wire. The screen first shows what it can do —
-// the capabilities declared by the adapter — so that no button promises an
-// action the hardware cannot carry out.
+// Un seul équipement pilote la défense active : c'est lui qui bloque, isole et
+// dit ce qu'il voit sur le fil. L'écran montre d'abord ce qu'il sait faire —
+// les capacités déclarées par l'adaptateur — pour qu'aucun bouton ne promette
+// une action que le matériel ne sait pas exécuter.
 
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
@@ -12,7 +12,7 @@ import { translate as tr } from "../lib/i18n";
 
 const PAGE: any = { padding: "22px 32px 60px", maxWidth: 1180 };
 
-// Icon per vendor: we stick to the app's vocabulary.
+// Picto par constructeur : on reste sur le vocabulaire de l'app.
 const VENDOR_ICON: Record<string, string> = {
   unifi: "router", "asus-merlin": "router", edgeos: "router",
   openwrt: "chip", routeros: "switch", pfsense: "shield",
@@ -20,9 +20,9 @@ const VENDOR_ICON: Record<string, string> = {
 };
 
 const CAP_LABEL: Record<string, string> = {
-  ban: "block", unban: "unblock", quarantine: "isolate",
-  clients: "list clients", arp: "ARP table", leases: "DHCP leases",
-  ports: "ports", vlans: "VLANs", reboot: "reboot",
+  ban: "bloquer", unban: "débloquer", quarantine: "isoler",
+  clients: "lister les clients", arp: "table ARP", leases: "baux DHCP",
+  ports: "ports", vlans: "VLAN", reboot: "redémarrer",
 };
 
 export function RouterPage({ t }: { t: any }) {
@@ -253,7 +253,7 @@ function Btn({ t, icon, children, onClick, solid, danger }: any) {
   );
 }
 
-// ── Connection form ────────────────────────────────────────────────────────
+// ── Formulaire de connexion ────────────────────────────────────────────────
 function GearForm({ t, adapters, gear, onClose, onSaved }: any) {
   const [vendor, setVendor] = useState(gear?.vendor || "unifi");
   const [form, setForm] = useState<any>({
@@ -266,7 +266,14 @@ function GearForm({ t, adapters, gear, onClose, onSaved }: any) {
   const [result, setResult] = useState<any>(null);
 
   const a = adapters.find((x: any) => x.id === vendor);
-  const transport = a?.transport === "api" ? "api" : "ssh";
+  // UniFi parle à l'API locale en HTTPS, pas en SSH. On lit le transport
+  // déclaré par l'adaptateur ; si la liste n'est pas encore chargée, on se
+  // rabat sur l'identifiant plutôt que de retomber sur SSH par défaut, ce qui
+  // affichait le mauvais formulaire.
+  const transport: "api" | "ssh" =
+    a?.transport === "api" ? "api"
+    : a?.transport === "ssh" ? "ssh"
+    : vendor === "unifi" ? "api" : "ssh";
   const needs: string[] = a?.needs || ["password"];
   const payload = () => ({ ...form, vendor, transport, port: Number(form.port) || undefined });
 
@@ -304,12 +311,42 @@ function GearForm({ t, adapters, gear, onClose, onSaved }: any) {
 
   return (
     <div onClick={onClose} style={{
-      position: "fixed", inset: 0, zIndex: 9500, background: "rgba(10,11,13,.5)",
-      backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+      position: "fixed", inset: 0, zIndex: 9500,
+      background: "rgba(10,11,13,.45)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }}>
+      {/* Deux halos qui dérivent lentement derrière le voile : le fond respire
+          sans jamais attirer l'œil, et la feuille se détache mieux. */}
+      <style>{`
+        @keyframes mml-derive-a {
+          0%,100% { transform: translate(-8%, -6%) scale(1) }
+          50%     { transform: translate(6%, 8%)  scale(1.15) }
+        }
+        @keyframes mml-derive-b {
+          0%,100% { transform: translate(7%, 5%)  scale(1.1) }
+          50%     { transform: translate(-6%, -7%) scale(1) }
+        }
+        @keyframes mml-monte {
+          from { opacity: 0; transform: translateY(10px) scale(.985) }
+          to   { opacity: 1; transform: none }
+        }
+      `}</style>
+      <div aria-hidden style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        <div style={{
+          position: "absolute", top: "-20%", left: "-10%", width: "70%", height: "80%",
+          background: `radial-gradient(circle, ${t.primary}22, transparent 65%)`,
+          animation: "mml-derive-a 26s ease-in-out infinite",
+        }}/>
+        <div style={{
+          position: "absolute", bottom: "-25%", right: "-12%", width: "65%", height: "75%",
+          background: `radial-gradient(circle, ${t.primary}18, transparent 65%)`,
+          animation: "mml-derive-b 34s ease-in-out infinite",
+        }}/>
+      </div>
       <div onClick={e => e.stopPropagation()} style={{
         width: 640, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto",
         background: t.bg, borderRadius: 16, boxShadow: t.liftHi,
+        position: "relative", animation: "mml-monte .22s cubic-bezier(.2,.7,.3,1)",
       }}>
         <div style={{
           display: "flex", alignItems: "center", gap: 10, padding: "18px 22px",

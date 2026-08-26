@@ -1,0 +1,35 @@
+# Resserrement de l'exposition reseau — A ACTIVER SCIEMMENT
+#
+# Ce fichier ne fait rien tant qu'il s'appelle « .exemple ». Pour l'activer :
+#     mv docker-compose.override.yml.exemple docker-compose.override.yml
+#     docker compose up -d
+# Pour revenir en arriere :
+#     rm docker-compose.override.yml && docker compose up -d
+#
+# Le compose publie « 8120:80 » sans adresse de liaison : Docker ouvre donc
+# 0.0.0.0:8120. L'interface — et le proxy /api/ qui va avec — repond a tout
+# VLAN capable de router jusqu'a cette machine. La posture pare-feu etant
+# encore ALLOW_ALL, cela veut dire : tous.
+#
+# Le tunnel Cloudflare n'a jamais eu besoin de ce port publie : s'il est un
+# conteneur du meme reseau Docker il joint « frontend:80 » directement ; s'il
+# tourne sur l'hote, 127.0.0.1:8120 lui repond toujours.
+#
+# Dans cet ordre, et pas dans l'autre :
+#   1. verifie que ton domaine repond bien par le tunnel ;
+#   2. active ce fichier ;
+#   3. verifie que le tunnel repond encore ;
+#   4. seulement la, considere l'acces direct comme retire.
+#
+# Ceci ne referme PAS le backend : il tourne en network_mode: host et aucun
+# override ne peut l'en empecher. Pour lui, pose BIND_ADDRESS dans ton .env --
+# sur l'adresse du PONT Docker, pas sur 127.0.0.1 : nginx joint l'API par la
+# passerelle du pont (proxy_pass 172.17.0.1:4000), la boucle locale de l'hote
+# lui est inaccessible. Releve l'adresse chez toi :
+#     ip -4 addr show docker0 | awk '/inet /{print $2}' | cut -d/ -f1
+# puis redemarre et verifie que l'interface repond encore.
+
+services:
+  frontend:
+    ports:
+      - "127.0.0.1:8120:80"

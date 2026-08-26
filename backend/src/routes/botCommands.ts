@@ -1,15 +1,21 @@
+// CRUD des commandes du bot Telegram.
+//
+// ── Correctif de sécurité ───────────────────────────────────────────────────
+// Ce routeur était monté **sans aucune authentification**, comme son voisin
+// commands. Le « GET / » rendait les lignes complètes, params compris — donc
+// l'identifiant d'équipement SSH et la commande d'une action exec_ssh déjà
+// enregistrée. C'était la pièce manquante d'une chaîne qui menait à
+// l'exécution d'une commande root sur la passerelle, sans identifiants.
+//
+// Lire demande une session ; écrire et déclencher demandent d'être
+// administrateur. « POST /:id/run » en particulier exécute réellement
+// l'action : il n'a rien d'un essai, du point de vue de la passerelle.
 import { Router } from "express";
 import { prisma } from "../db";
 import { BOT_ACTIONS, runAction } from "../services/botCommands";
 import { authRequired, requireRole } from "../middleware/auth";
 
 const router = Router();
-
-// Bot commands map a trigger to a server action, including "exec_ssh", "ban",
-// "lockdown". The test-fire (/:id/run) executes this action for real. Without
-// authentication, the API therefore let anyone take control of the equipment.
-// Token required everywhere; writing and execution are reserved for
-// administrators.
 router.use(authRequired);
 
 router.get("/actions", (_req, res) => res.json(BOT_ACTIONS));
@@ -62,8 +68,8 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
   catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
-// Test-fire from the UI (skips Telegram, runs locally and returns the rendered text).
-// Actually executes the action on the server side: reserved for administrators.
+// Déclenchement depuis l'interface. Le nom d'origine parlait d'essai ;
+// l'action part pour de bon sur l'équipement, d'où le rôle exigé.
 router.post("/:id/run", requireRole("admin"), async (req, res) => {
   try {
     const cmd = await prisma.botCommand.findUnique({ where: { id: req.params.id } });

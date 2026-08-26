@@ -1,58 +1,59 @@
-// Password hashing.
+// Hachage des mots de passe.
 //
-// Argon2id, winner of the Password Hashing Competition and OWASP's current
-// recommendation. It resists both side-channel attacks (thanks to its first
-// pass being data-independent) and dedicated-hardware attacks (thanks to its
-// memory cost), which bcrypt does not: bcrypt fits in 4 KiB, which makes it
-// massively parallelizable on GPU.
+// Argon2id, lauréat de la Password Hashing Competition et recommandation
+// actuelle de l'OWASP. Il résiste à la fois aux attaques par canal auxiliaire
+// (grâce à sa première passe indépendante des données) et aux attaques par
+// matériel dédié (grâce à son coût mémoire), ce que bcrypt ne fait pas :
+// bcrypt tient dans 4 Kio, ce qui le rend massivement parallélisable sur GPU.
 //
-// Three principles govern this module:
+// Trois principes gouvernent ce module :
 //
-//   1. Existing bcrypt hashes remain verifiable, and are silently re-encoded to
-//      Argon2id on the first successful login. Nobody loses access, and the
-//      fleet migrates on its own.
+//   1. Les empreintes bcrypt existantes restent vérifiables, et sont
+//      silencieusement réencodées en Argon2id à la première connexion réussie.
+//      Personne ne perd son accès, et le parc bascule tout seul.
 //
-//   2. Verification takes a comparable amount of time whether the account
-//      exists or not. Without this, an attacker distinguishes "unknown login"
-//      from "wrong password" by the clock, and enumerates the accounts.
+//   2. La vérification prend un temps comparable que le compte existe ou non.
+//      Sans cela, un attaquant distingue « identifiant inconnu » de « mot de
+//      passe faux » au chronomètre, et énumère les comptes.
 //
-//   3. An optional pepper, drawn from the environment, is added to the salt. A
-//      database stolen without the pepper cannot be cracked offline.
+//   3. Un poivre facultatif, tiré de l'environnement, s'ajoute au sel. Une base
+//      volée sans le poivre ne se casse pas hors ligne.
 
 import { createHmac, timingSafeEqual } from "crypto";
 import { hash as argonHash, verify as argonVerify, Algorithm, Version } from "@node-rs/argon2";
 import bcrypt from "bcryptjs";
 
-// ── Parameters ─────────────────────────────────────────────────────────────
+// ── Paramètres ─────────────────────────────────────────────────────────────
 //
-// The memory cost is the main lever against hardware attacks. 32 MiB per
-// verification stops GPU use cold, while staying manageable on a modest
-// machine: login takes a fraction of a second.
+// Le coût mémoire est le levier principal contre les attaques matérielles.
+// 32 Mio par vérification arrête net l'usage de GPU, tout en restant tenable
+// sur une machine modeste : la connexion prend une fraction de seconde.
 //
-// Raising it further would backfire on us: every login attempt reserves that
-// memory, and an attacker hammering the endpoint would exhaust the machine.
-// It's the attempt limiter that makes this choice safe — the two go together.
+// Le monter davantage se retournerait contre nous : chaque tentative de
+// connexion réserve cette mémoire, et un attaquant qui martèle l'endpoint
+// épuiserait la machine. C'est le limiteur de tentatives qui rend ce choix
+// sûr — les deux vont ensemble.
 export const PARAMS = {
   algorithm: Algorithm.Argon2id,
   version: Version.V0x13,
-  memoryCost: 32768,   // 32 MiB
+  memoryCost: 32768,   // 32 Mio
   timeCost: 3,         // 3 passes
-  parallelism: 1,      // a single thread: memory is already the limiting factor
+  parallelism: 1,      // un seul fil : la mémoire est déjà le facteur limitant
   outputLen: 32,
 } as const;
 
-/** Reference hash, used to equalize response times. */
+/** Empreinte de référence, utilisée pour égaliser les temps de réponse. */
 let LEURRE: string | null = null;
 
 /**
- * Optional pepper.
+ * Poivre facultatif.
  *
- * Unlike the salt, which is public and stored alongside the hash, the pepper
- * lives outside the database — in an environment variable, ideally in a secrets
- * manager. A database exfiltrated on its own becomes unusable.
+ * Contrairement au sel, qui est public et stocké avec l'empreinte, le poivre
+ * vit hors de la base — dans une variable d'environnement, idéalement dans un
+ * gestionnaire de secrets. Une base exfiltrée seule devient inexploitable.
  *
- * It is applied via HMAC before hashing rather than concatenated, to avoid
- * length-extension attacks and bcrypt's 72-byte cap.
+ * Il est appliqué en HMAC avant le hachage plutôt que concaténé, pour éviter
+ * les attaques par extension de longueur et le plafond de 72 octets de bcrypt.
  */
 function poivrer(motDePasse: string): string {
   const poivre = process.env.PASSWORD_PEPPER;
@@ -60,25 +61,25 @@ function poivrer(motDePasse: string): string {
   return createHmac("sha256", poivre).update(motDePasse, "utf8").digest("base64");
 }
 
-/** Recognizes a bcrypt hash by its prefix. */
+/** Reconnaît une empreinte bcrypt à son préfixe. */
 function estBcrypt(empreinte: string): boolean {
   return /^\$2[aby]\$/.test(empreinte);
 }
 
-/** Recognizes an Argon2id hash. */
+/** Reconnaît une empreinte Argon2id. */
 function estArgon2id(empreinte: string): boolean {
   return empreinte.startsWith("$argon2id$");
 }
 
 /**
- * Is the hash behind the current parameters?
+ * L'empreinte est-elle en retard sur les paramètres courants ?
  *
- * Used to progressively re-encode the fleet when we tighten the settings,
- * without asking anyone to change their password.
+ * Sert à réencoder progressivement le parc quand on durcit les réglages, sans
+ * demander à personne de changer de mot de passe.
  */
 export function aRechiffrer(empreinte: string): boolean {
   if (!empreinte) return true;
-  if (!estArgon2id(empreinte)) return true;      // bcrypt, or unknown format
+  if (!estArgon2id(empreinte)) return true;      // bcrypt, ou format inconnu
 
   const m = /\$argon2id\$v=(\d+)\$m=(\d+),t=(\d+),p=(\d+)\$/.exec(empreinte);
   if (!m) return true;
@@ -89,42 +90,42 @@ export function aRechiffrer(empreinte: string): boolean {
       || p < PARAMS.parallelism;
 }
 
-/** Produces an Argon2id hash. */
+/** Produit une empreinte Argon2id. */
 export async function hacher(motDePasse: string): Promise<string> {
   if (typeof motDePasse !== "string" || motDePasse.length === 0) {
-    throw new Error("Empty password.");
+    throw new Error("Mot de passe vide.");
   }
-  // Argon2 has no 72-byte limit like bcrypt, but we bound it anyway: a
-  // one-megabyte string would serve to saturate the CPU.
+  // Argon2 n'a pas la limite de 72 octets de bcrypt, mais on borne tout de
+  // même : une chaîne d'un mégaoctet servirait à saturer le processeur.
   if (Buffer.byteLength(motDePasse, "utf8") > 4096) {
-    throw new Error("Password excessively long.");
+    throw new Error("Mot de passe démesurément long.");
   }
   return argonHash(poivrer(motDePasse), PARAMS);
 }
 
 export interface ResultatVerification {
-  /** The password matches. */
+  /** Le mot de passe correspond. */
   ok: boolean;
-  /** The hash must be rewritten: it's bcrypt, or behind. */
+  /** L'empreinte doit être réécrite : elle est en bcrypt, ou en retard. */
   aMettreAJour: boolean;
-  /** New hash to store, if an update is required. */
+  /** Nouvelle empreinte à enregistrer, si une mise à jour est requise. */
   nouvelleEmpreinte?: string;
 }
 
 /**
- * Verifies a password against a hash, whatever its algorithm.
+ * Vérifie un mot de passe contre une empreinte, quel que soit son algorithme.
  *
- * When the hash is bcrypt and the password is correct, an Argon2id hash is
- * computed and returned: the caller just has to write it to the database.
- * That's what enables the migration without interruption.
+ * Quand l'empreinte est en bcrypt et que le mot de passe est correct, une
+ * empreinte Argon2id est calculée et renvoyée : l'appelant n'a plus qu'à
+ * l'écrire en base. C'est ce qui permet la migration sans interruption.
  */
 export async function verifier(
   motDePasse: string,
   empreinte: string | null | undefined,
 ): Promise<ResultatVerification> {
-  // Nonexistent account or one without a hash: we still perform a computation
-  // of equivalent cost, otherwise the response comes back instantly and
-  // betrays the account's absence.
+  // Compte inexistant ou sans empreinte : on effectue quand même un calcul de
+  // coût équivalent, sinon la réponse revient instantanément et trahit
+  // l'absence du compte.
   if (!empreinte) {
     await consommerTempsEquivalent();
     return { ok: false, aMettreAJour: false };
@@ -137,7 +138,7 @@ export async function verifier(
     try {
       ok = await argonVerify(empreinte, poivre);
     } catch {
-      ok = false;                                // corrupted hash
+      ok = false;                                // empreinte corrompue
     }
     if (!ok) return { ok: false, aMettreAJour: false };
     if (aRechiffrer(empreinte)) {
@@ -147,56 +148,58 @@ export async function verifier(
   }
 
   if (estBcrypt(empreinte)) {
-    // Legacy: bcrypt was applied to the raw password, without pepper. So we
-    // verify against the original value, then re-encode with it.
+    // Historique : bcrypt était appliqué au mot de passe brut, sans poivre.
+    // On vérifie donc contre la valeur d'origine, puis on réencode avec.
     const ok = await bcrypt.compare(motDePasse, empreinte).catch(() => false);
     if (!ok) return { ok: false, aMettreAJour: false };
     return { ok: true, aMettreAJour: true, nouvelleEmpreinte: await hacher(motDePasse) };
   }
 
-  // Unknown format: we refuse rather than guess.
+  // Format inconnu : on refuse plutôt que de deviner.
   await consommerTempsEquivalent();
   return { ok: false, aMettreAJour: false };
 }
 
 /**
- * Consumes a time comparable to a real verification.
+ * Consomme un temps comparable à une vérification réelle.
  *
- * We compute the hash of a fixed value once, then verify it against a value
- * that is always wrong. The cost is that of a genuine verification, which
- * smooths out the time difference between a known account and an unknown one.
+ * On calcule l'empreinte d'une valeur fixe une seule fois, puis on la vérifie
+ * contre une valeur toujours fausse. Le coût est celui d'une vérification
+ * authentique, ce qui aplanit la différence de temps entre un compte connu et
+ * un compte inconnu.
  */
 async function consommerTempsEquivalent(): Promise<void> {
   if (!LEURRE) LEURRE = await argonHash("00000000000000000000000000000000", PARAMS);
   try {
-    await argonVerify(LEURRE, "systematically wrong value");
+    await argonVerify(LEURRE, "valeur systematiquement fausse");
   } catch {
-    /* no effect: only the elapsed time matters */
+    /* sans effet : seul le temps écoulé compte */
   }
 }
 
 /**
- * Prepares the decoy at startup.
+ * Prépare le leurre au démarrage.
  *
- * Without this precaution, the very first attempt on a nonexistent account
- * would be slower than the following ones, which would constitute a signal.
+ * Sans cette précaution, la toute première tentative sur un compte inexistant
+ * serait plus lente que les suivantes, ce qui constituerait un signal.
  */
 export async function prechauffer(): Promise<void> {
   await consommerTempsEquivalent();
 }
 
 /**
- * Compares two strings in constant time.
+ * Compare deux chaînes en temps constant.
  *
- * For tokens, access keys, and one-time codes: a `===` comparison stops at the
- * first differing byte, which leaks the correct prefix by the clock.
+ * Pour les jetons, clés d'accès et codes à usage unique : une comparaison par
+ * `===` s'arrête au premier octet différent, ce qui laisse fuir le préfixe
+ * correct au chronomètre.
  */
 export function egalConstant(a: string, b: string): boolean {
   const ba = Buffer.from(String(a ?? ""), "utf8");
   const bb = Buffer.from(String(b ?? ""), "utf8");
-  // timingSafeEqual requires identical lengths. We hash first, which
-  // uniformizes the size without revealing the secret's real length.
-  const ha = createHmac("sha256", "comparison").update(ba).digest();
-  const hb = createHmac("sha256", "comparison").update(bb).digest();
+  // timingSafeEqual exige des longueurs identiques. On hache d'abord, ce qui
+  // uniformise la taille sans révéler la longueur réelle du secret.
+  const ha = createHmac("sha256", "comparaison").update(ba).digest();
+  const hb = createHmac("sha256", "comparaison").update(bb).digest();
   return timingSafeEqual(ha, hb);
 }

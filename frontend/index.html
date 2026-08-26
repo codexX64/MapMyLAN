@@ -1,22 +1,49 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light" data-shell="reading">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MapMyLAN</title>
+
+    <!-- La marque. Le .ico porte les trois tailles que réclament encore
+         quelques navigateurs ; les PNG servent aux onglets modernes, à l'écran
+         d'accueil iOS et au manifeste. -->
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icone-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icone-16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icone-180.png">
+    <meta name="theme-color" content="#F6F6F3" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0D0E10" media="(prefers-color-scheme: dark)">
+
+    <!-- Les deux familles de la maquette : Schibsted Grotesk pour le texte,
+         IBM Plex Mono pour tout ce qui est chiffre, adresse ou commande.
+         Voir ETAPE-1.md si la machine n'a pas d'accès sortant : la même
+         chose s'héberge localement en quelques minutes. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Choix de l'apparence avant le premier pixel : sans cela, une page
+         sombre s'ouvre sur un éclair blanc. On relit la même clé que le
+         magasin, on ne crée pas une seconde source de vérité. -->
+    <script>
+      (function () {
+        try {
+          var brut = localStorage.getItem("mapmylan_theme");
+          var sombres = { dark: 1, enterprise: 1, cyber: 1, noc: 1 };
+          var cle = sombres[brut] ? "dark" : "light";
+          document.documentElement.setAttribute("data-theme", cle);
+          document.documentElement.style.colorScheme = cle;
+        } catch (e) { /* mode privé, stockage refusé : on reste en clair */ }
+      })();
+    </script>
+
+    <!-- Fond et encre avant le chargement du bundle. Le reste du socle vit
+         dans src/styles/base.css ; ici, le strict minimum anti-clignotement. -->
     <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body, #root { height: 100%; }
-      body { background: #F6F6F3; color: #14161A; font-family: 'Schibsted Grotesk', system-ui, sans-serif; overflow: hidden; -webkit-font-smoothing: antialiased; }
-      ::-webkit-scrollbar { width: 6px; height: 6px; }
-      ::-webkit-scrollbar-thumb { background: #E5E5E0; border-radius: 20px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      input, button, select, textarea { font-family: inherit; }
-      button { cursor: pointer; }
-      [contenteditable]:focus { outline: 1px solid rgba(56,189,248,0.4); }
+      :root { --paper: #F6F6F3; --ink: #14161A; }
+      [data-theme="dark"] { --paper: #0D0E10; --ink: #ECEEF1; }
+      html, body { height: 100%; margin: 0; background: var(--paper); color: var(--ink); }
     </style>
   </head>
   <body>

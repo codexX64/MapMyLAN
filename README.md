@@ -4,51 +4,78 @@
 
 # MapMyLAN
 
-**Map, monitor and defend your local network.**
+**Cartographie, surveille et défend ton réseau local.**
 
-Automatic device discovery · Measured topology · Vulnerability detection
-Blocking on your own router · Live alerts
+Découverte automatique des appareils · Topologie mesurée · Détection de vulnérabilités
+Blocage sur ton propre routeur · Alertes en direct
 
-[**Try the demo →**](https://demo.codex64.fr/mapmylan)
+[**Essayer la démonstration →**](https://demo.codex64.fr/mapmylan)
 
 </div>
 
 ---
 
-## Editions
+## Éditions
 
-**MapMyLAN Codex64** is the public edition — the one in this repository. It runs
-on its own and needs no external service.
+**MapMyLAN Codex64** est l'édition publique, celle de ce dépôt. C'est le seul
+code : il fonctionne seul et n'a besoin d'aucun service annexe.
 
-**MapMyLAN REDACTED** refers to an install that grafts on extensions specific to
-its environment — a knowledge base, a metrics store, an internal ticketing
-system. The code is the same: only extensions dropped into `extensions/` are
-added. See [extensions/README.md](extensions/README.md).
+Une installation qui veut greffer un comportement qui lui est propre — base de
+connaissances, entrepôt de métriques, billetterie interne — dépose un module
+dans `extensions/` plutôt que de forker le projet. Rien à déclarer, rien à
+recompiler. Voir [extensions/README.md](extensions/README.md).
 
-## What MapMyLAN does
+## Ce que fait MapMyLAN
 
-MapMyLAN sweeps the ranges you declare, identifies every device, watches its
-open ports and warns you when something steps out of line. When a rule fires,
-the action runs **on your own network gear** — the block is real, not symbolic.
+MapMyLAN parcourt les plages que tu lui déclares, identifie chaque appareil,
+surveille ses ports ouverts et te prévient quand quelque chose sort de
+l'ordinaire. Quand une règle se déclenche, l'action est exécutée **sur ton
+équipement réseau** — le blocage est réel, pas symbolique.
 
-Three discovery sources are queried in parallel and merged:
+Trois sources de découverte sont interrogées en parallèle et fusionnées :
 
-| Source | What it brings |
+| Source | Ce qu'elle apporte |
 |---|---|
-| ARP sweep | What has recently talked on the segment |
-| Ping sweep | What answers when probed |
-| Network gear | What it actually carries, including silent devices |
+| Balayage ARP | Ce qui a communiqué récemment sur le segment |
+| Balayage ping | Ce qui répond aux sollicitations |
+| Équipement réseau | Ce qu'il porte réellement, y compris les appareils muets |
 
-The gear also reports each client's **switch port** and **associated access
-point**, which lets MapMyLAN build a measured topology rather than an inferred
-one. When several MAC addresses appear behind a single port, an unmanaged switch
-is inserted automatically at that spot.
+L'équipement fournit en outre le **port de commutation** et la **borne
+d'association** de chaque client, ce qui permet de construire une topologie
+mesurée plutôt que déduite. Quand plusieurs adresses MAC apparaissent derrière
+un même port, un commutateur non géré est inséré automatiquement à cet endroit.
 
-## Supported equipment
+## Les segments viennent de l'équipement
 
-| Vendor | Transport | Blocking | Clients | Ports |
+Les VLAN ne se saisissent pas : ils sont **relevés** sur la passerelle. Le nom et
+le sous-réseau viennent d'elle, l'ordre est numérique — trié comme du texte,
+« VLAN 10 » passerait devant « VLAN 2 » — et un segment disparu est signalé dans
+le compte-rendu du relevé, jamais effacé en silence. Les adresses de passerelle
+sont écartées de l'inventaire : ce ne sont pas des appareils.
+
+Réserver une adresse suit la même logique. Le préfixe est figé par le segment
+choisi, seule la partie hôte se saisit, et elle est vérifiée en direct contre
+les bornes réelles du sous-réseau. MapMyLAN ne réécrit pas la configuration de
+la machine — personne ne peut faire ça à distance : il demande à la passerelle
+de toujours servir cette adresse à cette carte réseau.
+
+## Le trafic, dans les deux sens
+
+Les connexions relevées sur la passerelle sont lues dans les **deux tuples** de
+conntrack : quand la traduction d'adresses masque le tuple aller, c'est le tuple
+retour qui porte la vraie source. Sans cela, les connexions **entrantes** —
+celles qui comptent le plus — restent invisibles.
+
+Trois règles, et trois seulement, font passer un flux en rouge : un service
+sensible atteint depuis l'extérieur, un appareil déjà mis à l'écart qui
+communique encore, une note de risque déjà haute. Chaque flux signalé porte la
+raison qui l'a signalé — aucun score global, aucune appréciation.
+
+## Équipements pris en charge
+
+| Constructeur | Transport | Blocage | Clients | Ports |
 |---|---|:-:|:-:|:-:|
-| Ubiquiti UniFi | Local HTTPS API | ✅ | ✅ | ✅ |
+| Ubiquiti UniFi | API locale HTTPS | ✅ | ✅ | ✅ |
 | Asus / Merlin | SSH | ✅ | ✅ | — |
 | OpenWrt | SSH | ✅ | ✅ | — |
 | MikroTik RouterOS | SSH | ✅ | ✅ | ✅ |
@@ -56,21 +83,27 @@ is inserted automatically at that spot.
 | Cisco IOS | SSH | ✅ | ✅ | ✅ |
 | Ubiquiti EdgeOS | SSH | ✅ | ✅ | — |
 | Zyxel | SSH | ✅ | — | — |
-| Generic | SSH | free-form commands | — | — |
+| Générique | SSH | commandes libres | — | — |
 
-> **UniFi** requires a **local** account, created in *Settings → Admins & Users*
-> with the local-access option. The credentials of an online Ubiquiti account
-> are rejected by the local API.
+> **UniFi** exige un compte **local**, créé dans *Settings → Admins & Users*
+> avec l'option d'accès local. Les identifiants du compte Ubiquiti en ligne
+> sont refusés par l'API locale.
+
+---
+
+> **Note du mainteneur** — ce dépôt ne contient pas encore la totalité du
+> travail réalisé. Voir [docs/ETAT.md](docs/ETAT.md) pour la liste des éléments
+> à récupérer, dont plusieurs correctifs de sécurité.
 
 ## Installation
 
-### Requirements
+### Prérequis
 
-- Docker and Docker Compose
-- A machine on the network to monitor, wired if possible
-- Administrator access to your router
+- Docker et Docker Compose
+- Une machine sur le réseau à surveiller, reliée en filaire de préférence
+- Un accès administrateur à ton routeur
 
-### Getting started
+### Mise en route
 
 ```bash
 git clone https://github.com/CodexX64/mapmylan.git
@@ -78,7 +111,8 @@ cd mapmylan
 cp .env.example .env
 ```
 
-Open `.env` and fill in at least the three secrets. Generate them like this:
+Ouvre le `.env` et renseigne au minimum les trois secrets. Ils se génèrent
+ainsi :
 
 ```bash
 echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)"
@@ -86,122 +120,108 @@ echo "JWT_SECRET=$(openssl rand -base64 48)"
 echo "MASTER_KEY=$(openssl rand -base64 32)"
 ```
 
-Then:
+Puis :
 
 ```bash
 docker compose up -d --build
 ```
 
-The interface listens on `http://localhost:8090`. On first launch, a wizard
-guides you: create the account, choose authentication, connect to the gear,
-declare the ranges, run the first sweep.
+L'interface écoute sur `http://localhost:8120`. Au premier lancement, un
+assistant te guide : création du compte, choix de l'authentification, connexion
+à l'équipement, déclaration des plages, premier balayage.
 
-### Network interface
+### Interface réseau
 
-The ARP sweep needs to be on the same segment as the devices, so the backend
-container runs on the host network. Specify the interface to use:
+Le balayage ARP a besoin d'être sur le même segment que les appareils. Le
+conteneur backend tourne donc en réseau hôte. Précise l'interface à utiliser :
 
 ```bash
 ip -o link show | awk -F': ' '{print $2}'
 ```
 
-Put the name in `SCAN_INTERFACE`.
+Reporte le nom dans `SCAN_INTERFACE`.
 
 ---
 
 ## Configuration
 
-Everything is set from the interface, except what must exist before the first
-start. The `.env` file holds only that.
+Tout se règle depuis l'interface, sauf ce qui doit exister avant le premier
+démarrage. Le fichier `.env` ne contient que cela.
 
-| Variable | Role |
+| Variable | Rôle |
 |---|---|
-| `POSTGRES_PASSWORD` | Database password |
-| `JWT_SECRET` | Session-token signing |
-| `MASTER_KEY` | Encryption of device credentials at rest |
-| `PASSWORD_PEPPER` | Optional — pepper added to password hashing |
-| `SCAN_INTERFACE` | Network interface used for the sweep |
-| `SCAN_SUBNET` | Initial range, later replaced by the interface's own |
-| `DEFAULT_ADMIN_USER` | Account recovery — leave empty in normal use |
-| `DEFAULT_ADMIN_PASSWORD` | Same. **Empty by default**, otherwise reapplied on every start |
+| `POSTGRES_PASSWORD` | Mot de passe de la base |
+| `JWT_SECRET` | Signature des jetons de session |
+| `MASTER_KEY` | Chiffrement des identifiants d'équipement au repos |
+| `PASSWORD_PEPPER` | Facultatif — poivre ajouté au hachage des mots de passe |
+| `SCAN_INTERFACE` | Interface réseau du balayage |
+| `SCAN_SUBNET` | Plage initiale, remplacée ensuite par celles de l'interface |
+| `DEFAULT_ADMIN_USER` | Reprise en main après oubli — laisser vide en usage normal |
+| `DEFAULT_ADMIN_PASSWORD` | Idem. **Vide par défaut**, sinon réappliqué à chaque démarrage |
 
-> `DEFAULT_ADMIN_PASSWORD` must stay **empty** in normal operation. If set, it
-> rewrites the account password on every container restart, which cancels any
-> change made from the interface.
+> `DEFAULT_ADMIN_PASSWORD` doit rester **vide** en fonctionnement normal.
+> Renseigné, il réécrit le mot de passe du compte à chaque redémarrage du
+> conteneur, ce qui annule tout changement fait depuis l'interface.
 
-### Scanned ranges
+### Plages balayées
 
-A network rarely fits in a single subnet. Declare as many as needed from
-*Settings → Scanned ranges*: DHCP on one, infrastructure on another, a device
-still on its factory addressing on a third.
+Un réseau tient rarement dans un seul sous-réseau. Déclare-en autant que
+nécessaire depuis *Réglages → Plages balayées* : le DHCP sur l'une,
+l'infrastructure sur une autre, un équipement resté sur son adressage d'usine
+sur une troisième.
 
-They are swept **one after another**, never at the same time: two parallel ARP
-sweeps saturate the network card and skew the results.
-
----
-
-## Security
-
-MapMyLAN handles network-device credentials and can cut off access to devices.
-The following choices follow from that.
-
-**Passwords.** Hashed with Argon2id — 32 MiB of memory, three passes — which
-makes dedicated-hardware attacks pointless. Legacy bcrypt hashes inherited from
-an earlier version are verified and silently re-encoded on the first successful
-sign-in. An optional pepper, taken from the environment, makes an exfiltrated
-database alone useless.
-
-**Authentication.** Three proofs can combine: password, passkey and a second
-factor. The passkey relies on WebAuthn — the private part never leaves the
-device, and the key is bound to the origin, so it is useless on a site that
-would impersonate yours.
-
-**Device credentials.** Encrypted at rest with AES-256-GCM using `MASTER_KEY`.
-They never travel back to the browser.
-
-**Public exposure.** If you open MapMyLAN on a domain, place it behind
-authenticated access — a tunnel with access control, or a VPN. The application
-is not meant to be exposed bare on the Internet.
-
-A vulnerability to report? See [SECURITY.md](SECURITY.md).
+Elles sont parcourues **l'une après l'autre**, jamais simultanément : deux
+balayages ARP en parallèle saturent la carte réseau et faussent les résultats.
 
 ---
 
-## Demo
+## Sécurité
 
-A full demo is available at
-**[demo.codex64.fr/mapmylan](https://demo.codex64.fr/mapmylan)** — first-run
-wizard, map, global traffic, inventory, settings. All the data there is
-fictitious and the addresses belong to the ranges reserved for documentation.
+MapMyLAN manipule des identifiants d'équipement réseau et peut couper l'accès à
+des appareils. Les choix suivants en découlent.
 
-## Screenshots
+**Mots de passe.** Hachés en Argon2id — 32 Mio de mémoire, trois passes — ce qui
+rend les attaques par matériel dédié inintéressantes. Les empreintes bcrypt
+héritées d'une version antérieure sont vérifiées puis réencodées silencieusement
+à la première connexion réussie. Un poivre facultatif, tiré de l'environnement,
+rend une base exfiltrée seule inexploitable.
 
-<p align="center">
-  <img src="docs/screenshots/1-Demo-Start-Configuration.png" width="520" alt="Start configuration"><br><br>
-  <img src="docs/screenshots/2-Demo-ID-configuration.png" width="520" alt="Identity configuration"><br><br>
-  <img src="docs/screenshots/3-Start-Page-Demo.png" width="520" alt="Home page"><br><br>
-  <img src="docs/screenshots/4-Globe-Demo.png" width="520" alt="Globe view"><br><br>
-  <img src="docs/screenshots/5-Settings-Demo.png" width="520" alt="Settings">
-</p>
+**Authentification.** Trois preuves peuvent se combiner : mot de passe, clé
+d'accès et second facteur. La clé d'accès s'appuie sur WebAuthn — la partie
+privée ne quitte jamais l'appareil, et la clé est liée à l'origine, donc
+inutilisable sur un site qui imiterait le tien.
+
+**Identifiants d'équipement.** Chiffrés au repos en AES-256-GCM avec `MASTER_KEY`.
+Ils ne redescendent jamais vers le navigateur.
+
+**Exposition publique.** Si tu ouvres MapMyLAN sur un domaine, place-le derrière
+un accès authentifié — tunnel avec contrôle d'accès, ou VPN. L'application n'est
+pas conçue pour être exposée nue sur Internet.
+
+Une faille à signaler ? Voir [SECURITY.md](SECURITY.md).
 
 ---
 
-## License & no warranty
+## Démonstration
 
-This project is distributed under the **MIT License** (see [`LICENSE`](LICENSE)).
-The copyright notice must be kept in any redistribution, including derivative
-works — that is a requirement of the license, not a convention.
+Une démonstration complète est disponible sur
+**[demo.codex64.fr/mapmylan](https://demo.codex64.fr/mapmylan)** — assistant
+de première configuration, carte, trafic mondial, inventaire, réglages. Toutes
+les données y sont fictives et les adresses appartiennent aux plages réservées à
+la documentation.
 
-The software is provided **"AS IS", without any warranty** — express or implied —
-of merchantability, fitness for a particular purpose, or security. It is the
-user's responsibility to **audit and secure the code before any production use**.
+Elle est aussi dans ce dépôt : `demo/index.html`, à ouvrir directement dans un
+navigateur.
 
-> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+---
 
-By using, deploying or modifying MapMyLAN, the user accepts that **the author
-cannot be held liable** for any damage, data loss or security incident resulting
-from its use. MapMyLAN is a personal, open-source project, provided free of
-charge and with no obligation of support.
+## Licence
+
+MIT — voir [LICENSE](LICENSE).
+
+La mention de copyright doit être conservée dans toute redistribution, y compris
+dans les travaux dérivés. C'est une obligation de la licence, pas une
+convention.
 
 ---
 

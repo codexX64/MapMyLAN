@@ -1,8 +1,8 @@
-// Connection to the main network equipment.
+// Connexion à l'équipement réseau principal.
 //
-// A single screen on the interface side, several paths on the machine side: SSH
-// for most vendors, local API for UniFi. Credentials never come back out of the
-// API: we only return whether a secret is present.
+// Un seul écran côté interface, plusieurs voies côté machine : SSH pour la
+// plupart des constructeurs, API locale pour UniFi. Les identifiants ne
+// ressortent jamais de l'API : on ne renvoie que la présence d'un secret.
 
 import { Router } from "express";
 import { prisma } from "../db";
@@ -36,7 +36,7 @@ const publicShape = (row: any) => row && ({
   capabilities: getAdapter(row.vendor).capabilities,
 });
 
-// Catalog of supported vendors, with what each one can do.
+// Catalogue des constructeurs pris en charge, avec ce que chacun sait faire.
 router.get("/adapters", (_req, res) => {
   res.json(ADAPTERS.map(a => ({
     id: a.id, label: a.label, transport: a.transport,
@@ -44,7 +44,7 @@ router.get("/adapters", (_req, res) => {
   })));
 });
 
-// Main equipment currently registered.
+// Équipement principal actuellement enregistré.
 router.get("/", async (_req, res) => {
   const row = await mainRouterRow();
   res.json(row ? publicShape(row) : null);
@@ -65,7 +65,7 @@ function credsFromBody(body: any): RouterCreds {
   };
 }
 
-// Discovery: we ask the equipment who it is, without registering anything.
+// Reconnaissance : on demande à l'équipement qui il est, sans rien enregistrer.
 router.post("/detect", requireRole("admin"), async (req, res) => {
   try {
     const creds = credsFromBody(req.body || {});
@@ -79,13 +79,13 @@ router.post("/detect", requireRole("admin"), async (req, res) => {
   } catch (err: any) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
-// Test of a configuration, whether registered or not.
+// Test d'une configuration, enregistrée ou non.
 router.post("/test", requireRole("admin"), async (req, res) => {
   try {
     let ctx, adapter;
     if (req.body?.useSaved) {
       const row = await mainRouterRow();
-      if (!row) return res.status(404).json({ ok: false, error: "No device registered" });
+      if (!row) return res.status(404).json({ ok: false, error: "Aucun équipement enregistré" });
       ctx = contextFor(row); adapter = getAdapter(row.vendor);
     } else {
       const creds = credsFromBody(req.body || {});
@@ -104,19 +104,19 @@ router.post("/test", requireRole("admin"), async (req, res) => {
       });
     }
     await logEvent(result.ok ? "info" : "warn", "router",
-      `Test ${adapter.label}: ${result.ok ? "succeeded" : "failed"} ${result.info || result.error || ""}`);
+      `Test ${adapter.label} : ${result.ok ? "réussi" : "échec"} ${result.info || result.error || ""}`);
     res.json({ ...result, adapter: adapter.id, capabilities: adapter.capabilities });
   } catch (err: any) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
-// Registration. A secret left empty keeps the one already stored.
+// Enregistrement. Un secret laissé vide conserve celui déjà stocké.
 router.put("/", requireRole("admin"), async (req, res) => {
   try {
     const b = req.body || {};
-    if (!b.host || !b.username) return res.status(400).json({ error: "Host and username required" });
+    if (!b.host || !b.username) return res.status(400).json({ error: "Hôte et identifiant requis" });
 
     const data: any = {
-      name: b.name || `Router ${b.host}`,
+      name: b.name || `Routeur ${b.host}`,
       host: b.host,
       port: Number(b.port) || (b.transport === "api" ? 443 : 22),
       username: b.username,
@@ -131,28 +131,53 @@ router.put("/", requireRole("admin"), async (req, res) => {
     if (b.privateKey) data.privateKeyEnc = encrypt(b.privateKey);
     if (b.passphrase) data.passphraseEnc = encrypt(b.passphrase);
 
-    const existing = await mainRouterRow();
+    // L'enregistrement se fait sur la ligne marquée « équipement principal ».
+    // Si ce drapeau a été déplacé entre-temps — l'ajout d'une console SSH
+    // cochée « équipement principal » le retire à tout le monde — la ligne
+    // existante devient invisible ici, et une seconde était créée à côté.
+    // On la retrouve donc aussi par son transport et son hôte.
+    const existing =
+      (await mainRouterRow()) ||
+      (await prisma.sshDevice.findFirst({
+        where: { transport: data.transport, host: data.host },
+        orderBy: { createdAt: "asc" },
+      }));
     const row = existing
       ? await prisma.sshDevice.update({ where: { id: existing.id }, data })
       : await prisma.sshDevice.create({ data });
 
-    await logEvent("info", "router", `Main device registered: ${data.vendor} on ${data.host}`);
+    // Une ligne en transport « api » ne vient que d'ici : toute autre est un
+    // doublon laissé par une version précédente. On nettoie, et on le dit.
+    if (data.transport === "api") {
+      const doublons = await prisma.sshDevice.deleteMany({
+        where: { transport: "api", id: { not: row.id } },
+      });
+      if (doublons.count) {
+        await logEvent("info", "router", `${doublons.count} fiche(s) en double supprimée(s)`);
+      }
+    }
+
+    await logEvent("info", "router", `Équipement principal enregistré : ${data.vendor} sur ${data.host}`);
     res.json(publicShape(row));
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
+// Supprimer l'équipement principal retire aussi ses doublons éventuels : une
+// ligne en transport « api » ne peut venir que de cette page.
 router.delete("/", requireRole("admin"), async (_req, res) => {
   const row = await mainRouterRow();
   if (row) await prisma.sshDevice.delete({ where: { id: row.id } });
+  const restes = await prisma.sshDevice.deleteMany({ where: { transport: "api" } });
+  await logEvent("info", "router", `Équipement principal supprimé${restes.count ? ` (+${restes.count} doublon(s))` : ""}`);
   res.json({ ok: true });
 });
 
-// Who does the equipment see right now? Also used to compare with what the
-// scan found on its side.
+// Qui l'équipement voit-il en ce moment ? Sert aussi à comparer avec ce que le
+// balayage a trouvé de son côté.
 router.get("/clients", async (_req, res) => {
   try {
     const row = await mainRouterRow();
-    if (!row) return res.status(404).json({ error: "No device registered" });
+    if (!row) return res.status(404).json({ error: "Aucun équipement enregistré" });
     const adapter = getAdapter(row.vendor);
     if (!adapter.clients) return res.json({ supported: false, clients: [] });
     const clients = await adapter.clients(contextFor(row));
@@ -160,12 +185,12 @@ router.get("/clients", async (_req, res) => {
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
-// ARP table as seen by the equipment: this is the most reliable source for
-// finding the silent devices that the scan misses.
+// Table ARP vue par l'équipement : c'est la source la plus fiable pour
+// retrouver les appareils muets que le balayage rate.
 router.get("/arp", async (_req, res) => {
   try {
     const row = await mainRouterRow();
-    if (!row) return res.status(404).json({ error: "No device registered" });
+    if (!row) return res.status(404).json({ error: "Aucun équipement enregistré" });
     const adapter = getAdapter(row.vendor);
     if (!adapter.arp) return res.json({ supported: false, entries: [] });
     res.json({ supported: true, entries: await adapter.arp(contextFor(row)) });

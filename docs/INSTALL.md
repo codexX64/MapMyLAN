@@ -1,14 +1,15 @@
-# Detailed installation guide
+# Guide d'installation détaillé
 
-## 1 · Choose the machine
+## 1 · Choisir la machine
 
-MapMyLAN must be **on the segment it monitors**. ARP scanning does not cross
-routers: a machine placed behind a routing hop will only see its own segment.
+MapMyLAN doit être **sur le segment qu'il surveille**. Le balayage ARP ne
+traverse pas les routeurs : une machine placée derrière un routage ne verra que
+son propre segment.
 
-Prefer a wired connection. Over Wi-Fi, client isolation — often enabled by
-default on access points — prevents it from seeing the other devices.
+Préférez une liaison filaire. En Wi-Fi, l'isolation des clients — souvent
+activée par défaut sur les bornes — empêche de voir les autres appareils.
 
-## 2 · Get the project
+## 2 · Récupérer le projet
 
 ```bash
 git clone https://github.com/CodexX64/mapmylan.git
@@ -16,9 +17,9 @@ cd mapmylan
 cp .env.example .env
 ```
 
-## 3 · Generate the secrets
+## 3 · Générer les secrets
 
-Three secrets are required. Do not reuse ones from another project.
+Trois secrets sont nécessaires. Ne réutilisez pas ceux d'un autre projet.
 
 ```bash
 {
@@ -29,77 +30,76 @@ Three secrets are required. Do not reuse ones from another project.
 } >> .env
 ```
 
-Then remove the original blank lines to avoid duplicates.
+Retirez ensuite les lignes vides d'origine pour éviter les doublons.
 
-> `MASTER_KEY` encrypts the credentials of your network equipment. Losing it
-> makes them unrecoverable: you would have to re-enter them. Back it up somewhere
-> other than the machine.
+> `MASTER_KEY` chiffre les identifiants de votre équipement réseau. La perdre
+> les rend irrécupérables : il faudra les ressaisir. Sauvegardez-la ailleurs
+> que sur la machine.
 
-## 4 · Declare the network interface
+## 4 · Déclarer l'interface réseau
 
 ```bash
 ip -o link show | awk -F': ' '{print $2}'
 ```
 
-Enter the name in `SCAN_INTERFACE`. On a machine with several interfaces, choose
-the one that carries the network to monitor — not a Docker interface, not a
-tunnel interface.
+Reportez le nom dans `SCAN_INTERFACE`. Sur une machine à plusieurs interfaces,
+choisissez celle qui porte le réseau à surveiller — pas une interface Docker,
+pas une interface de tunnel.
 
-## 5 · Start
+## 5 · Démarrer
 
 ```bash
 docker compose up -d --build
 docker compose logs -f backend
 ```
 
-Wait for the line announcing that it is listening, then open
-`http://localhost:8120`.
+Attendez la ligne annonçant l'écoute, puis ouvrez `http://localhost:8120`.
 
-## 6 · Follow the wizard
+## 6 · Suivre l'assistant
 
-**Administrator account.** Choose a long passphrase rather than a short,
-complicated password: length matters more than variety.
+**Compte administrateur.** Choisissez une phrase longue plutôt qu'un mot de
+passe court et compliqué : la longueur pèse davantage que la variété.
 
-**Authentication.** The password alone is enough on a closed network. As soon as
-access leaves your home, add at least a second factor.
+**Authentification.** Le mot de passe seul suffit sur un réseau fermé. Dès que
+l'accès sort de chez vous, ajoutez au moins un second facteur.
 
-**Network equipment.** The form adjusts to the manufacturer.
+**Équipement réseau.** Le formulaire s'ajuste au constructeur.
 
-*For UniFi*, first create a **local** account on the console, under
-*Settings → Admins & Users*, with the local access option enabled. Then enter the
-gateway address, port 443, and these credentials. Since the certificate is
-self-signed, leave TLS verification disabled.
+*Pour UniFi*, créez d'abord un compte **local** sur la console, dans
+*Settings → Admins & Users*, avec l'option d'accès local activée. Puis
+renseignez l'adresse de la passerelle, le port 443 et ces identifiants. Le
+certificat étant auto-signé, laissez la vérification TLS désactivée.
 
-*For manufacturers over SSH*, check that the service is enabled on the equipment
-and that the account has write permissions — otherwise reading will work but
-blocking will fail.
+*Pour les constructeurs en SSH*, vérifiez que le service est activé sur
+l'équipement et que le compte a les droits d'écriture — sans quoi la lecture
+fonctionnera mais le blocage échouera.
 
-**Ranges.** Declare everything your network actually contains. A forgotten range
-is a slice of the network left invisible.
+**Plages.** Déclarez tout ce que votre réseau contient réellement. Une plage
+oubliée est un pan du réseau invisible.
 
-**Alerts.** A messaging bot warns you within seconds; email leaves a written
-trace. A second address dedicated to password resets limits the damage if the
-sending mailbox is compromised.
+**Alertes.** Un bot de messagerie prévient en quelques secondes ; le courriel
+laisse une trace écrite. Une seconde adresse dédiée à la réinitialisation du
+mot de passe limite les dégâts si la boîte d'envoi est compromise.
 
-## 7 · After installation
+## 7 · Après l'installation
 
-- Clear `DEFAULT_ADMIN_PASSWORD` if it was used.
-- Back up `MASTER_KEY` off the machine.
-- Create a first defense rule: without one, nothing will be blocked
-  automatically.
+- Videz `DEFAULT_ADMIN_PASSWORD` s'il a servi.
+- Sauvegardez `MASTER_KEY` hors de la machine.
+- Créez une première règle de défense : sans elle, rien ne sera bloqué
+  automatiquement.
 
-## Troubleshooting
+## Dépannage
 
-**The scan finds only one host.** The interface is probably wrong, or the
-declared range does not match the real network. Check with `ip addr` and
+**Le balayage ne trouve qu'un hôte.** L'interface est probablement mauvaise, ou
+la plage déclarée ne correspond pas au réseau réel. Vérifiez avec `ip addr` et
 `ip route`.
 
-**"Connection lost before handshake."** An SSH channel is being opened to a port
-that speaks HTTPS. Check the manufacturer selected: UniFi goes through the API,
-not SSH.
+**« Connection lost before handshake ».** Un canal SSH est ouvert vers un port
+qui parle HTTPS. Vérifiez le constructeur choisi : UniFi passe par l'API, pas
+par SSH.
 
-**UniFi credentials rejected.** The account used is an online Ubiquiti account.
-The local API only accepts local accounts.
+**Identifiants UniFi refusés.** Le compte utilisé est un compte Ubiquiti en
+ligne. L'API locale n'accepte que les comptes locaux.
 
-**The password comes back after a restart.** `DEFAULT_ADMIN_PASSWORD` is set in
-`.env` and is reapplied on every start. Clear it.
+**Le mot de passe revient après un redémarrage.** `DEFAULT_ADMIN_PASSWORD` est
+renseigné dans le `.env` et se réapplique à chaque démarrage. Videz-le.

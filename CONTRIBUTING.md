@@ -1,27 +1,28 @@
-# Contributing
+# Contribuer
 
-## Before opening a pull request
+## Avant d'ouvrir une pull request
 
-Describe your intent in an issue first. A feature that is designed and then
-rejected wastes everyone's time.
+Décrivez d'abord votre intention dans une issue. Une fonctionnalité conçue puis
+refusée fait perdre du temps à tout le monde.
 
 ## Style
 
-The code is commented **in French**, like the rest of the project. Comments
-explain *why* a decision was made, not what the code does line by line — that is
-already legible in the code itself.
+Le code est commenté **en français**, comme le reste du projet. Les commentaires
+expliquent *pourquoi* une décision a été prise, pas ce que le code fait ligne à
+ligne — cela se lit déjà dans le code.
 
-Dependencies are added sparingly. A fifty-kilobyte library for a twenty-line
-function will not be accepted.
+Les dépendances sont ajoutées avec parcimonie. Une bibliothèque de cinquante
+kilo-octets pour une fonction de vingt lignes ne passera pas.
 
-## What is checked
+## Ce qui est vérifié
 
-- Type checking passes without errors, both backend and frontend.
-- No personal data, no real network addresses. Examples use the ranges reserved
-  for documentation: `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`.
-- Secrets stay out of the repository.
+- Le typage passe sans erreur, backend et frontend.
+- Aucune donnée personnelle, aucune adresse de réseau réel. Les exemples
+  utilisent les plages réservées à la documentation : `192.0.2.0/24`,
+  `198.51.100.0/24`, `203.0.113.0/24`.
+- Les secrets restent hors du dépôt.
 
-## Security
+## Sécurité
 
-A vulnerability is reported privately, never through a public pull request that
-would reveal it before a fix exists. See [SECURITY.md](SECURITY.md).
+Une faille se signale en privé, jamais par une pull request publique qui la
+révélerait avant qu'un correctif existe. Voir [SECURITY.md](SECURITY.md).

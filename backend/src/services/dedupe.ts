@@ -1,13 +1,13 @@
-// Device deduplication.
+// Déduplication des appareils.
 //
-// An IP must designate only one device. Duplicates appeared when a machine
-// changed its MAC address — USB-C adapter, wired/wireless switchover, random
-// MAC — because the lookup was done by MAC first and created a fresh record on
-// failure.
+// Une IP ne doit désigner qu'un seul appareil. Des doublons apparaissaient
+// quand une machine changeait d'adresse MAC — adaptateur USB-C, bascule
+// filaire/sans-fil, MAC aléatoire — parce que la recherche se faisait d'abord
+// par MAC et créait une fiche neuve en cas d'échec.
 //
-// This cleanup elects the most relevant record for each IP, pulls ports,
-// interfaces, history, CVEs and topology links into it, then deletes the
-// others. It runs at startup and can be re-triggered from the UI.
+// Ce nettoyage élit la fiche la plus pertinente pour chaque IP, y rapatrie
+// ports, interfaces, historique, CVE et liens de topologie, puis supprime les
+// autres. Il tourne au démarrage et peut être relancé depuis l'interface.
 
 import { prisma } from "../db";
 import { logEvent } from "./logger";
@@ -15,11 +15,11 @@ import { logEvent } from "./logger";
 const rank = (d: any) => {
   const status = d.status === "online" ? 0 : d.status === "suspect" ? 1 : d.status === "banned" ? 2 : 3;
   return [
-    d.isMainRouter ? 0 : 1,          // the main router always wins
-    status,                          // then whatever is alive
-    d.mac ? 0 : 1,                   // then whatever has a hardware address
-    d.customName ? 0 : 1,            // then whatever the user has named
-    -(new Date(d.lastSeen || 0).getTime()), // then the most recently seen
+    d.isMainRouter ? 0 : 1,          // le routeur principal l'emporte toujours
+    status,                          // puis ce qui est vivant
+    d.mac ? 0 : 1,                   // puis ce qui a une adresse matérielle
+    d.customName ? 0 : 1,            // puis ce que l'utilisateur a nommé
+    -(new Date(d.lastSeen || 0).getTime()), // puis le plus récemment vu
   ];
 };
 
@@ -46,8 +46,8 @@ export async function dedupeDevices(): Promise<{ groups: number; removed: number
     const losers = list.filter(d => d.id !== keeper.id);
 
     for (const loser of losers) {
-      // The MAC address is unique in the database: we free it before moving
-      // anything, otherwise the merge fails on the constraint.
+      // L'adresse MAC est unique en base : on la libère avant de déplacer quoi
+      // que ce soit, sinon la reprise échoue sur la contrainte.
       await prisma.device.update({ where: { id: loser.id }, data: { mac: null } }).catch(() => {});
 
       await prisma.port.updateMany({ where: { deviceId: loser.id }, data: { deviceId: keeper.id } }).catch(() => {});
@@ -57,13 +57,13 @@ export async function dedupeDevices(): Promise<{ groups: number; removed: number
       await prisma.topologyLink.updateMany({ where: { fromId: loser.id }, data: { fromId: keeper.id } }).catch(() => {});
       await prisma.topologyLink.updateMany({ where: { toId: loser.id }, data: { toId: keeper.id } }).catch(() => {});
 
-      // The duplicate's MAC becomes an additional interface of the kept
-      // record: we don't lose the information, we file it in the right place.
+      // La MAC du doublon devient une interface supplémentaire de la fiche
+      // conservée : on ne perd pas l'information, on la range au bon endroit.
       if (loser.mac && loser.mac !== keeper.mac) {
         await prisma.interface.create({
           data: {
             deviceId: keeper.id, mac: loser.mac, ip: loser.ip,
-            type: "ethernet", label: "duplicate merge",
+            type: "ethernet", label: "reprise doublon",
           },
         }).catch(() => {});
       }
@@ -81,7 +81,7 @@ export async function dedupeDevices(): Promise<{ groups: number; removed: number
   }
 
   if (removed) {
-    await logEvent("info", "dedupe", `${removed} duplicates merged across ${groups} addresses`);
+    await logEvent("info", "dedupe", `${removed} doublons fusionnés sur ${groups} adresses`);
   }
   return { groups, removed };
 }

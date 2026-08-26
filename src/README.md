@@ -1,64 +1,63 @@
-# Provided modules
+# Modules fournis
 
-These files are meant to be dropped into the project's tree. They do not
-constitute a standalone application.
+Ces fichiers sont à déposer dans l'arborescence du projet. Ils ne constituent
+pas une application autonome.
 
-| File | Destination | Role |
+| Fichier | Destination | Rôle |
 |---|---|---|
-| `password.ts` | `backend/src/services/` | Argon2id hashing, transparent bcrypt migration, constant-time comparison |
-| `detourage.ts` | `frontend/src/lib/` | Dependency-free image cutout, by diffusion from the edges |
-| `DevicePhoto.tsx` | `frontend/src/components/device/` | Importing and cutting out a device photo |
-| `WorldTrafficView.tsx` | `frontend/src/components/world/` | Orthographic globe and connection log |
-| `ticket.ts` | `backend/src/services/` | Building the structured ticket and its transports |
-| `alerte.ts` | `backend/src/services/` | Routing alerts to the channels, according to the format of each |
-| `extensions.ts` | `backend/src/services/` | Hook point for optional extensions |
+| `password.ts` | `backend/src/services/` | Hachage Argon2id, migration bcrypt transparente, comparaison en temps constant |
+| `detourage.ts` | `frontend/src/lib/` | Détourage d'image sans dépendance, par diffusion depuis les bords |
+| `DevicePhoto.tsx` | `frontend/src/components/device/` | Import et détourage d'une photo d'appareil |
+| `WorldTrafficView.tsx` | `frontend/src/components/world/` | Globe orthographique et journal des connexions |
+| `ticket.ts` | `backend/src/services/` | Construction du ticket structuré et transports |
+| `alerte.ts` | `backend/src/services/` | Aiguillage des alertes vers les canaux, selon le format de chacun |
+| `extensions.ts` | `backend/src/services/` | Point d'accroche pour les extensions facultatives |
 
-## Dependency to add
+## Dépendance à ajouter
 
-`password.ts` requires:
+`password.ts` requiert :
 
 ```bash
 npm install @node-rs/argon2
 ```
 
-This implementation provides precompiled binaries, unlike the `argon2` package,
-which requires a compilation toolchain in the Docker image.
+Cette implémentation fournit des binaires précompilés, contrairement au paquet
+`argon2` qui exige une chaîne de compilation dans l'image Docker.
 
-## Alerts
+## Alertes
 
-`ticket.ts` produces a normalized object rather than a sentence: severity,
-affected device, metrics, and grouping key are separate fields, which lets a
-ticketing system create the ticket without interpreting the text.
+`ticket.ts` produit un objet normalisé plutôt qu'une phrase : gravité, appareil
+concerné, métriques et clé de regroupement sont des champs séparés, ce qui
+permet à un système de billetterie de créer le ticket sans interpréter le texte.
 
-**The human-readable format is the default.** The structured format is only used
-if a ticketing system is connected: sending JSON to someone reading their mail
-would be a regression. Each channel has its own setting, and the bot always stays
-readable — nobody reads JSON on their phone.
+**Le format lisible est celui par défaut.** Le format structuré ne sert que si
+une billetterie est branchée : envoyer du JSON à quelqu'un qui ouvre son
+courrier serait une régression. Chaque canal a son propre réglage, et le bot
+reste toujours lisible — personne ne lit du JSON sur son téléphone.
 
-Ticketing is optional. Without it, alerts still go out through the other
-channels. If it responds, the ticket reference is cited in the messages meant for
-humans; if it fails, the other channels go out regardless.
+La billetterie est facultative. Sans elle, les alertes partent quand même par
+les autres canaux. Si elle répond, la référence du ticket est citée dans les
+messages destinés aux humains ; si elle échoue, les autres canaux partent
+malgré tout.
 
-Urgency is derived from a matrix crossing impact and scope. An unreachable
-gateway is blocking at the scale of the site, hence P1; a port opening on a
-machine concerns that machine, hence P4. Nothing is left to the sender's
-judgment, which prevents an automated system from declaring itself at maximum
-priority.
+L'urgence se déduit d'une matrice croisant l'impact et la portée. Une passerelle
+injoignable est bloquante à l'échelle du site, donc P1 ; un port qui s'ouvre sur
+une machine concerne cette machine, donc P4. Rien n'est laissé à l'appréciation
+de l'émetteur, ce qui évite qu'un automate se déclare en priorité maximale.
 
-The grouping key combines the nature of the event and its subject, with no
-timestamp: a recurring incident increments a counter instead of creating a
-hundred tickets.
+La clé de regroupement combine la nature de l'événement et son sujet, sans
+horodatage : un incident qui se répète incrémente un compteur au lieu de créer
+cent tickets.
 
-The name of the header carrying the key is configurable, and so is the
-destination address. The module therefore makes no assumption about the ticketing
-system in use.
+Le nom de l'en-tête portant la clé est configurable, l'adresse de destination
+aussi. Le module ne présume donc pas de la billetterie employée.
 
 ## Extensions
 
-`extensions.ts` loads whatever the `extensions/` folder at the root contains. An
-extension is recognized there by its mere presence: nothing to declare, nothing
-to recompile.
+`extensions.ts` charge ce que contient le dossier `extensions/` à la racine.
+Une extension y est reconnue par sa seule présence : rien à déclarer, rien à
+recompiler.
 
-This mechanism avoids maintaining two versions of the code for two uses. An
-installation that wants to graft in particular behavior drops in its module; the
-others have nothing to do, and the shared code stays identical.
+Ce mécanisme évite d'entretenir deux versions du code pour deux usages. Une
+installation qui veut greffer un comportement particulier dépose son module ;
+les autres n'ont rien à faire, et le code partagé reste identique.

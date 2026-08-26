@@ -1,19 +1,28 @@
-// CRUD for user-defined notification commands ("when X → do Y")
+// CRUD des commandes définies par l'utilisateur (« quand X → faire Y »).
+//
+// ── Correctif de sécurité ───────────────────────────────────────────────────
+// Ce routeur était monté **sans aucune authentification**. Tous les autres en
+// posent une ; celui-ci avait été oublié, et son voisin bot-commands avec lui.
+//
+// Ce n'était pas un détail de confort : l'action `exec_ssh` de ce catalogue
+// exécute une commande sur un équipement enregistré — le routeur, en root. La
+// chaîne tenait en trois requêtes non authentifiées : lire les commandes
+// existantes pour y trouver un identifiant d'équipement, en créer une nouvelle
+// portant la commande voulue, la déclencher.
+//
+// Deux niveaux, parce qu'ils ne coûtent rien et qu'ils disent la bonne chose :
+// lire demande une session, écrire et déclencher demandent d'être
+// administrateur. Un « viewer » n'a aucune raison de fabriquer une action qui
+// s'exécute sur la passerelle.
 import { Router } from "express";
 import { prisma } from "../db";
 import { TRIGGERS, ACTIONS, fireCommand } from "../services/commands";
 import { authRequired, requireRole } from "../middleware/auth";
 
 const router = Router();
-
-// These commands can trigger defense actions and SSH executions (the
-// "exec_ssh" action). Without authentication, anyone on the network could
-// therefore create a command, trigger it, and have anything executed on the
-// registered equipment. The whole router requires a valid token; creation and
-// modification are reserved for administrators.
 router.use(authRequired);
 
-// Catalog endpoints (used by the builder UI)
+// Catalogue, lu par l'écran de construction.
 router.get("/triggers", (_req, res) => res.json(TRIGGERS));
 router.get("/actions",  (_req, res) => res.json(ACTIONS));
 
@@ -61,8 +70,7 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
-// Manually fire a command (for testing) — uses the "manual" trigger.
-// Can execute destructive actions: reserved for administrators.
+// Déclenchement manuel, pour essai — passe par le déclencheur « manual ».
 router.post("/:id/fire", requireRole("admin"), async (req, res) => {
   try {
     const cmd = await prisma.notificationCommand.findUnique({ where: { id: req.params.id } });

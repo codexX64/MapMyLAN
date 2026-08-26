@@ -10,6 +10,29 @@ import { logEvent } from "./logger";
 import { fullScan } from "./scanner";
 import { banDevice, quarantineDevice, unbanDevice } from "./defense";
 import { executeOnDevice } from "./ssh";
+import { getConfig } from "./notifier";
+
+/**
+ * Les discussions autorisees pour une commande.
+ *
+ * -- Correctif de securite --------------------------------------------------
+ * L'ancienne regle s'ecrivait : « s'il y a une liste, la respecter ». Donc
+ * pas de liste, pas de controle -- et **tout le monde passait**. Un nom de bot
+ * Telegram se cherche ; quiconque le trouvait pouvait declencher n'importe
+ * quelle commande sans liste, exec_ssh comprise.
+ *
+ * La regle s'ecrit maintenant dans l'autre sens : on part ferme. Une liste
+ * vide ne veut plus dire « personne n'est refuse », elle veut dire « seule la
+ * discussion principale » -- celle enregistree dans la configuration du canal
+ * Telegram. Les commandes existantes continuent donc de repondre sans avoir a
+ * les rouvrir une par une, et personne d'autre n'entre.
+ */
+async function discussionsAutorisees(cmd: any): Promise<string[]> {
+  const liste = Array.isArray(cmd?.allowedChatIds) ? cmd.allowedChatIds.map(String) : [];
+  if (liste.length) return liste;
+  const c = await getConfig("telegram").catch(() => null);
+  return c?.chatId ? [String(c.chatId)] : [];
+}
 
 // ─── Catalog of bot actions ──────────────────────────────────────────────
 export const BOT_ACTIONS = [
@@ -218,8 +241,15 @@ export async function tryRunBotMessage(text: string, chatId: string): Promise<st
     if (no) { pendingConfirms.delete(chatId); return "Cancelled."; }
   }
 
-  // Built-in /help — list the user's custom commands too
+  // /help -- la liste des commandes est elle-meme un renseignement : elle dit
+  // ce que le bot sait faire sur le reseau. On ne la sert qu'a la discussion
+  // principale, comme le reste.
   if (/^\/(help|start)\b/i.test(trimmed)) {
+    const principale = await getConfig("telegram").catch(() => null);
+    if (!principale?.chatId || String(principale.chatId) !== String(chatId)) {
+      await logEvent("warn", "bot", `/help demande depuis une discussion inconnue : ${chatId}`);
+      return "\u{1F6AB} Not authorized.";
+    }
     const list = await prisma.botCommand.findMany({ where: { enabled: true } });
     let body = "<b>MapMyLAN bot</b>\n\nBuilt-in commands:\n/status /network /alerts /scan\n/ban &lt;ip&gt; /unban &lt;ip&gt; /quarantine &lt;ip&gt;\n/device &lt;ip&gt; /score &lt;ip&gt;\n";
     if (list.length) {
@@ -237,9 +267,9 @@ export async function tryRunBotMessage(text: string, chatId: string): Promise<st
   const cmd = await prisma.botCommand.findFirst({ where: { trigger: head, enabled: true } });
   if (!cmd) return null;
 
-  // Authorization
-  const allowed = (cmd.allowedChatIds && cmd.allowedChatIds.length > 0) ? cmd.allowedChatIds : null;
-  if (allowed && !allowed.map(String).includes(String(chatId))) {
+  // Autorisation -- fermee par defaut, voir discussionsAutorisees().
+  const allowed = await discussionsAutorisees(cmd);
+  if (!allowed.includes(String(chatId))) {
     await logEvent("warn", "bot", `Unauthorized ${cmd.trigger} from chat ${chatId}`);
     return "🚫 Not authorized.";
   }

@@ -27,11 +27,12 @@ export const config = {
 if (config.masterKey.length < 32) throw new Error("MASTER_KEY must be at least 32 characters");
 
 
-// ── Secret checks at startup ────────────────────────────────────────────────
+// ── Contrôle des secrets au démarrage ───────────────────────────────────────
 //
-// An empty or guessable JWT_SECRET lets anyone forge any token, and therefore
-// impersonate the administrator without ever knowing their password. The
-// service refuses to start rather than appearing to run while being wide open.
+// Un JWT_SECRET vide ou deviné permet de forger n'importe quel jeton, donc de
+// se faire passer pour l'administrateur sans connaître son mot de passe. Le
+// service refuse de démarrer plutôt que de fonctionner en apparence tout en
+// étant ouvert.
 const SECRETS_FAIBLES = new Set([
   "", "secret", "changeme", "change-me", "password", "mapmylan",
   "jwt-secret", "supersecret", "dev", "test", "votre-secret-ici",
@@ -43,22 +44,15 @@ export function verifierSecrets(): void {
   const master = String(process.env.MASTER_KEY || "");
 
   if (SECRETS_FAIBLES.has(jwt.toLowerCase()) || jwt.length < 32) {
-    manques.push("JWT_SECRET must be at least 32 characters and not a common value");
+    manques.push("JWT_SECRET doit faire au moins 32 caractères et ne pas être une valeur courante");
   }
-  if (!master || master.length < 16) {
-    manques.push("MASTER_KEY is missing or too short");
-  }
-  if (!process.env.POSTGRES_PASSWORD) {
-    manques.push("POSTGRES_PASSWORD is missing");
-  }
+  if (!master || master.length < 16) manques.push("MASTER_KEY est absente ou trop courte");
 
   if (manques.length) {
-    console.error("\n  Startup refused — the configuration is not secure:\n");
+    console.error("\n  Démarrage refusé — la configuration n'est pas sûre :\n");
     for (const m of manques) console.error("    · " + m);
-    console.error("\n  Generate them like this:\n");
-    console.error("    openssl rand -base64 48   → JWT_SECRET");
-    console.error("    openssl rand -base64 32   → MASTER_KEY");
-    console.error("    openssl rand -base64 24   → POSTGRES_PASSWORD\n");
+    console.error("\n    openssl rand -base64 48   → JWT_SECRET");
+    console.error("    openssl rand -base64 32   → MASTER_KEY\n");
     process.exit(1);
   }
 }
