@@ -79,16 +79,17 @@ jobs:
 
       # Et aucun identifiant d'installation, nulle part, tests compris.
       #
-      # Les motifs sont encodés. Un garde-fou qui épelle en clair les noms qu'il
-      # interdit les publie lui-même, dans un dépôt public, à chaque lecture :
-      # il devient la fuite qu'il est censé empêcher. Les décoder demande une
-      # commande, pas un secret — le but n'est pas de les cacher à un curieux
-      # déterminé, mais de ne pas les afficher au premier venu ni aux moteurs
-      # de recherche.
+      # La liste vit dans un secret du dépôt : rien dans l'arbre, rien dans
+      # l'historique, rien dans les diffs.
       - name: aucun identifiant d'installation
+        env:
+          MOTIFS: ${{ secrets.FORBIDDEN_PATTERNS }}
         run: |
-          motifs=$(printf '%s' 'REDACTED' | base64 -d)
-          if git ls-files | xargs grep -In -iE "$motifs"; then
+          if [ -z "$MOTIFS" ]; then
+            echo "::error::secret FORBIDDEN_PATTERNS absent"
+            exit 1
+          fi
+          if git ls-files | xargs grep -In -iE "$MOTIFS"; then
             echo "::error::identifiant d'installation trouvé"
             exit 1
           fi
