@@ -172,9 +172,14 @@ tbody tr:hover td{background:var(--well)}
 /* carte topologie */
 .plan{background:var(--surface);border-radius:14px;box-shadow:var(--lift);overflow:hidden}
 .planwrap{background:var(--well);background-image:radial-gradient(circle at 1px 1px,var(--hair) 1px,transparent 0);background-size:22px 22px;padding:6px}
-.plan svg.map{display:block;width:100%;height:auto}
+/* Le cadre s'allonge en arborescence, mais jamais au point de chasser la barre
+   d'outils hors de l'écran : au-delà, le dessin se réduit dans son cadre. */
+.plan svg.map{display:block;width:100%;height:auto;max-height:74vh}
 .wire{fill:none;stroke:var(--faint);stroke-width:1.3;opacity:.85}
 .wire.air{stroke-dasharray:2 5}
+/* Attache déduite de l'arborescence : plus pâle et pointillée, parce qu'elle
+   dit « il pend probablement de là », pas « ce câble existe ». */
+.wire.deduit{stroke-dasharray:5 6;opacity:.45}
 .tie{fill:none;stroke:var(--hair);stroke-width:1.2;stroke-dasharray:1 5}
 .tie-note{font-family:var(--mono);font-size:8px;letter-spacing:.1em;fill:var(--faint)}
 .unit .plate{fill:var(--surface);stroke:var(--hair);stroke-width:1}
@@ -469,6 +474,11 @@ tbody tr:hover td{background:var(--well)}
 .po:hover{background:var(--hair-soft);color:var(--ink)}
 .po.opa{cursor:default;gap:9px}
 .po.opa input{width:82px;accent-color:var(--accent)}
+/* Zoom au bouton : la molette ne permet pas de viser précisément, il faut un
+   pas rond sous la main. */
+.pomini{font:inherit;font-family:var(--mono);font-size:11px;color:var(--ink-soft);
+  background:transparent;border:none;border-radius:6px;padding:2px 7px;cursor:pointer;line-height:1.6}
+.pomini:hover{background:var(--hair-soft);color:var(--ink)}
 .posep{flex:1}
 .poinfo{font-family:var(--mono);font-size:11px;color:var(--faint)}
 
@@ -699,6 +709,64 @@ img.logo{display:block;width:auto;flex:none;image-rendering:auto}
 .adr-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
 .adr-actions .ghostbtn{flex:none;white-space:nowrap;font-size:11.5px}
 .aide-adr{margin-top:10px;font-size:11.5px;line-height:1.55;color:var(--muted)}
+
+/* Menu du compte, en haut à droite. */
+.menu-compte{position:relative}
+button.who{border:0;cursor:pointer;font-family:var(--sans)}
+.volet{position:absolute;right:0;top:40px;z-index:80;width:236px;background:var(--surface);
+  border:1px solid var(--hair);border-radius:12px;box-shadow:var(--lift-hi);overflow:hidden}
+.volet-tete{display:flex;align-items:center;gap:11px;padding:12px 13px;border-bottom:1px solid var(--hair-soft)}
+.volet-tete b{display:block;font-size:13px;font-weight:600}
+.volet-tete em{display:block;font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:1px}
+.volet-titre{padding:9px 13px 5px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.volet-ligne{display:flex;align-items:center;gap:10px;width:100%;padding:9px 13px;border:0;background:none;
+  text-align:left;font-family:var(--sans);font-size:12.5px;color:var(--ink);cursor:pointer}
+.volet-ligne:hover{background:var(--well)}
+.volet-ligne small{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:1px}
+.volet-ligne .pastille{width:24px;height:24px;border-radius:50%;background:var(--well);color:var(--muted);
+  display:grid;place-items:center;font-size:9.5px;font-weight:600;flex:none}
+.volet-ligne.actif .pastille{background:var(--ink);color:var(--paper)}
+.volet-ligne.quitter{border-top:1px solid var(--hair-soft);color:var(--alarm);margin-top:4px}
+.voile{position:fixed;inset:0;z-index:9600;background:rgba(12,14,18,.5);display:grid;place-items:center;padding:20px}
+/* `display:grid` bat le `display:none` de l'attribut hidden : sans cette ligne,
+   le voile « caché » couvre encore la page et avale tous les clics. */
+.voile[hidden],.volet[hidden]{display:none}
+.voile-carte{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--hair);
+  border-radius:16px;padding:22px;box-shadow:var(--lift-hi)}
+.bandeau-role{display:flex;align-items:center;gap:9px;margin:0 0 14px;padding:9px 13px;border-radius:10px;
+  background:var(--warn-wash);color:var(--warn);font-size:12.5px;line-height:1.5}
+.bascule{padding:8px 13px;border-radius:9px;font-size:12.5px;cursor:pointer;font-family:var(--sans);
+  border:1px solid var(--hair);background:transparent;color:var(--muted)}
+.bascule.on{border-color:var(--accent);background:var(--wash);color:var(--accent)}
+/* Les moyens inscrits, dans les réglages. */
+.moyens{display:flex;flex-direction:column;gap:9px}
+.moyen{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.moyen .ivig{width:28px;height:28px;border-radius:9px;flex:none}
+.moyen b{display:block;font-size:12.5px;font-weight:500}
+.moyen small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:1px}
+/* L'écran de connexion posé par-dessus la démo. */
+#cx-corps label{display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 5px}
+#cx-corps input{width:100%;padding:10px 12px;border:1px solid var(--hair);border-radius:9px;
+  background:var(--well);color:var(--ink);font-size:13px;outline:none;margin-bottom:13px}
+#cx-corps input:focus{border-color:var(--accent)}
+#cx-corps input.code{font-family:var(--mono);font-size:15px;letter-spacing:.16em;text-align:center}
+#cx-corps .principal{width:100%;padding:11px 14px;border-radius:10px;border:0;background:var(--ink);
+  color:var(--paper);font-size:13.5px;cursor:pointer;font-family:var(--sans)}
+#cx-corps .discret{width:100%;margin-top:11px;background:none;border:0;color:var(--muted);
+  font-size:12px;cursor:pointer;font-family:var(--sans)}
+#cx-corps .aide{color:var(--muted);font-size:12.5px;line-height:1.55;margin:0 0 15px}
+#cx-corps .onglets{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+#cx-corps .jalons{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:13px;font-family:var(--mono);font-size:10.5px}
+#cx-corps .jalon{padding:4px 9px;border-radius:999px;border:1px solid var(--hair);color:var(--faint)}
+#cx-corps .jalon.fait{background:var(--wash);color:var(--accent);border-color:transparent}
+#cx-corps .jalon.encours{color:var(--ink)}
+
+/* Silhouettes de la carte : un seul trait, la couleur vient de l'état du nœud. */
+.unit .art{color:var(--ink-soft)}
+.unit.core .art{color:var(--paper)}
+.unit.flag .art{color:var(--alarm)}
+.unit.ded .art{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -825,7 +893,36 @@ img.logo{display:block;width:auto;flex:none;image-rendering:auto}
         <button class="ghost" title="FR / EN" style="width:auto;padding:0 11px;font-family:var(--mono);font-size:11px">FR</button>
         <button class="ghost"><svg class="i" width="16" height="16"><use href="#ic-bell"/></svg></button>
         <button class="ghost" id="theme"><svg class="i" width="16" height="16"><use href="#ic-mode"/></svg></button>
-        <div class="who">EV</div>
+        <div class="menu-compte">
+          <button class="who" id="qui" title="Compte" aria-haspopup="true" aria-expanded="false">AD</button>
+          <div class="volet" id="volet-compte" hidden>
+            <div class="volet-tete">
+              <span class="who" id="volet-init">AD</span>
+              <div style="min-width:0">
+                <b id="volet-nom">admin</b>
+                <em id="volet-role">administrateur</em>
+              </div>
+            </div>
+            <div class="volet-titre">Changer de compte</div>
+            <div id="volet-comptes"></div>
+            <button class="volet-ligne quitter" id="deconnexion">Se déconnecter</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Déconnexion : la démo ne quitte pas la page, elle pose l'écran de
+         connexion par-dessus. C'est celui du produit, pas un résumé. -->
+    <div class="voile" id="voile-deco" hidden>
+      <div class="voile-carte">
+        <div style="display:flex;align-items:center;gap:11px;margin-bottom:18px">
+          <span class="tile"><svg class="i" width="17" height="17"><use href="#ic-shield"/></svg></span>
+          <div>
+            <b style="font-size:15px" id="cx-titre">MapMyLAN</b>
+            <div class="mono dim" style="font-size:11px;margin-top:2px" id="cx-sous">connexion à votre réseau</div>
+          </div>
+        </div>
+        <div id="cx-corps"></div>
       </div>
     </div>
 
@@ -891,9 +988,18 @@ img.logo{display:block;width:auto;flex:none;image-rendering:auto}
             <label class="po opa" id="z-opa-boite" style="display:none">Plan
               <input type="range" id="z-opa" min="10" max="100" value="55"></label>
             <button class="po" id="z-plan-off" style="display:none">Retirer le plan</button>
+            <span class="po" style="cursor:default">Agencement
+              <select id="z-agencement" style="background:transparent;border:none;color:var(--ink);font:inherit;cursor:pointer;outline:none">
+                <option value="libre">libre</option>
+                <option value="arbre">arborescence</option>
+              </select></span>
             <span class="posep"></span>
             <span class="poinfo" id="z-info">glisser pour déplacer · molette pour zoomer</span>
-            <span class="poinfo" id="zoomval">100 %</span>
+            <span class="po" style="cursor:default;gap:4px">
+              <button class="pomini" id="z-moins" title="Dézoomer">−</button>
+              <button class="pomini" id="z-cent" title="Revenir à 100 %" style="min-width:48px"><span id="zoomval">100 %</span></button>
+              <button class="pomini" id="z-plus" title="Zoomer">+</button>
+            </span>
             <button class="po" id="topo-reset">Réinitialiser</button>
           </div>
           <div class="planbar">
@@ -1153,25 +1259,32 @@ img.logo{display:block;width:auto;flex:none;image-rendering:auto}
 
         <div class="set">
           <header><span class="tile"><svg class="i" width="17" height="17"><use href="#ic-shield"/></svg></span>
-            <div><h2>Double authentification</h2><p>Trois moyens, au choix : clé d'accès, application d'authentification, salon de messagerie. Le second facteur est exigé pour réinitialiser le mot de passe.</p></div>
+            <div><h2>Double authentification</h2><p>Trois moyens : clé d'accès, application, salon de messagerie. Ce qui est inscrit ici décide de ce que la connexion demandera.</p></div>
             <span class="chip a" style="margin-left:auto">Active</span></header>
-          <div style="padding:0 18px 18px;display:flex;gap:18px;align-items:flex-start">
-            <div class="qr"><svg viewBox="0 0 25 25" width="104" height="104" shape-rendering="crispEdges" id="qr"></svg></div>
-            <div style="flex:1;font-size:12.5px;color:var(--muted);line-height:1.6">
-              Scannez ce code dans votre application d'authentification, ou saisissez la clé à la main.
-              <div style="background:var(--well);border-radius:8px;padding:9px 12px;font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);margin-top:10px;word-break:break-all">JBSWY3DPEHPK3PXP</div>
-              <div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;
-                          border-top:1px solid var(--hair-soft)">
-                <span class="ivig" style="width:26px;height:26px;border-radius:8px">
-                  <svg class="i" width="13" height="13"><use href="#ic-bot"/></svg></span>
-                <div style="flex:1;min-width:0">
-                  <div style="font-size:12.5px;color:var(--ink-soft)">Salon de messagerie</div>
-                  <div class="mono" style="font-size:10.5px;color:var(--faint);margin-top:1px">
-                    code envoyé au seul salon enregistré · valable 5 min · 5 essais</div>
-                </div>
-                <span class="chip a">configuré</span>
-              </div>
+          <div style="padding:0 18px 18px">
+            <div class="moyens" id="moyens-a2f"></div>
+            <p class="lede" style="margin:13px 0 0;max-width:none;font-size:12px">
+              La connexion en demandera <b>une seule</b>, la plus solide. La réinitialisation les
+              demandera <b>toutes</b> : elle n'a pas de mot de passe à opposer, c'est lui qu'elle
+              remplace. Déconnecte-toi pour voir la différence.
+            </p>
+          </div>
+        </div>
+
+        <div class="set">
+          <header><span class="tile"><svg class="i" width="17" height="17"><use href="#ic-mail"/></svg></span>
+            <div><h2>Adresse du compte</h2><p>Celle qui <b>reçoit</b> le lien de réinitialisation. Sans elle, ce compte ne peut pas réinitialiser son mot de passe.</p></div></header>
+          <div style="padding:0 18px 18px">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <input id="adr-compte" class="mono" value="admin@exemple.local"
+                style="flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--hair);border-radius:9px;
+                       background:var(--well);color:var(--ink);font-size:12.5px;outline:none">
+              <button class="btn" id="adr-vider">Retirer l'adresse</button>
             </div>
+            <p class="lede" style="margin:11px 0 0;max-width:none;font-size:12px">
+              À ne pas confondre avec l'adresse d'envoi, ci-dessous : celle-là <b>envoie</b>. Les
+              confondre enverrait les liens de tous les comptes dans la même boîte.
+            </p>
           </div>
         </div>
 
@@ -1890,7 +2003,11 @@ document.querySelectorAll(".toggle").forEach(t => t.addEventListener("click", ()
 
 // QR décoratif, motif stable
 (() => {
+  // Le QR des réglages a laissé place à la liste des moyens inscrits. On sort
+  // proprement au lieu de lever : une exception ici arrêtait tout le script de
+  // la page, et l'assistant ne se fermait plus.
   const svg = document.getElementById("qr");
+  if (!svg) return;
   let h = 7;
   const rnd = () => { h = (h*1103515245 + 12345) & 0x7fffffff; return h / 0x7fffffff; };
   let d = "";
@@ -1932,6 +2049,57 @@ const PHOTOS = {};
  * appareils : il occupait trois fois la place nécessaire. Une vignette carrée
  * porte la photo ou le picto, et le texte se pose dessous, centré.
  */
+// ══ Silhouettes d'appareils ════════════════════════════════════════════════
+// Recopiées de components/ui/DeviceArt.tsx — c'est le même jeu que le produit.
+// Un picto dit la catégorie ; sur une carte, c'est la SILHOUETTE du matériel
+// qu'on reconnaît d'un coup d'œil, avant même de lire le nom.
+const FAMILLE = {
+  router: "routeur", gateway: "routeur", firewall: "routeur",
+  switch: "commutateur",
+  ap: "borne", accesspoint: "borne",
+  server: "serveur", nas: "serveur", docker: "serveur", vm: "serveur",
+  pi: "carte", raspberry: "carte",
+  computer: "ordinateur", laptop: "ordinateur", desktop: "ordinateur", pc: "ordinateur",
+  phone: "mobile", tablet: "mobile",
+  printer: "imprimante",
+  camera: "camera",
+  iot: "objet", plug: "objet",
+  tv: "ecran", console: "ecran",
+  unknown: "inconnu",
+
+  // Les noms de pictos de `lib/icons` sont acceptés aussi. Les deux
+  // vocabulaires circulent dans l'application — un appareil porte un type, un
+  // composant d'affichage reçoit parfois déjà le picto résolu — et une
+  // silhouette manquante se voit tout de suite sur la carte : tout retombait
+  // sur le boîtier en pointillé.
+  chip: "ordinateur", air: "borne", cam: "camera",
+  eye: "ecran", shield: "routeur",
+};
+
+const SILHOUETTES = {
+  routeur: '<rect x="7" y="15" width="50" height="17" rx="3.5"/> <rect x="12.5" y="20" width="13" height="7" rx="1.5"/> <circle cx="42" cy="23.5" r="1.3"/> <circle cx="47" cy="23.5" r="1.3"/> <circle cx="52" cy="23.5" r="1.3"/>',
+  commutateur: '<rect x="4" y="16" width="56" height="16" rx="2.5"/> <circle cx="9" cy="24" r="1.2"/> <rect x="15.0" y="19" width="3.8" height="3.2" rx="0.6"/><rect x="20.4" y="19" width="3.8" height="3.2" rx="0.6"/><rect x="25.8" y="19" width="3.8" height="3.2" rx="0.6"/><rect x="31.200000000000003" y="19" width="3.8" height="3.2" rx="0.6"/><rect x="36.6" y="19" width="3.8" height="3.2" rx="0.6"/><rect x="42.0" y="19" width="3.8" height="3.2" rx="0.6"/><rect x="47.400000000000006" y="19" width="3.8" height="3.2" rx="0.6"/><rect x="52.800000000000004" y="19" width="3.8" height="3.2" rx="0.6"/> <rect x="15.0" y="25.8" width="3.8" height="3.2" rx="0.6"/><rect x="20.4" y="25.8" width="3.8" height="3.2" rx="0.6"/><rect x="25.8" y="25.8" width="3.8" height="3.2" rx="0.6"/><rect x="31.200000000000003" y="25.8" width="3.8" height="3.2" rx="0.6"/><rect x="36.6" y="25.8" width="3.8" height="3.2" rx="0.6"/><rect x="42.0" y="25.8" width="3.8" height="3.2" rx="0.6"/><rect x="47.400000000000006" y="25.8" width="3.8" height="3.2" rx="0.6"/><rect x="52.800000000000004" y="25.8" width="3.8" height="3.2" rx="0.6"/>',
+  borne: '<ellipse cx="32" cy="20" rx="17" ry="5.5"/> <path d="M15 20v5a17 5.5 0 0 0 34 0v-5"/> <ellipse cx="32" cy="20" rx="6" ry="2"/>',
+  serveur: '<rect x="8" y="11" width="48" height="22" rx="2.5"/> <rect x="12" y="14.5" width="13" height="4.2" rx="1"/> <rect x="12" y="20.4" width="13" height="4.2" rx="1"/> <rect x="12" y="26.3" width="13" height="4.2" rx="1"/> <path d="M31 15.5h20M31 19.5h20M31 23.5h20M31 27.5h20"/> <circle cx="51.5" cy="31" r="1.1"/>',
+  carte: '<rect x="10" y="12" width="44" height="21" rx="2"/> <rect x="14.0" y="15" width="1.4" height="3" rx="0.4"/><rect x="16.6" y="15" width="1.4" height="3" rx="0.4"/><rect x="19.2" y="15" width="1.4" height="3" rx="0.4"/><rect x="21.8" y="15" width="1.4" height="3" rx="0.4"/><rect x="24.4" y="15" width="1.4" height="3" rx="0.4"/><rect x="27.0" y="15" width="1.4" height="3" rx="0.4"/><rect x="29.6" y="15" width="1.4" height="3" rx="0.4"/><rect x="32.2" y="15" width="1.4" height="3" rx="0.4"/><rect x="34.8" y="15" width="1.4" height="3" rx="0.4"/><rect x="37.400000000000006" y="15" width="1.4" height="3" rx="0.4"/> <rect x="16" y="22" width="10" height="7.5" rx="1"/> <rect x="44" y="20" width="10" height="5" rx="1"/> <rect x="44" y="27" width="10" height="4" rx="1"/>',
+  ordinateur: '<rect x="14" y="10" width="36" height="22" rx="2"/> <path d="M8 33.5h48l-3.5-4.5H11.5z"/> <path d="M27 31h10"/>',
+  mobile: '<rect x="23" y="7" width="18" height="28" rx="3.5"/> <path d="M29.5 11h5"/> <path d="M23 30.5h18"/>',
+  imprimante: '<path d="M21 16V8h22v8"/> <rect x="9" y="16" width="46" height="12" rx="2.5"/> <path d="M21 28v6h22v-6"/> <path d="M25 31h14"/> <circle cx="49" cy="22" r="1.2"/>',
+  camera: '<rect x="12" y="13" width="30" height="14" rx="7"/> <path d="M42 15.5a4.5 4.5 0 0 1 0 9z"/> <circle cx="38" cy="20" r="3.6"/> <circle cx="38" cy="20" r="1.4"/> <path d="M24 27v4M17 34h14"/>',
+  objet: '<rect x="18" y="9" width="28" height="26" rx="7"/> <circle cx="32" cy="15.5" r="1.6"/> <rect x="26.5" y="20" width="2.6" height="8" rx="1.3"/> <rect x="34.9" y="20" width="2.6" height="8" rx="1.3"/>',
+  ecran: '<rect x="9" y="9" width="46" height="19" rx="2"/> <path d="M32 28v4M24 34h16"/>',
+  inconnu: '<rect x="13" y="12" width="38" height="21" rx="4" stroke-dasharray="3 2.6"/> <path d="M29 20.5a3.2 3.2 0 1 1 3.6 3.1v1.8"/> <circle cx="32.6" cy="28.6" r="0.9"/>'
+};
+
+function silhouette(type, largeur){
+  var f = FAMILLE[String(type || "").toLowerCase()] || "inconnu";
+  var h = largeur * 40 / 64;
+  return '<svg class="art" viewBox="0 0 64 40" x="' + (-largeur / 2) + '" y="' + (-h / 2) +
+    '" width="' + largeur + '" height="' + h + '" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" overflow="visible">' +
+    (SILHOUETTES[f] || SILHOUETTES.inconnu) + '</svg>';
+}
+
 function noeud(cx, cy, kd, nm, ip, gl, cls){
   var T = 74, r = T/2;
   var photo = PHOTOS[nm];
@@ -1940,13 +2108,7 @@ function noeud(cx, cy, kd, nm, ip, gl, cls){
       '" width="' + (T-10) + '" height="' + (T-10) + '" rx="14"/></clipPath>' +
       '<image href="' + photo + '" x="' + (-r+5) + '" y="' + (-r+5) + '" width="' + (T-10) +
       '" height="' + (T-10) + '" preserveAspectRatio="xMidYMid slice" clip-path="url(#cp' + noeud.n + ')"/>'
-    : (function(){
-        var c = GLC[gl] || [10.5, 7];
-        // Le picto est agrandi d'un tiers : dans une vignette de 74, un dessin
-        // de 21 paraissait perdu.
-        return '<g class="gl" transform="scale(1.35) translate(' +
-               (-c[0]).toFixed(2) + ' ' + (-c[1]).toFixed(2) + ')">' + (GL[gl] || "") + '</g>';
-      })();
+    : silhouette(gl, 54);
 
   return '<g class="unit ' + (cls||"") + '" transform="translate(' + cx + ' ' + cy + ')">' +
     '<rect class="plate" x="' + (-r) + '" y="' + (-r) + '" width="' + T + '" height="' + T + '" rx="19"/>' +
@@ -1968,13 +2130,13 @@ const NOEUDS = [
   { id:"gw",   x:490, y: 55, kd:"PASSERELLE",          nm:"passerelle",              ip:"192.0.2.1",      gl:"router", cls:"core" },
   { id:"sw",   x:150, y:215, kd:"COMMUTATEUR DÉDUIT",  nm:"commutateur",         ip:"192.0.2.3",      gl:"switch", cls:"ded"  },
   { id:"dock", x:375, y:215, kd:"DOCKER · PORT 5",     nm:"Serveur Docker",      ip:"192.0.2.10",     gl:"server", cls:""     },
-  { id:"inf",  x:605, y:215, kd:"INFÉRENCE · PORT 6",  nm:"Serveur d'inférence", ip:"192.0.2.30",     gl:"chip",   cls:""     },
+  { id:"inf",  x:605, y:215, kd:"INFÉRENCE · PORT 6",  nm:"Serveur d'inférence", ip:"192.0.2.30",     gl:"server", cls:""     },
   { id:"ap",   x:830, y:215, kd:"BORNE · PORT 2",      nm:"Borne sans fil",      ip:"192.0.2.2",      gl:"air",    cls:""     },
   { id:"pc",   x:105, y:368, kd:"POSTE",               nm:"Poste de travail",    ip:"198.51.100.131", gl:"chip",   cls:""     },
-  { id:"unk",  x:300, y:368, kd:"INCONNU · PORT 7",    nm:"unknown-c8f2",        ip:"198.51.100.47",  gl:"chip",   cls:"flag" },
-  { id:"mob",  x:495, y:368, kd:"MOBILE · WIFI",       nm:"Mobile",              ip:"198.51.100.204", gl:"chip",   cls:""     },
+  { id:"unk",  x:300, y:368, kd:"INCONNU · PORT 7",    nm:"unknown-c8f2",        ip:"198.51.100.47",  gl:"unknown",cls:"flag" },
+  { id:"mob",  x:495, y:368, kd:"MOBILE · WIFI",       nm:"Mobile",              ip:"198.51.100.204", gl:"phone",  cls:""     },
   { id:"iot",  x:690, y:368, kd:"IOT · WIFI",          nm:"prise-connectee",     ip:"203.0.113.23",  gl:"plug",   cls:"flag" },
-  { id:"pi",   x:885, y:368, kd:"PI · WIFI",           nm:"nano-serveur",        ip:"198.51.100.77",  gl:"server", cls:""     },
+  { id:"pi",   x:885, y:368, kd:"PI · WIFI",           nm:"nano-serveur",        ip:"198.51.100.77",  gl:"pi",     cls:""     },
 ];
 const LIENS = [
   { a:"gw", b:"sw",  t:"wire", note:"3 MAC · PORT 3" },
@@ -1982,6 +2144,133 @@ const LIENS = [
   { a:"sw", b:"pc",  t:"wire" }, { a:"sw", b:"unk", t:"wire" },
   { a:"ap", b:"mob", t:"air"  }, { a:"ap", b:"iot", t:"air"  }, { a:"ap", b:"pi", t:"air" },
 ];
+// ═══ Agencement en arborescence ═════════════════════════════════════
+//
+// La disposition libre ci-dessus range par nature : passerelle en haut,
+// équipements en dessous, machines ensuite. Celle-ci range par dépendance —
+// qu'est-ce qui pend de quoi — et se lit comme un schéma de baie : la
+// passerelle à gauche, et à chaque colonne vers la droite ce qui s'y branche.
+//
+// Mêmes règles que `frontend/src/lib/topologie-arbre.ts`, aux écartements
+// près : la maquette dessine dans 980 × 462, l'application dans 2400 × 1600.
+
+const A_COLONNE = 278, A_LIGNE = 134, A_DEPART = 92, A_AXE = 231;
+// L'arborescence est haute quand la libre est large : sept rangées d'appareils
+// dans un cadre trois fois plus large que haut se réduiraient à des vignettes
+// illisibles. Le cadre de dessin s'allonge donc avec l'agencement.
+const A_HAUTEUR = { libre: 462, arbre: 620 };
+const A_INFRA = ["router", "switch", "air", "firewall"];
+let AGENCEMENT = "libre";
+let ARBRE = null;
+
+function rangArbre(n){
+  if (n.cls === "core") return 0;
+  var i = A_INFRA.indexOf(n.gl);
+  return i < 0 ? 5 : i + 1;
+}
+function octet(ip){ var p = String(ip || "").split("."); return Number(p[3]) || 0; }
+
+function disposerArbre(){
+  var ordonner = function(a, b){ return rangArbre(a) - rangArbre(b) || octet(a.ip) - octet(b.ip); };
+  var infra = NOEUDS.filter(function(n){ return rangArbre(n) < 5; }).sort(ordonner);
+  var racine = (infra[0] || NOEUDS[0]).id;
+
+  // Les liaisons relevées, parcourues en largeur : le parcours donne un arbre
+  // même quand les liaisons forment une boucle.
+  var voisins = {};
+  LIENS.forEach(function(l){
+    (voisins[l.a] = voisins[l.a] || []).push(l.b);
+    (voisins[l.b] = voisins[l.b] || []).push(l.a);
+  });
+  var enfants = {}, peres = {}, vus = {}, file = [racine];
+  vus[racine] = 1;
+  while (file.length){
+    var id = file.shift();
+    (voisins[id] || []).filter(function(v){ return !vus[v]; })
+      .map(noeudPar).sort(ordonner).forEach(function(n){
+        if (vus[n.id]) return;
+        vus[n.id] = 1; peres[n.id] = id;
+        (enfants[id] = enfants[id] || []).push(n.id);
+        file.push(n.id);
+      });
+  }
+  // Ce que les liaisons n'ont pas dit : l'ossature se chaîne, le reste rejoint
+  // la RACINE — surtout pas le dernier équipement de la colonne. Rangée par
+  // nature, elle se termine par la borne : tout appareil sans liaison connue
+  // s'y retrouvait accroché, ce qui est faux et se voit tout de suite.
+  var dernier = racine;
+  infra.forEach(function(n){
+    if (!vus[n.id]){ vus[n.id] = 1; peres[n.id] = dernier; (enfants[dernier] = enfants[dernier] || []).push(n.id); }
+    dernier = n.id;
+  });
+  NOEUDS.forEach(function(n){
+    if (vus[n.id]) return;
+    vus[n.id] = 1; peres[n.id] = racine; (enfants[racine] = enfants[racine] || []).push(n.id);
+  });
+
+  // Une colonne par génération, une ligne par feuille, chaque père centré en
+  // face de ses fils : deux sous-arbres ne peuvent pas se marcher dessus.
+  var prof = {}, y = {}, ligne = 0;
+  prof[racine] = 0;
+  var poser = function(id){
+    var fils = enfants[id] || [];
+    (fils).forEach(function(f){ prof[f] = prof[id] + 1; });
+    if (!fils.length){ y[id] = ligne * A_LIGNE; ligne += 1; return y[id]; }
+    var b = fils.map(poser);
+    y[id] = (b[0] + b[b.length - 1]) / 2;
+    return y[id];
+  };
+  poser(racine);
+
+  var decalage = A_AXE - y[racine], pos = {};
+  NOEUDS.forEach(function(n){
+    if (y[n.id] === undefined) return;
+    pos[n.id] = { x: A_DEPART + prof[n.id] * A_COLONNE, y: y[n.id] + decalage };
+  });
+  // Le tronc vertical qui porte une fratrie. Un fils unique aligné sur son
+  // père n'en a pas besoin : la liaison est alors une simple horizontale.
+  var troncs = {};
+  Object.keys(enfants).forEach(function(idp){
+    var ys = enfants[idp].map(function(f){ return pos[f] && pos[f].y; }).filter(function(v){ return v != null; });
+    if (ys.length < 2 || !pos[idp]) return;
+    var mn = Math.min.apply(null, ys), mx = Math.max.apply(null, ys);
+    if (mn !== mx) troncs[idp] = { x: pos[idp].x + A_COLONNE / 2, y1: mn, y2: mx };
+  });
+  return { positions: pos, troncs: troncs, peres: peres };
+}
+
+/** Où se dessine un nœud, selon l'agencement en cours. */
+function pointDe(n){
+  if (AGENCEMENT === "arbre" && ARBRE && ARBRE.positions[n.id]) return ARBRE.positions[n.id];
+  return { x: n.x, y: n.y };
+}
+
+/** Liaison en coude : l'œil suit une horizontale puis une verticale, au lieu
+ *  de démêler douze diagonales. */
+function coudeArbre(a, b, mx){
+  var g = a.x <= b.x ? a : b, d = a.x <= b.x ? b : a;
+  var x1 = g.x + 37, x2 = d.x - 37;
+  var m = mx == null ? (x1 + x2) / 2 : mx;
+  if (Math.abs(g.y - d.y) < 0.5) return "M" + x1 + " " + g.y + "H" + x2;
+  return "M" + x1 + " " + g.y + "H" + m + "V" + d.y + "H" + x2;
+}
+
+/** Cadre la vue sur l'ensemble du dessin. Les deux agencements n'occupent pas
+ *  la même emprise : sans recadrage, on bascule et on tombe sur un coin vide. */
+function cadrerTopo(){
+  var pts = NOEUDS.map(pointDe);
+  if (!pts.length) return;
+  // Un nœud déborde vers le bas : sous sa plaque viennent le genre, le nom et
+  // l'adresse. La marge basse est donc plus grande, sinon le dernier appareil
+  // de la colonne perd son adresse hors du cadre.
+  var H = A_HAUTEUR[AGENCEMENT] || 462;
+  var xs = pts.map(function(p){ return p.x; }), ys = pts.map(function(p){ return p.y; });
+  var x1 = Math.min.apply(null, xs) - 62, x2 = Math.max.apply(null, xs) + 62;
+  var y1 = Math.min.apply(null, ys) - 52, y2 = Math.max.apply(null, ys) + 96;
+  var k = Math.min(1, 980 / (x2 - x1), H / (y2 - y1));
+  vue = { k: k, tx: 980 / 2 - k * (x1 + x2) / 2, ty: H / 2 - k * (y1 + y2) / 2 };
+}
+
 // Les zones décrivent des lieux — un garage, un bureau, une baie — pas des
 // catégories techniques. Elles se créent, se nomment, se redimensionnent, et
 // emportent les appareils qu'elles contiennent quand on les déplace.
@@ -2018,12 +2307,18 @@ function courbe(a, b){
 function dessineTopo(){
   var el = document.getElementById("topo");
   if (!el) return;
+  ARBRE = AGENCEMENT === "arbre" ? disposerArbre() : null;
+  var HAUT = A_HAUTEUR[AGENCEMENT] || 462;
+  el.setAttribute("viewBox", "0 0 980 " + HAUT);
   var fond = PLAN.image
-    ? '<image href="' + PLAN.image + '" x="0" y="0" width="980" height="462" ' +
+    ? '<image href="' + PLAN.image + '" x="0" y="0" width="980" height="' + HAUT + '" ' +
       'preserveAspectRatio="xMidYMid meet" opacity="' + PLAN.opacite + '"/>'
     : "";
 
-  var zones = ZONES_CARTE.map(function(z){
+  // Une zone décrit un lieu — un bureau, une baie. En arborescence, les
+  // appareils ne sont plus placés là où ils se trouvent mais selon ce qui les
+  // porte : un cadre « Bureau » n'y voudrait plus rien dire.
+  var zones = (AGENCEMENT === "arbre" ? [] : ZONES_CARTE).map(function(z){
     var sel = zoneChoisie === z.id ? " sel" : "";
     return '<g class="zone' + sel + '" data-zone="' + z.id + '">' +
       '<rect class="zbg" x="' + z.x + '" y="' + z.y + '" width="' + z.w + '" height="' + z.h + '" rx="16"/>' +
@@ -2038,25 +2333,72 @@ function dessineTopo(){
   }).join("");
 
   var liens = LIENS.map(function(l){
-    var a = noeudPar(l.a), b = noeudPar(l.b);
-    if (!a || !b) return "";
-    var d = courbe(a, b);
+    var na = noeudPar(l.a), nb = noeudPar(l.b);
+    if (!na || !nb) return "";
+    var a = pointDe(na), b = pointDe(nb), d, nx, ny;
+    if (ARBRE){
+      // Le coude tombe sur le tronc du PÈRE des deux bouts : c'est ce qui fait
+      // que les liaisons d'un même équipement se superposent au lieu de se
+      // croiser.
+      var pere = ARBRE.peres[l.b] === l.a ? l.a : (ARBRE.peres[l.a] === l.b ? l.b : null);
+      var tr = pere && ARBRE.troncs[pere];
+      d = coudeArbre(a, b, tr ? tr.x : null);
+      nx = tr ? tr.x : (a.x + b.x) / 2; ny = (a.y + b.y) / 2 - 8;
+    } else {
+      d = courbe(na, nb);
+      nx = (a.x + b.x) / 2; ny = (a.y + b.y) / 2 + 4;
+    }
     var note = l.note
-      ? '<text class="tie-note" x="' + ((a.x + b.x) / 2) + '" y="' + ((a.y + b.y) / 2 + 4) +
-        '" text-anchor="middle">' + l.note + '</text>' : "";
+      ? '<text class="tie-note" x="' + nx + '" y="' + ny + '" text-anchor="middle">' + l.note + '</text>' : "";
     return '<path class="wire' + (l.t === "air" ? " air" : "") + '" d="' + d + '"/>' + note;
   }).join("");
 
+  // En arborescence, un appareil que rien ne relie a quand même sa place :
+  // le pointillé pâle dit que l'attache est déduite, pas relevée.
+  var attaches = !ARBRE ? "" : Object.keys(ARBRE.peres).map(function(id){
+    var idp = ARBRE.peres[id];
+    var connue = LIENS.some(function(l){
+      return (l.a === id && l.b === idp) || (l.b === id && l.a === idp);
+    });
+    if (connue) return "";
+    var a = ARBRE.positions[idp], b = ARBRE.positions[id];
+    if (!a || !b) return "";
+    var tr = ARBRE.troncs[idp];
+    return '<path class="wire deduit" d="' + coudeArbre(a, b, tr ? tr.x : null) + '"/>';
+  }).join("");
+
   var noeuds = NOEUDS.map(function(n){
-    return '<g data-n="' + n.id + '">' + noeud(n.x, n.y, n.kd, n.nm, n.ip, n.gl, n.cls) + '</g>';
+    var p = pointDe(n);
+    return '<g data-n="' + n.id + '">' + noeud(p.x, p.y, n.kd, n.nm, n.ip, n.gl, n.cls) + '</g>';
   }).join("");
 
   el.innerHTML = '<g id="camera" transform="translate(' + vue.tx + ' ' + vue.ty + ') scale(' + vue.k + ')">' +
-                 fond + zones + liens + noeuds + '</g>' +
-                 '<rect class="zdepot" id="zdepot" x="6" y="6" width="968" height="450" rx="16"/>';
+                 fond + zones + attaches + liens + noeuds + '</g>' +
+                 '<rect class="zdepot" id="zdepot" x="6" y="6" width="968" height="' + (HAUT - 12) + '" rx="16"/>';
   brancheTopo(el);
   var z = document.getElementById("zoomval");
   if (z) z.textContent = Math.round(vue.k * 100) + " %";
+}
+
+/** Amène le zoom à `k` en gardant immobile le point du dessin situé sous le
+ *  curseur. Sans cette correction, zoomer déplace ce qu'on vise. */
+function zoomerVersPoint(el, ev, k){
+  var avant = versDessin(el, ev);
+  vue.k = k;
+  var apres = versDessin(el, ev);
+  vue.tx += (apres.x - avant.x) * vue.k;
+  vue.ty += (apres.y - avant.y) * vue.k;
+  dessineTopo();
+}
+
+/** Zoom au bouton : par pas ronds, au centre de la vue. Il faut un moyen
+ *  d'être précis sans la souris — c'est celui-là. */
+function zoomerAuBouton(k){
+  var el = document.getElementById("topo");
+  if (!el) return;
+  var r = el.getBoundingClientRect();
+  zoomerVersPoint(el, { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 },
+                  Math.max(0.4, Math.min(3, k)));
 }
 
 /** Convertit un point écran en coordonnées du dessin. */
@@ -2073,6 +2415,16 @@ function brancheTopo(el){
   // Déplacement d'un appareil : les liens suivent, puisqu'ils sont recalculés
   // à partir des positions.
   el.querySelectorAll("[data-n]").forEach(function(g){
+    // En arborescence, les places sont calculées : on ne déplace pas un nœud
+    // pour le voir revenir au relevé suivant. Le clic ouvre la fiche.
+    if (AGENCEMENT === "arbre"){
+      g.style.cursor = "pointer";
+      g.addEventListener("click", function(){
+        var n = noeudPar(g.dataset.n);
+        if (n && typeof ficheAppareil === "function") ficheAppareil(n.nm);
+      });
+      return;
+    }
     g.style.cursor = "grab";
     g.addEventListener("mousedown", function(ev){
       ev.stopPropagation();
@@ -2215,15 +2567,19 @@ function chargerPlan(f){
 
   // Zoom centré sur le pointeur : on garde sous le curseur le point qui s'y
   // trouvait avant, sinon la vue dérive à chaque cran de molette.
+  // Le pas de zoom suit l'AMPLEUR du geste, pas le simple fait qu'un événement
+  // soit arrivé. Un pas fixe paraît correct avec une molette crantée, mais un
+  // pavé tactile en émet des dizaines par geste : on traversait toute la plage
+  // d'un coup et viser un appareil devenait impossible. Chaque événement est
+  // aussi borné, quoi que rapporte le navigateur.
   el.addEventListener("wheel", function(ev){
     ev.preventDefault();
-    var avant = versDessin(el, ev);
-    var k = vue.k * (ev.deltaY < 0 ? 1.12 : 1 / 1.12);
-    vue.k = Math.max(0.4, Math.min(3, k));
-    var apres = versDessin(el, ev);
-    vue.tx += (apres.x - avant.x) * vue.k;
-    vue.ty += (apres.y - avant.y) * vue.k;
-    dessineTopo();
+    var unite = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1;
+    var px = Math.max(-60, Math.min(60, ev.deltaY * unite));
+    // Le pincement d'un pavé tactile arrive ici avec ctrlKey, en valeurs bien
+    // plus petites : il lui faut sa propre sensibilité.
+    var k = vue.k * Math.exp(-px * (ev.ctrlKey ? 0.010 : 0.002));
+    zoomerVersPoint(el, ev, Math.max(0.4, Math.min(3, k)));
   }, { passive:false });
 
   // Nouvelle zone : posée au centre de la vue courante, pour qu'elle
@@ -2279,6 +2635,26 @@ function chargerPlan(f){
     if (f) chargerPlan(f);
   });
 
+  var bm = document.getElementById("z-moins");
+  if (bm) bm.onclick = function(){ zoomerAuBouton(vue.k / 1.25); };
+  var bp = document.getElementById("z-plus");
+  if (bp) bp.onclick = function(){ zoomerAuBouton(vue.k * 1.25); };
+  var bc = document.getElementById("z-cent");
+  if (bc) bc.onclick = function(){ zoomerAuBouton(1); };
+
+  var ag = document.getElementById("z-agencement");
+  if (ag) ag.onchange = function(){
+    AGENCEMENT = ag.value === "arbre" ? "arbre" : "libre";
+    var inf = document.getElementById("z-info");
+    if (inf) inf.textContent = AGENCEMENT === "arbre"
+      ? "places calculées · molette pour zoomer"
+      : "glisser pour déplacer · molette pour zoomer";
+    // On recadre : les deux agencements n'occupent pas la même emprise.
+    if (AGENCEMENT === "arbre"){ ARBRE = disposerArbre(); cadrerTopo(); }
+    else vue = { tx:0, ty:0, k:1 };
+    dessineTopo();
+  };
+
   var rz = document.getElementById("topo-reset");
   if (rz) rz.onclick = function(){
     vue = { tx:0, ty:0, k:1 };
@@ -2287,6 +2663,10 @@ function chargerPlan(f){
     ZONE_INIT.forEach(function(o){ ZONES_CARTE.push(Object.assign({}, o)); });
     compteurZone = ZONE_INIT.length;
     zoneChoisie = null;
+    AGENCEMENT = "libre";
+    if (ag) ag.value = "libre";
+    var inf2 = document.getElementById("z-info");
+    if (inf2) inf2.textContent = "glisser pour déplacer · molette pour zoomer";
     dessineTopo();
   };
 })();
@@ -2483,6 +2863,325 @@ function dessine(){
 const elFlux=document.getElementById("flux");
 const statsSvc=new Map(), statsDev=new Map();
 let nBloq=0, compteur=0;
+
+// ══ Ce que le compte a inscrit ═════════════════════════════════════════════
+// Réglé dans les Réglages, exigé à la connexion et à la réinitialisation —
+// exactement comme dans le produit. Il n'y a pas d'écran à part pour ça, et il
+// ne faut pas en inventer un : une démo qui montre une page qui n'existe pas
+// ment sur le produit.
+const A2F = { moyens: new Set(["trousseau", "application"]), adresse: "admin@exemple.local" };
+const NOM_MOYEN = {
+  trousseau: "Clé d'accès",
+  application: "Application d'authentification",
+  telegram: "Salon de messagerie",
+};
+const COURT_MOYEN = { trousseau: "clé d'accès", application: "application", telegram: "Telegram" };
+// L'ordre suit la solidité : une clé ne se recopie ni ne s'intercepte, le code
+// d'application vit hors ligne, celui de Telegram traverse un service tiers.
+const ORDRE_MOYENS = ["trousseau", "application", "telegram"];
+const moyensInscrits = () => ORDRE_MOYENS.filter((m) => A2F.moyens.has(m));
+
+(() => {
+  const hote = document.getElementById("moyens-a2f");
+  if (!hote) return;
+  const DETAIL = {
+    trousseau: ["ic-shield", "Touch ID, Face ID, trousseau du système ou clé USB"],
+    application: ["ic-clock", "code à six chiffres, hors ligne sur l'appareil"],
+    telegram: ["ic-bot", "code envoyé au seul salon enregistré · 5 min · 5 essais"],
+  };
+  function rendre() {
+    hote.innerHTML = "";
+    for (const m of ORDRE_MOYENS) {
+      const pose = A2F.moyens.has(m);
+      const d = document.createElement("div");
+      d.className = "moyen";
+      d.innerHTML =
+        '<span class="ivig"><svg class="i" width="13" height="13"><use href="#' + DETAIL[m][0] + '"/></svg></span>' +
+        '<div style="flex:1;min-width:0"><b>' + NOM_MOYEN[m] + "</b><small>" + DETAIL[m][1] + "</small></div>" +
+        '<button class="btn">' + (pose ? "Retirer" : "Inscrire") + "</button>";
+      d.querySelector("button").onclick = () => {
+        if (pose) A2F.moyens.delete(m); else A2F.moyens.add(m);
+        rendre();
+      };
+      hote.appendChild(d);
+    }
+  }
+  rendre();
+  const champ = document.getElementById("adr-compte");
+  champ.addEventListener("input", () => { A2F.adresse = champ.value.trim(); });
+  document.getElementById("adr-vider").onclick = () => { champ.value = ""; A2F.adresse = ""; };
+})();
+
+// ══ Connexion et réinitialisation ══════════════════════════════════════════
+// Le vrai enchaînement du produit :
+//   connexion        identifiant → mot de passe → UNE preuve
+//   réinitialisation identifiant → lien par courrier → TOUTES les preuves
+//                    → nouveau mot de passe
+function ouvrirConnexion(surEntree) {
+  const voile = document.getElementById("voile-deco");
+  const corps = document.getElementById("cx-corps");
+  const titre = document.getElementById("cx-titre");
+  const sous = document.getElementById("cx-sous");
+  let restants = [], faits = [], nom = "admin";
+
+  const esc = (t) => String(t).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+  const ecran = (html, apres) => { corps.innerHTML = html; if (apres) apres(); };
+
+  const jalons = () => (restants.length + faits.length < 2 ? "" :
+    '<div class="jalons">' +
+      faits.map((m) => '<span class="jalon fait">✓ ' + COURT_MOYEN[m] + "</span>").join("") +
+      restants.map((m, i) => '<span class="jalon' + (i ? "" : " encours") + '">' + COURT_MOYEN[m] + "</span>").join("") +
+    "</div>");
+
+  // ── identifiant + mot de passe ─────────────────────────────────────────
+  function identifiants() {
+    titre.textContent = "MapMyLAN";
+    sous.textContent = "connexion à votre réseau";
+    ecran(
+      "<label>Identifiant</label><input id=\"cx-u\" value=\"" + esc(nom) + "\">" +
+      "<label>Mot de passe</label><input id=\"cx-p\" type=\"password\" value=\"ievoohei\">" +
+      '<button class="principal" id="cx-go">Se connecter</button>' +
+      '<button class="discret" id="cx-oubli">Mot de passe oublié ?</button>',
+      () => {
+        document.getElementById("cx-go").onclick = () => {
+          nom = document.getElementById("cx-u").value.trim() || "admin";
+          const l = moyensInscrits();
+          // Aucun moyen inscrit : on entre, et l'inscription s'impose.
+          if (!l.length) return inscription();
+          // UNE preuve, la plus solide inscrite.
+          restants = [l[0]]; faits = [];
+          preuve("connexion");
+        };
+        document.getElementById("cx-oubli").onclick = demandeLien;
+      });
+  }
+
+  // ── la preuve ──────────────────────────────────────────────────────────
+  function preuve(but) {
+    const m = restants[0];
+    titre.textContent = but === "connexion" ? "Second facteur" : "Réinitialisation";
+    sous.textContent = but === "connexion"
+      ? "mot de passe accepté"
+      : "preuve " + (faits.length + 1) + " sur " + (faits.length + restants.length);
+
+    // À la connexion, on peut choisir un autre moyen. À la réinitialisation,
+    // non : ils sont tous demandés, l'un après l'autre.
+    const autres = but === "connexion" ? moyensInscrits().filter((x) => x !== m) : [];
+    const onglets = autres.length
+      ? '<div class="onglets">' + [m].concat(autres).map((x) =>
+          '<button class="bascule' + (x === m ? " on" : "") + '" data-cx="' + x + '">' +
+          COURT_MOYEN[x] + "</button>").join("") + "</div>"
+      : "";
+
+    const bloc = m === "trousseau"
+      ? '<p class="aide">Touch ID, Face ID, trousseau du système ou clé USB. Rien à recopier.</p>' +
+        '<button class="principal" id="cx-ok">Utiliser ma clé d\'accès</button>'
+      : m === "application"
+        ? "<label>Code de l'application</label><input class=\"code\" id=\"cx-c\" placeholder=\"000000\">" +
+          '<button class="principal" id="cx-ok">Valider</button>'
+        : '<p class="aide">Un code à six chiffres part dans le salon enregistré.</p>' +
+          '<label>Code reçu</label><input class="code" id="cx-c" placeholder="000000">' +
+          '<button class="principal" id="cx-ok">Valider</button>';
+
+    ecran(jalons() + onglets + bloc +
+      '<button class="discret" id="cx-retour">Reprendre depuis le début</button>',
+      () => {
+        corps.querySelectorAll("[data-cx]").forEach((b) => {
+          b.onclick = () => { restants = [b.dataset.cx]; preuve(but); };
+        });
+        document.getElementById("cx-ok").onclick = () => {
+          faits.push(restants.shift());
+          if (restants.length) return preuve(but);
+          if (but === "connexion") return entrer();
+          nouveauMotDePasse();
+        };
+        document.getElementById("cx-retour").onclick = identifiants;
+      });
+  }
+
+  // ── inscription imposée ────────────────────────────────────────────────
+  function inscription() {
+    titre.textContent = "Un second facteur, avant d'entrer";
+    sous.textContent = "obligatoire · une seule fois";
+    ecran(
+      '<p class="aide">Ce compte peut couper un appareil et exécuter des commandes sur ton ' +
+      "équipement réseau. Un mot de passe seul ne suffit pas à le garder.</p>" +
+      '<div class="onglets">' +
+        '<button class="bascule on" data-ins="trousseau">Clé d\'accès</button>' +
+        '<button class="bascule" data-ins="application">Application</button>' +
+      "</div>" +
+      '<p class="aide" id="cx-ins-aide">Elle ne fonctionne que sur ce domaine — inutilisable ' +
+      "sur un site qui t'imiterait.</p>" +
+      '<button class="principal" id="cx-ok">Enregistrer</button>',
+      () => {
+        let choix = "trousseau";
+        corps.querySelectorAll("[data-ins]").forEach((b) => {
+          b.onclick = () => {
+            choix = b.dataset.ins;
+            corps.querySelectorAll("[data-ins]").forEach((x) => x.classList.toggle("on", x === b));
+            document.getElementById("cx-ins-aide").textContent = choix === "trousseau"
+              ? "Elle ne fonctionne que sur ce domaine — inutilisable sur un site qui t'imiterait."
+              : "Une clé d'accès exige du HTTPS. Sur une installation jointe en clair, l'application prend le relais.";
+          };
+        });
+        document.getElementById("cx-ok").onclick = () => { A2F.moyens.add(choix); entrer(); };
+      });
+  }
+
+  // ── réinitialisation : le courrier d'abord ─────────────────────────────
+  function demandeLien() {
+    titre.textContent = "Réinitialiser le mot de passe";
+    sous.textContent = "étape 1 sur 3";
+    ecran(
+      '<p class="aide">Un lien part à l\'adresse rattachée au compte. En l\'ouvrant, chaque moyen ' +
+      "inscrit sera demandé — puis le nouveau mot de passe.</p>" +
+      "<label>Identifiant du compte</label><input id=\"cx-u\" value=\"" + esc(nom) + "\">" +
+      '<button class="principal" id="cx-ok">Envoyer le lien</button>' +
+      '<button class="discret" id="cx-retour">Annuler</button>',
+      () => {
+        document.getElementById("cx-ok").onclick = () => {
+          const l = moyensInscrits();
+          const possible = !!A2F.adresse && l.length > 0;
+          // Réponse identique dans tous les cas : rien à déduire du compte.
+          // Le motif réel n'est écrit ici que parce que c'est une démonstration.
+          ecran(
+            '<p class="aide"><b style="color:var(--ink)">Regarde ta boîte mail.</b><br>' +
+            "Si ce compte existe et qu'une adresse lui est rattachée, un lien vient d'y partir. " +
+            "Il vaut quinze minutes et ne fonctionne qu'une fois.</p>" +
+            (possible
+              ? '<button class="principal" id="cx-ok">J\'ai reçu le lien — l\'ouvrir</button>'
+              : '<p class="aide" style="color:var(--alarm)">Ici, ' + (!A2F.adresse
+                  ? "aucune adresse n'est rattachée au compte : rien n'est parti. Pas d'adresse, pas de réinitialisation."
+                  : "aucun moyen n'est inscrit : le lien seul ne prouverait rien, il n'est pas envoyé.") + "</p>") +
+            '<button class="discret" id="cx-retour">Retour à la connexion</button>',
+            () => {
+              const ok = document.getElementById("cx-ok");
+              if (ok) ok.onclick = () => {
+                // TOUTES les preuves : sans mot de passe à opposer, elles sont
+                // la seule chose qui protège encore le compte.
+                restants = moyensInscrits(); faits = [];
+                preuve("reinit");
+              };
+              document.getElementById("cx-retour").onclick = identifiants;
+            });
+        };
+        document.getElementById("cx-retour").onclick = identifiants;
+      });
+  }
+
+  function nouveauMotDePasse() {
+    titre.textContent = "Réinitialiser le mot de passe";
+    sous.textContent = "étape 3 sur 3";
+    ecran(
+      "<label>Nouveau mot de passe</label><input type=\"password\" placeholder=\"au moins 8 caractères\">" +
+      "<label>Confirmation</label><input type=\"password\">" +
+      '<button class="principal" id="cx-ok">Enregistrer</button>',
+      () => { document.getElementById("cx-ok").onclick = entrer; });
+  }
+
+  function entrer() {
+    voile.hidden = true;
+    if (surEntree) surEntree(nom);
+  }
+
+  identifiants();
+  voile.hidden = false;
+}
+
+// ══ Le compte, en haut à droite ════════════════════════════════════════════
+// Trois comptes fictifs, trois rôles. Changer de compte n'est pas décoratif :
+// le rôle décide de ce qui est permis, comme `requireRole` côté serveur. Un
+// lecteur voit tout et ne déclenche rien — c'est ce que la démo montre, plutôt
+// que d'afficher des boutons qui promettraient une action refusée.
+(() => {
+  const COMPTES = [
+    { id: "admin", nom: "admin", role: "administrateur", desc: "tous les droits" },
+    { id: "operateur", nom: "operateur", role: "opérateur", desc: "agit, ne configure pas" },
+    { id: "lecteur", nom: "lecteur", role: "lecteur", desc: "lecture seule" },
+  ];
+  const initiales = (nom) => {
+    const p = String(nom).split(/[\s._-]+/).filter(Boolean);
+    return (p.length > 1 ? p[0][0] + p[1][0] : String(nom).slice(0, 2)).toUpperCase();
+  };
+
+  let courant = COMPTES[0];
+  const qui = document.getElementById("qui");
+  const volet = document.getElementById("volet-compte");
+  if (!qui) return;
+
+  function ligneCompte(c, actif, surClic) {
+    const b = document.createElement("button");
+    b.className = "volet-ligne" + (actif ? " actif" : "");
+    b.innerHTML = '<span class="pastille">' + initiales(c.nom) + "</span>" +
+      '<span style="min-width:0">' + c.nom + "<small>" + c.role + " · " + c.desc + "</small></span>";
+    b.onclick = surClic;
+    return b;
+  }
+
+  function rendre() {
+    qui.textContent = initiales(courant.nom);
+    document.getElementById("volet-init").textContent = initiales(courant.nom);
+    document.getElementById("volet-nom").textContent = courant.nom;
+    document.getElementById("volet-role").textContent = courant.role;
+    const l = document.getElementById("volet-comptes");
+    l.innerHTML = "";
+    for (const c of COMPTES)
+      l.appendChild(ligneCompte(c, c.id === courant.id, () => { courant = c; fermer(); rendre(); }));
+    appliquerRole();
+  }
+
+  // Ce que le rôle change réellement. Rien n'est caché : ce qui est refusé le
+  // dit, plutôt que de disparaître — on ne cherche pas un bouton qui n'existe
+  // plus, on comprend pourquoi il ne répond pas.
+  function appliquerRole() {
+    const lecture = courant.id === "lecteur";
+    document.querySelectorAll(".btn.solid").forEach((b) => {
+      b.disabled = lecture;
+      b.style.opacity = lecture ? ".45" : "";
+      b.style.cursor = lecture ? "not-allowed" : "";
+      b.title = lecture ? "Refusé : ce compte est en lecture seule." : "";
+    });
+    const sshQui = document.getElementById("ssh-qui");
+    if (sshQui) sshQui.textContent = courant.nom;
+    const champ = document.getElementById("cmd");
+    if (champ) {
+      champ.disabled = lecture;
+      champ.placeholder = lecture
+        ? "lecture seule — aucune commande ne part"
+        : "ip neigh · clear pour effacer l'écran";
+    }
+    document.querySelectorAll(".bandeau-role").forEach((e) => e.remove());
+    if (!lecture) return;
+    document.querySelectorAll(".page").forEach((pg) => {
+      const t = pg.querySelector(".headrow");
+      if (!t) return;
+      const d = document.createElement("div");
+      d.className = "bandeau-role";
+      d.innerHTML = '<svg class="i" width="14" height="14"><use href="#ic-shield"/></svg>' +
+        "<span>Compte en <b>lecture seule</b>. Tout reste visible ; rien ne se déclenche.</span>";
+      t.insertAdjacentElement("afterend", d);
+    });
+  }
+
+  const ouvrir = () => { volet.hidden = false; qui.setAttribute("aria-expanded", "true"); };
+  const fermer = () => { volet.hidden = true; qui.setAttribute("aria-expanded", "false"); };
+  qui.onclick = (e) => { e.stopPropagation(); volet.hidden ? ouvrir() : fermer(); };
+  document.addEventListener("click", (e) => {
+    if (!volet.hidden && !volet.contains(e.target) && e.target !== qui) fermer();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") fermer(); });
+
+  document.getElementById("deconnexion").onclick = () => {
+    fermer();
+    ouvrirConnexion((nom) => {
+      const trouve = COMPTES.find((c) => c.nom === nom);
+      courant = trouve || COMPTES[0];
+      rendre();
+    });
+  };
+
+  rendre();
+})();
 
 // ══ Segments relevés sur la passerelle ═════════════════════════════════════
 // Le sous-réseau vient du champ ip_subnet de l'équipement : c'est l'adresse de

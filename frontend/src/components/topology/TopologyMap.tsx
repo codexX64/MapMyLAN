@@ -15,14 +15,26 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../../stores/app";
 import { api } from "../../api/client";
 import { Theme } from "../../lib/themes";
-import { DeviceIcon } from "../ui/DeviceIcon";
+import { DeviceArt } from "../ui/DeviceArt";
+import { disposerEnArbre, coude } from "../../lib/topologie-arbre";
 import { CiscoIcon } from "../ui/CiscoIcon";
 
-interface Props { theme: Theme; }
+interface Props {
+  theme: Theme;
+  /**
+   * Agencement imposé par la page. Quand il est fourni, la carte n'affiche
+   * plus son propre sélecteur : le choix vit là où la page l'a placé, à côté
+   * des onglets de vue. Sans lui, la carte reste autonome.
+   */
+  agencement?: "libre" | "arbre";
+  onAgencement?: (m: "libre" | "arbre") => void;
+}
 
 interface Pos { x: number; y: number }
 
-const W = 2400, H = 1600;
+// Largeur du plan de travail. La HAUTEUR, elle, n'est pas fixe : voir plus bas.
+const W = 2400;
+const H_DEFAUT = 1600;
 
 // Le plan de travail fait 2400 unités de large, la maquette 980 : sans
 // agrandissement, une plaque de 74 unités et son libellé de 11,5 seraient
@@ -77,14 +89,14 @@ const LINK_STYLES: Record<string, { color: (t: any) => string; dash: string; wid
   sibling:  { color: t => t.border || t.faint, dash: "1 5",     width: 1.1, animate: false },
 };
 
-export function TopologyMap({ theme: t }: Props) {
+export function TopologyMap({ theme: t, agencement, onAgencement }: Props) {
   const { devices, topology, refreshTopology } = useStore();
   const select = (id: string | null) => useStore.getState().selectDevice(id);
 
   const useCisco = false;
 
   // ── State ──
-  const [positions, setPositions] = useState<Record<string, Pos>>({});
+  const [libres, setLibres] = useState<Record<string, Pos>>({});
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [linkType, setLinkType] = useState("ethernet");
@@ -102,8 +114,81 @@ export function TopologyMap({ theme: t }: Props) {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; deviceId?: string } | null>(null);
   const [mousePos, setMousePos] = useState<Pos>({ x: 0, y: 0 });
+  // ── Agencement ──
+  //
+  // « Libre » est l'agencement d'origine : chaque appareil garde la position
+  // que l'utilisateur lui a donnée, enregistrée sur sa fiche (posX / posY).
+  // « Arborescence » ne range plus par nature mais par dépendance — qu'est-ce
+  // qui pend de quoi — et se recalcule à chaque relevé.
+  //
+  // Le mode reste dans ce navigateur, comme le plan de fond : c'est une
+  // préférence d'affichage, pas une donnée du parc. Et surtout, passer en
+  // arborescence n'écrase JAMAIS les positions enregistrées : elles restent
+  // dans `libres` et reviennent intactes au retour.
+  const [modeLocal, setModeLocal] = useState<"libre" | "arbre">(() => {
+    try { return localStorage.getItem("mapmylan_agencement") === "arbre" ? "arbre" : "libre"; }
+    catch { return "libre"; }
+  });
+  const mode = agencement ?? modeLocal;
+  const changerMode = (m: "libre" | "arbre") => {
+    if (onAgencement) { onAgencement(m); return; }
+    setModeLocal(m);
+    try { localStorage.setItem("mapmylan_agencement", m); } catch { /* rien à faire */ }
+  };
+
+  const arbre = useMemo(
+    () => (mode === "arbre"
+      ? disposerEnArbre(
+          // Ce que le contrôleur a mesuré vit dans les métadonnées du relevé :
+          // l'amont déclaré par l'équipement, le commutateur qui porte
+          // l'appareil, la borne, et le média. Les sortir ici permet à la
+          // disposition de dessiner la hiérarchie RÉELLE — celle que
+          // l'interface du constructeur affiche — sans dépendre de la dernière
+          // reconstruction des liaisons.
+          devices.map((d: any) => ({
+            ...d,
+            uplinkMac: d?.metadata?.uplinkMac,
+            swMac: d?.metadata?.swMac,
+            apMac: d?.metadata?.apMac,
+            medium: d?.metadata?.medium,
+          })),
+          topology.links as any,
+        )
+      : null),
+    [mode, devices, topology.links],
+  );
+  const positions = arbre ? arbre.positions : libres;
+
   const svgRef = useRef<SVGSVGElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Hauteur du plan de travail ──────────────────────────────────────────
+  //
+  // Elle suit la forme du cadre où la carte est affichée, au lieu d'être figée
+  // à 1600. Un plan de 2400 × 1600 dans un cadre deux fois plus large que haut
+  // se retrouve encadré de bandes vides à gauche et à droite : `meet` réduit
+  // tout jusqu'à faire tenir la hauteur, et la moitié de la largeur disponible
+  // ne sert à rien. C'est ce qui rendait la carte minuscule.
+  //
+  // On garde la largeur de référence et on déduit la hauteur du rapport du
+  // cadre : plus de bandes vides, donc le même dessin occupe tout l'espace.
+  const [H, setH] = useState(H_DEFAUT);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const mesurer = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width < 40 || r.height < 40) return;
+      // Bornée : un cadre très plat ne doit pas écraser le plan au point que
+      // les positions enregistrées sortent toutes du cadre.
+      const h = Math.round((W * r.height) / r.width);
+      setH(Math.max(900, Math.min(2400, h)));
+    };
+    mesurer();
+    const ro = new ResizeObserver(mesurer);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const fichierRef = useRef<HTMLInputElement | null>(null);
 
   // Plan d'architecte posé sous la topologie. Il n'a pas de contrepartie
@@ -125,14 +210,33 @@ export function TopologyMap({ theme: t }: Props) {
   const ajusterVue = () => {
     const pts = Object.values(positions);
     if (!pts.length) { setZoom(1); setPan({ x: 0, y: 0 }); return; }
-    const marge = 130 * ECHELLE_NOEUD;
+    // Marges. Elles étaient de 130 unités de nœud partout — 286 unités du plan
+    // de chaque côté, près d'un tiers de la hauteur d'un petit parc gaspillé.
+    //
+    // Elles ne sont pas non plus symétriques : un nœud déborde de 81 vers le
+    // haut (la plaque) mais de 180 vers le bas (genre, nom, adresse). Une marge
+    // égale des deux côtés coupait donc les libellés de la dernière rangée.
+    const margeX = 170, margeHaut = 100, margeBas = 245;
     const xs = pts.map(q => q.x), ys = pts.map(q => q.y);
-    const minX = Math.min(...xs) - marge, maxX = Math.max(...xs) + marge;
-    const minY = Math.min(...ys) - marge, maxY = Math.max(...ys) + marge;
-    const k = Math.max(0.25, Math.min(2.6, Math.min(W / (maxX - minX), H / (maxY - minY))));
+    const minX = Math.min(...xs) - margeX, maxX = Math.max(...xs) + margeX;
+    const minY = Math.min(...ys) - margeHaut, maxY = Math.max(...ys) + margeBas;
+    // La barre d'outils est posée PAR-DESSUS le dessin : la place qu'elle
+    // occupe n'est pas utilisable. Sans en tenir compte, la première rangée
+    // d'appareils se cadre derrière elle — c'est ce qui coupait le nœud du
+    // haut. On la mesure plutôt que de la deviner : elle passe sur deux lignes
+    // quand la fenêtre est étroite.
+    const cadre = containerRef.current?.getBoundingClientRect();
+    const barre = containerRef.current?.querySelector(".planoutils") as HTMLElement | null;
+    const partBarre = cadre && barre && cadre.height > 0
+      ? Math.min(0.35, barre.offsetHeight / cadre.height)
+      : 0;
+    const hUtile = H * (1 - partBarre);
+
+    const k = Math.max(0.25, Math.min(2.6, Math.min(W / (maxX - minX), hUtile / (maxY - minY))));
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
     setZoom(k);
-    setPan({ x: k * (W / 2 - cx), y: k * (H / 2 - cy) });
+    // Centré dans ce qui reste sous la barre, d'où le décalage vers le bas.
+    setPan({ x: k * (W / 2 - cx), y: k * (H / 2 - cy) + (H * partBarre) / 2 });
   };
 
   // Cadrage automatique à la première ouverture : on ne montre pas un coin
@@ -145,6 +249,14 @@ export function TopologyMap({ theme: t }: Props) {
     dejaCadre.current = true;
     ajusterVue();
   }, [positions]);
+
+  // Les deux agencements n'occupent pas la même emprise : sans recadrage, on
+  // bascule en arborescence et on se retrouve devant un coin vide.
+  const premierRendu = useRef(true);
+  useEffect(() => {
+    if (premierRendu.current) { premierRendu.current = false; return; }
+    ajusterVue();
+  }, [mode]);
 
   const chargerPlan = (f?: File | null) => {
     if (!f) return;
@@ -164,7 +276,7 @@ export function TopologyMap({ theme: t }: Props) {
 
   // ── Initialize positions from devices' saved posX/posY, fallback to layered layout ──
   useEffect(() => {
-    setPositions((cur) => {
+    setLibres((cur) => {
       const next = { ...cur };
       // Étage d'un appareil.
       //
@@ -197,9 +309,10 @@ export function TopologyMap({ theme: t }: Props) {
       // On range chaque étage par dernier octet, pour que les appareils d'une
       // même machine (même N, faces filaire et wifi) se retrouvent voisins.
       const lastOctet = (ip: string) => { const p = (ip || "").split("."); return +p[3] || 0; };
-      // Les étages sont espacés d'une hauteur de nœud entière : plaque,
-      // genre, nom et adresse compris, sinon deux rangées se chevauchent.
-      const layerY = [150, 430, 710, 990, 1270, 1520];
+      // Les étages sont espacés d'une hauteur de nœud entière : plaque, genre,
+      // nom et adresse compris, sinon deux rangées se chevauchent. Un nœud est
+      // dessiné à 2,2× : il occupe près de 260 en hauteur, d'où le pas de 290.
+      const layerY = [140, 430, 720, 1010, 1300, 1590];
       for (const lvl of Object.keys(layers)) {
         const items = layers[+lvl].sort((a, b) => lastOctet(a.ip) - lastOctet(b.ip));
         items.forEach((d, i) => {
@@ -248,7 +361,9 @@ export function TopologyMap({ theme: t }: Props) {
       setDraggingId(null);
       return;
     }
-    if (e.button !== 0) return;
+    // En arborescence, les places sont calculées : on ne déplace pas un nœud
+    // pour le voir revenir au relevé suivant. Le clic ouvre la fiche.
+    if (e.button !== 0 || mode === "arbre") return;
     setDraggingId(id);
     setDragMoved(false);
     setLinkingFrom(null);
@@ -267,8 +382,8 @@ export function TopologyMap({ theme: t }: Props) {
   const onMouseMove = (e: React.MouseEvent) => {
     const p = screenToSvg(e.clientX, e.clientY);
     setMousePos(p);
-    if (draggingId) {
-      setPositions(prev => ({ ...prev, [draggingId]: p }));
+    if (draggingId && mode === "libre") {
+      setLibres(prev => ({ ...prev, [draggingId]: p }));
       setDragMoved(true);
       return;
     }
@@ -319,7 +434,7 @@ export function TopologyMap({ theme: t }: Props) {
   };
 
   const onMouseUp = async (e?: React.MouseEvent) => {
-    if (draggingId) {
+    if (draggingId && mode === "libre") {
       const p = positions[draggingId];
       if (p) api.updateDevice(draggingId, { posX: p.x, posY: p.y }).catch(() => {});
     }
@@ -421,41 +536,66 @@ export function TopologyMap({ theme: t }: Props) {
   };
 
   // ── Pan + zoom ──
-  const onWheel = (e: WheelEvent) => {
-    e.preventDefault();
-    const factor = e.deltaY > 0 ? 0.92 : 1.08;
+  //
+  // Le pas de zoom suit l'AMPLEUR du geste, pas le simple fait qu'un événement
+  // soit arrivé. C'est le point important : un pas fixe de 8 % paraît correct
+  // avec une molette crantée, mais un pavé tactile ou une souris à molette
+  // libre émettent des dizaines d'événements par geste — 27 suffisaient à
+  // passer de 25 % à 200 %, et viser un appareil devenait impossible.
+  //
+  // On borne aussi chaque événement : une secousse ne peut plus traverser
+  // toute la plage d'un coup, quel que soit ce que rapporte le navigateur.
+  const ZOOM_MIN = 0.25, ZOOM_MAX = 2;
+
+  /** Ce que vaut un événement de roulette, en pixels, tous navigateurs
+   *  confondus : Safari compte en pixels, Firefox en lignes, certains en pages. */
+  const pixelsRoulette = (e: WheelEvent): number => {
+    const unite = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    return Math.max(-60, Math.min(60, e.deltaY * unite));
+  };
+
+  /**
+   * Amène le zoom à `cible` en gardant immobile le point du plan situé sous
+   * (clientX, clientY). Sans cette correction, zoomer déplace ce qu'on vise.
+   */
+  const zoomerVers = (cible: number, clientX: number, clientY: number) => {
+    const k = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cible));
+    if (Math.abs(k - zoom) < 0.0005) return;
     const svg = svgRef.current;
     const g = worldGroupRef.current;
-    if (!svg || !g) {
-      setZoom(z => Math.max(0.25, Math.min(2, z * factor)));
-      return;
-    }
-    // Step 1: world coordinate currently under the cursor (this is what we want
-    // to keep stationary across the zoom change).
-    const worldBefore = screenToSvg(e.clientX, e.clientY);
+    if (!svg || !g) { setZoom(k); return; }
 
-    // Step 2: figure out the new zoom value (clamped).
-    const newZoom = Math.max(0.25, Math.min(2, zoom * factor));
-    if (newZoom === zoom) return;
-
-    // Step 3: at the new zoom, what's the SVG-viewBox point that the cursor
-    // would map to without changing the pan? We can compute it directly:
-    //   svgPoint = screenToSvgViewBox(cursor)   (independent of our pan/zoom)
-    //   worldAfter = (svgPoint - pan) / newZoom - centeringOffset(newZoom)
-    // We want worldAfter == worldBefore, so we solve for the new pan.
-    const svgPt = svg.createSVGPoint();
-    svgPt.x = e.clientX; svgPt.y = e.clientY;
-    const svgCTM = svg.getScreenCTM(); if (!svgCTM) return;
-    const inViewBox = svgPt.matrixTransform(svgCTM.inverse()); // raw viewBox coords
-    const centerOffset = (W - W * newZoom) / (2 * newZoom);
-    // newPan such that:  inViewBox.x = newPan.x + newZoom * (worldBefore.x + centerOffsetX)
-    //                  → newPan.x = inViewBox.x - newZoom * (worldBefore.x + centerOffset)
-    const centerOffsetY = (H - H * newZoom) / (2 * newZoom);
+    // Le point du plan actuellement sous le curseur : c'est lui qui ne doit
+    // pas bouger.
+    const avant = screenToSvg(clientX, clientY);
+    const pt = svg.createSVGPoint();
+    pt.x = clientX; pt.y = clientY;
+    const ctm = svg.getScreenCTM(); if (!ctm) return;
+    const dansCadre = pt.matrixTransform(ctm.inverse());
+    // dansCadre = pan + k · (point + recentrage(k)) — on résout en pan.
+    const recentrageX = (W - W * k) / (2 * k);
+    const recentrageY = (H - H * k) / (2 * k);
     setPan({
-      x: inViewBox.x - newZoom * (worldBefore.x + centerOffset),
-      y: inViewBox.y - newZoom * (worldBefore.y + centerOffsetY),
+      x: dansCadre.x - k * (avant.x + recentrageX),
+      y: dansCadre.y - k * (avant.y + recentrageY),
     });
-    setZoom(newZoom);
+    setZoom(k);
+  };
+
+  const onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    // Le pincement d'un pavé tactile arrive en événement de roulette avec
+    // ctrlKey : ses valeurs sont bien plus petites, il lui faut sa sensibilité.
+    const sensibilite = e.ctrlKey ? 0.010 : 0.002;
+    zoomerVers(zoom * Math.exp(-pixelsRoulette(e) * sensibilite), e.clientX, e.clientY);
+  };
+
+  /** Zoom au bouton : par pas ronds, centré sur le milieu de la vue. Il faut
+   *  un moyen d'être précis sans la souris — c'est celui-là. */
+  const zoomerAuBouton = (cible: number) => {
+    const r = containerRef.current?.getBoundingClientRect();
+    if (r) zoomerVers(cible, r.left + r.width / 2, r.top + r.height / 2);
+    else setZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cible)));
   };
 
   // Attach the wheel handler as a NON-passive native listener so preventDefault()
@@ -498,6 +638,17 @@ export function TopologyMap({ theme: t }: Props) {
         <button className="po" onClick={(e) => { e.stopPropagation(); ajusterVue(); }}>
           Recentrer
         </button>
+        {/* Le sélecteur n'apparaît que si la page ne l'a pas pris en charge. */}
+        {!agencement && (
+          <span className="po" style={{ cursor: "default" }}>
+            Agencement
+            <select value={mode} onChange={(e) => changerMode(e.target.value as "libre" | "arbre")}
+              style={{ background: "transparent", border: "none", color: "var(--ink)", font: "inherit", cursor: "pointer", outline: "none" }}>
+              <option value="libre">libre</option>
+              <option value="arbre">arborescence</option>
+            </select>
+          </span>
+        )}
         <span className="po" style={{ cursor: "default" }}>
           Liaison
           <select value={linkType} onChange={(e) => setLinkType(e.target.value)}
@@ -540,8 +691,20 @@ export function TopologyMap({ theme: t }: Props) {
         )}
 
         <span className="posep"/>
-        <span className="poinfo">glisser pour déplacer · molette pour zoomer</span>
-        <span className="poinfo">{Math.round(zoom * 100)} %</span>
+        {/* Court : la barre est déjà pleine, et les boutons de zoom qui suivent
+            disent d'eux-mêmes à quoi sert la molette. */}
+        <span className="poinfo">
+          {mode === "arbre" ? "places calculées" : "glisser pour déplacer"}
+        </span>
+        <span className="po" style={{ cursor: "default", gap: 4 }}>
+          <button className="pomini" title="Dézoomer"
+            onClick={(e) => { e.stopPropagation(); zoomerAuBouton(zoom / 1.25); }}>−</button>
+          <button className="pomini" title="Revenir à 100 %"
+            onClick={(e) => { e.stopPropagation(); zoomerAuBouton(1); }}
+            style={{ minWidth: 48 }}>{Math.round(zoom * 100)} %</button>
+          <button className="pomini" title="Zoomer"
+            onClick={(e) => { e.stopPropagation(); zoomerAuBouton(zoom * 1.25); }}>+</button>
+        </span>
       </div>
 
       {/* Main SVG */}
@@ -632,6 +795,26 @@ export function TopologyMap({ theme: t }: Props) {
             );
           })}
 
+          {/* Attaches déduites de l'arborescence.
+              Un appareil relevé mais jamais rattaché a bien une place dans le
+              dessin ; sans ce trait, il y flotterait sans rien qui l'explique.
+              Le pointillé pâle dit ce que c'est : une déduction, pas une
+              liaison enregistrée. */}
+          {arbre && Object.entries(arbre.rattachements).map(([idFeuille, idParent]) => {
+            const dejaTracee = topology.links.some((l: any) =>
+              (l.fromId === idFeuille && l.toId === idParent) ||
+              (l.toId === idFeuille && l.fromId === idParent));
+            if (dejaTracee) return null;
+            const a = positions[idParent], b = positions[idFeuille];
+            if (!a || !b) return null;
+            const tr = arbre.troncs.find(x => x.depuis === idParent);
+            return (
+              <path key={"att-" + idFeuille} d={coude(a, b, tr?.x)} fill="none"
+                stroke={t.muted} strokeWidth={1.5} strokeDasharray="5 6" opacity={0.5}
+                style={{ pointerEvents: "none" }}/>
+            );
+          })}
+
           {/* Links — color and pattern depend on link type, arrows show flow direction */}
           {topology.links.map((l: any) => {
             const a = positions[l.fromId], b = positions[l.toId];
@@ -654,37 +837,72 @@ export function TopologyMap({ theme: t }: Props) {
             const flowFrom = flowReversed ? b : a;
             const flowTo = flowReversed ? a : b;
 
+            // En arborescence, une liaison se lit en deux coudes à angle droit
+            // : l'œil suit une horizontale puis une verticale, au lieu de
+            // démêler douze diagonales. Le coude tombe sur le tronc de la pile
+            // pour que les liaisons d'un même équipement se superposent — c'est
+            // ce qui dessine la colonne.
+            // Le coude tombe sur le tronc du PÈRE des deux bouts : c'est ce qui
+            // fait que les liaisons d'un même équipement se superposent au lieu
+            // de se croiser. Quand la liaison ne suit pas l'arbre — un lien posé
+            // à la main entre deux branches — on coude à mi-chemin.
+            const pere = arbre
+              ? (arbre.rattachements[l.toId] === l.fromId ? l.fromId
+                : arbre.rattachements[l.fromId] === l.toId ? l.toId : null)
+              : null;
+            const tronc = pere ? arbre!.troncs.find(x => x.depuis === pere) : undefined;
+            const mx = tronc ? tronc.x : (a.x + b.x) / 2;
+            const trace = arbre ? coude(a, b, mx) : null;
+            // Un même segment, tracé en droite ou en coude selon l'agencement.
+            const trait = (extra: any) => (trace
+              ? <path d={trace} fill="none" {...extra}/>
+              : <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} {...extra}/>);
+
             return (
               <g key={l.id}>
-                {suspect && <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={`${t.err}40`} strokeWidth={6}/>}
+                {suspect && trait({ stroke: `${t.err}40`, strokeWidth: 6 })}
 
                 {/* Hit area (invisible, fat line for easier clicking) */}
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                  stroke="transparent" strokeWidth={14}
-                  style={{ cursor: "pointer" }}
-                  onClick={(e) => { e.stopPropagation(); setSelectedLinkId(isSelected ? null : l.id); }}
-                  onDoubleClick={async (e) => {
+                {trait({
+                  stroke: "transparent", strokeWidth: 14,
+                  style: { cursor: "pointer" },
+                  onClick: (e: React.MouseEvent) => { e.stopPropagation(); setSelectedLinkId(isSelected ? null : l.id); },
+                  onDoubleClick: async (e: React.MouseEvent) => {
                     e.stopPropagation();
                     if (confirm(`Delete link between ${fromDev?.hostname || fromDev?.ip || "?"} and ${toDev?.hostname || toDev?.ip || "?"}?`)) {
                       await api.deleteLink(l.id); refreshTopology(); setSelectedLinkId(null);
                     }
-                  }}
-                  onContextMenu={(e) => {
+                  },
+                  onContextMenu: (e: React.MouseEvent) => {
                     e.preventDefault(); e.stopPropagation();
                     setLinkMenu({ x: e.clientX, y: e.clientY, linkId: l.id });
-                  }}
-                />
+                  },
+                })}
 
                 {/* Visible line */}
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color}
-                  strokeWidth={isSelected ? typeStyle.width + 2 : typeStyle.width}
-                  opacity={isSelected ? 1 : 0.75}
-                  strokeDasharray={typeStyle.dash}
-                  style={{ animation: typeStyle.animate ? "flow 1.5s linear infinite" : undefined, pointerEvents: "none" }}/>
+                {trait({
+                  stroke: color,
+                  strokeWidth: isSelected ? typeStyle.width + 2 : typeStyle.width,
+                  opacity: isSelected ? 1 : 0.75,
+                  strokeDasharray: typeStyle.dash,
+                  style: { animation: typeStyle.animate ? "flow 1.5s linear infinite" : undefined, pointerEvents: "none" },
+                })}
 
                 {/* Direction arrow at 65% along the line */}
                 {(() => {
                   const t65 = 0.6;
+                  // En coude, la flèche se pose sur la dernière horizontale,
+                  // celle qui arrive au nœud : ailleurs elle tomberait à côté
+                  // du trait.
+                  if (trace) {
+                    const ax = (mx + flowTo.x) / 2;
+                    const angle = flowTo.x >= mx ? 0 : 180;
+                    return (
+                      <g transform={`translate(${ax} ${flowTo.y}) rotate(${angle})`} style={{ pointerEvents: "none" }}>
+                        <polygon points="-7,-5 7,0 -7,5" fill={color} opacity={0.9}/>
+                      </g>
+                    );
+                  }
                   const ax = flowFrom.x + (flowTo.x - flowFrom.x) * t65;
                   const ay = flowFrom.y + (flowTo.y - flowFrom.y) * t65;
                   const dx = flowTo.x - flowFrom.x;
@@ -698,14 +916,25 @@ export function TopologyMap({ theme: t }: Props) {
                 })()}
 
                 {/* Animated traffic particle (placeholder for future Wireshark integration) */}
-                <circle cx={flowFrom.x} cy={flowFrom.y} r={3} fill={color} opacity={0.9} style={{ pointerEvents: "none" }}>
-                  <animate attributeName="cx" from={flowFrom.x} to={flowTo.x} dur="2.4s" repeatCount="indefinite"/>
-                  <animate attributeName="cy" from={flowFrom.y} to={flowTo.y} dur="2.4s" repeatCount="indefinite"/>
-                  <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.4s" repeatCount="indefinite"/>
-                </circle>
+                {trace ? (
+                  <circle r={3} fill={color} opacity={0.9} style={{ pointerEvents: "none" }}>
+                    {/* La particule suit le coude, sinon elle couperait à travers
+                        le dessin au lieu de longer le câble. */}
+                    <animateMotion path={trace} dur="2.4s" repeatCount="indefinite"
+                      calcMode="linear" keyTimes="0;1"
+                      keyPoints={flowReversed ? "1;0" : "0;1"}/>
+                    <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.4s" repeatCount="indefinite"/>
+                  </circle>
+                ) : (
+                  <circle cx={flowFrom.x} cy={flowFrom.y} r={3} fill={color} opacity={0.9} style={{ pointerEvents: "none" }}>
+                    <animate attributeName="cx" from={flowFrom.x} to={flowTo.x} dur="2.4s" repeatCount="indefinite"/>
+                    <animate attributeName="cy" from={flowFrom.y} to={flowTo.y} dur="2.4s" repeatCount="indefinite"/>
+                    <animate attributeName="opacity" values="0;0.9;0.9;0" dur="2.4s" repeatCount="indefinite"/>
+                  </circle>
+                )}
 
                 {/* Link label */}
-                <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 - 10}
+                <text x={trace ? mx : (a.x + b.x) / 2} y={(a.y + b.y) / 2 - 10}
                   fill={isSelected ? color : t.muted}
                   fontSize={isSelected ? 11 : 9}
                   fontFamily={t.monoFont}
@@ -768,12 +997,17 @@ export function TopologyMap({ theme: t }: Props) {
 
                 <rect className="plate" x={-r} y={-r} width={T} height={T} rx={19}/>
 
-                <foreignObject x={-r} y={-r} width={T} height={T} style={{ pointerEvents: "none" }}>
-                  <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <DeviceIcon type={d.customType || d.type} size={34} color={couleurGlyphe}
-                      dim={d.status === "offline"} pulse={false}/>
-                  </div>
-                </foreignObject>
+                {/* La silhouette du matériel, pas un picto de catégorie.
+                    Une topologie se lit d'un coup d'œil : un boîtier plat percé
+                    de deux rangées de ports EST un commutateur, alors qu'un
+                    glyphe abstrait demande à être décodé. Le dessin est un SVG
+                    imbriqué plutôt qu'un foreignObject — il suit le zoom, il
+                    s'exporte, et il ne dépend pas du rendu HTML dans SVG. */}
+                <DeviceArt type={d.customType || d.type}
+                  vendor={d.vendor} model={d.model} hostname={d.hostname}
+                  x={-27} y={-17} size={54} color={couleurGlyphe}
+                  dim={d.status === "offline"}
+                  style={{ pointerEvents: "none" }}/>
 
                 <text className="kd"  y={r + 17} textAnchor="middle">{genre}</text>
                 <text className="nm"  y={r + 32} textAnchor="middle">{nom}</text>

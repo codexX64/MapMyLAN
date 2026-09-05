@@ -438,6 +438,12 @@ tbody tr:hover td{background:var(--well)}
 .po:hover{background:var(--hair-soft);color:var(--ink)}
 .po.opa{cursor:default;gap:9px}
 .po.opa input{width:82px;accent-color:var(--accent)}
+/* Zoom au bouton : la molette ne permet pas de viser précisément, il faut un
+   pas rond sous la main. Les trois boutons forment un seul bloc. */
+.pomini{font:inherit;font-family:var(--mono);font-size:11px;color:var(--ink-soft);
+  background:transparent;border:none;border-radius:6px;padding:2px 7px;cursor:pointer;
+  line-height:1.6;text-align:center}
+.pomini:hover{background:var(--hair-soft);color:var(--ink)}
 .posep{flex:1}
 .poinfo{font-family:var(--mono);font-size:11px;color:var(--faint)}
 

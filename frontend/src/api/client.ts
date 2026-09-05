@@ -105,6 +105,9 @@ export const api = {
 
   // Historique du trafic, tenu par le serveur.
   trafficState: () => request<any>("/traffic/state"),
+  /** Les totaux sur tout l'historique conservé, une ligne par destination. */
+  trafficAggregats: (depuis?: number) =>
+    request<any>(`/traffic/aggregats${depuis ? `?depuis=${depuis}` : ""}`),
   trafficFlows: (o: { limite?: number; depuis?: number; avant?: number } = {}) => {
     const q = new URLSearchParams();
     if (o.limite) q.set("limite", String(o.limite));
@@ -149,7 +152,7 @@ export const api = {
 
   me: () => request<{
     id: string; username: string; role: string;
-    mustChangePassword: boolean; totpEnabled: boolean;
+    mustChangePassword: boolean; totpEnabled: boolean; doitInscrireA2f?: boolean;
   }>("/auth/me"),
 
   users: () => request<{
@@ -251,10 +254,17 @@ export const api = {
     request<any>("/auth/totp/disable", { method: "POST", body: JSON.stringify({ password, code }) }),
 
   // Réinitialisation du mot de passe
+  // Demande le lien de réinitialisation. Il part à l'adresse DU COMPTE — pas
+  // d'adresse, pas de réinitialisation. La réponse est la même dans tous les
+  // cas : rien à en déduire sur le compte.
   resetStart: (username: string) =>
-    request<{ ok: boolean; challengeId?: string; ttlMinutes: number }>("/auth/reset/start", { method: "POST", body: JSON.stringify({ username }) }),
-  resetVerify: (challengeId: string, totpCode: string, telegramCode: string) =>
-    request<{ resetToken: string }>("/auth/reset/verify", { method: "POST", body: JSON.stringify({ challengeId, totpCode, telegramCode }) }),
+    request<{ ok: boolean; ttlMinutes: number }>(
+      "/auth/reset/start", { method: "POST", body: JSON.stringify({ username }) }),
+  // Ouverture du lien : le secret est échangé une fois contre un défi, et ne
+  // resert jamais. Rouvrir le même lien ne donne plus rien.
+  resetLienOuvrir: (secret: string) =>
+    request<{ ok: boolean; defi: string; moyens: string[]; restants: string[]; chatMasque?: string | null; ttlMinutes: number }>(
+      "/auth/reset/lien/ouvrir", { method: "POST", body: JSON.stringify({ secret }) }),
   resetComplete: (resetToken: string, password: string) =>
     request<any>("/auth/reset/complete", { method: "POST", body: JSON.stringify({ resetToken, password }) }),
 

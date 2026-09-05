@@ -145,6 +145,18 @@ export function MapPage({ t }: { t?: any }) {
   const [occupe, setOccupe] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // L'agencement de la carte vit ici plutôt que dans la carte elle-même :
+  // c'est un choix de VUE, au même titre que carte / tableau / trafic, et il
+  // se prend donc au même endroit. Le choix reste dans ce navigateur.
+  const [agencement, setAgencement] = useState<"libre" | "arbre">(() => {
+    try { return localStorage.getItem("mapmylan_agencement") === "arbre" ? "arbre" : "libre"; }
+    catch { return "libre"; }
+  });
+  const choisirAgencement = (m: "libre" | "arbre") => {
+    setAgencement(m);
+    try { localStorage.setItem("mapmylan_agencement", m); } catch { /* rien à faire */ }
+  };
+
   const reconstruire = async () => {
     setOccupe(true); setMessage(null);
     try { await api.autoBuildTopology(); await refreshTopology(); }
@@ -158,6 +170,12 @@ export function MapPage({ t }: { t?: any }) {
       lede={s("page.map.lede")}
       actions={<>
         <Views items={[
+          { label: s("agencement.free"), icon: "libre", on: agencement === "libre",
+            onClick: () => choisirAgencement("libre") },
+          { label: s("agencement.tree"), icon: "arbre", on: agencement === "arbre",
+            onClick: () => choisirAgencement("arbre") },
+        ]}/>
+        <Views items={[
           { label: s("view.map"), icon: "map", on: true },
           { label: s("view.table"), icon: "devices", onClick: () => setPage("devices") },
           { label: s("page.world.title"), icon: "globe", onClick: () => setPage("world") },
@@ -169,7 +187,7 @@ export function MapPage({ t }: { t?: any }) {
 
       <div className="plan">
         <div className="planwrap" style={{ height: "calc(100vh - 260px)", minHeight: 420 }}>
-          <TopologyMap theme={t}/>
+          <TopologyMap theme={t} agencement={agencement} onAgencement={choisirAgencement}/>
         </div>
         <div className="planbar">
           <div><span className="ln"/>{s("link.wired")}</div>

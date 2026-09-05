@@ -1,8 +1,13 @@
 // Réinitialisation du mot de passe.
 //
-// Trois étapes : on nomme le compte, on prouve son identité par deux canaux
-// indépendants (application d'authentification et Telegram), puis on choisit un
+// Trois étapes : on nomme le compte, on prouve son identité, puis on choisit un
 // nouveau mot de passe.
+//
+// La preuve demandée est celle que le compte a RÉELLEMENT inscrite — clé
+// d'accès, application, Telegram — et le même écran sert à la connexion. Avant,
+// cette page exigeait en dur un code d'application ET un code Telegram : un
+// compte sans Telegram configuré voyait donc réclamer un code qui ne pouvait
+// pas arriver, et la procédure ne pouvait pas aboutir.
 //
 // Le serveur répond de la même façon que le compte existe ou non : l'écran ne
 // permet donc pas de deviner quels identifiants sont valides.
@@ -13,22 +18,52 @@ import { useStore } from "../stores/app";
 import { THEMES, compatTheme, resolveTheme } from "../lib/themes";
 import { Icon } from "../lib/icons";
 import { translate as tr } from "../lib/i18n";
+import { SecondeEtape } from "../components/security/SecondeEtape";
 
-export function ResetPasswordPage({ onBack }: { onBack: () => void }) {
+const NOM_MOYEN: Record<string, string> = {
+  trousseau: "clé d'accès", application: "application", telegram: "Telegram",
+};
+
+export function ResetPasswordPage({ onBack, secretLien }: { onBack: () => void; secretLien?: string }) {
   const themeKey = useStore((s) => s.themeKey);
   const t = compatTheme(THEMES[resolveTheme(themeKey)]);
 
   const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
   const [username, setUsername] = useState("");
-  const [challengeId, setChallengeId] = useState("");
-  const [appCode, setAppCode] = useState("");
-  const [tgCode, setTgCode] = useState("");
+  const [defi, setDefi] = useState("");
+  const [restants, setRestants] = useState<string[]>([]);
+  const [faits, setFaits] = useState<string[]>([]);
+  const [code, setCode] = useState("");
   const [resetToken, setResetToken] = useState("");
   const [p1, setP1] = useState("");
   const [p2, setP2] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [left, setLeft] = useState(0);
+  const [lienEnvoye, setLienEnvoye] = useState(false);
+
+  // Atteint par le lien reçu par courrier : on l'échange tout de suite contre
+  // un défi, puis on efface le secret de la barre d'adresse et de l'historique.
+  // Sans cela il resterait lisible par-dessus l'épaule, dans les favoris, et
+  // dans le journal de tout mandataire traversé.
+  useEffect(() => {
+    if (!secretLien) return;
+    let vivant = true;
+    setBusy(true);
+    api.resetLienOuvrir(secretLien)
+      .then((r) => {
+        if (!vivant) return;
+        setDefi(r.defi || "");
+        setRestants(r.restants || r.moyens || []);
+        setFaits([]);
+        setLeft((r.ttlMinutes || 15) * 60);
+        setStep(1);
+      })
+      .catch((e: any) => { if (vivant) setErr(e?.message || "Lien invalide."); })
+      .finally(() => { if (vivant) setBusy(false); });
+    try { window.history.replaceState({}, "", window.location.pathname); } catch { /* sans conséquence */ }
+    return () => { vivant = false; };
+  }, [secretLien]);
 
   // Compte à rebours de validité de la demande.
   useEffect(() => {
@@ -40,27 +75,23 @@ export function ResetPasswordPage({ onBack }: { onBack: () => void }) {
   const start = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(""); setBusy(true);
-    try {
-      const r = await api.resetStart(username.trim());
-      setChallengeId(r.challengeId || "");
-      setLeft((r.ttlMinutes || 10) * 60);
-      setStep(1);
-    } catch (e: any) { setErr(e.message); }
+    try { await api.resetStart(username.trim()); setLienEnvoye(true); }
+    catch (e: any) { setErr(e.message); }
     finally { setBusy(false); }
   };
 
-  const verify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErr(""); setBusy(true);
-    try {
-      // Sans identifiant de demande, le compte n'était pas éligible : on
-      // affiche la même erreur que pour des codes faux.
-      if (!challengeId) throw new Error(tr("reset.errCodes"));
-      const r = await api.resetVerify(challengeId, appCode, tgCode);
-      setResetToken(r.resetToken);
-      setStep(2);
-    } catch (e: any) { setErr(e.message); }
-    finally { setBusy(false); }
+  // La preuve est acceptée : le serveur rend un jeton qui n'autorise QUE la
+  // pose d'un nouveau mot de passe. Il n'ouvre aucune session.
+  // Une preuve acceptée. Tant qu'il en reste, on enchaîne sur la suivante :
+  // réinitialiser exige TOUS les moyens inscrits, parce qu'il n'y a pas de mot
+  // de passe à opposer — c'est lui qu'on remplace.
+  const preuveAcceptee = (r: any) => {
+    setErr(""); setCode("");
+    if (r?.resetToken) { setResetToken(r.resetToken); setStep(2); return; }
+    if (r?.etape === "encore") {
+      setFaits((f) => [...f, ...restants.filter((m) => !(r.restants || []).includes(m))]);
+      setRestants(r.restants || []);
+    }
   };
 
   const complete = async (e: React.FormEvent) => {
@@ -131,44 +162,70 @@ export function ResetPasswordPage({ onBack }: { onBack: () => void }) {
                 autoFocus autoComplete="username" style={field}/>
             </div>
             {err && <ErrBox t={t} msg={err}/>}
-            <button type="submit" disabled={busy || !username.trim()} style={primary}>
-              {busy ? tr("reset.sending") : tr("reset.send")}
-            </button>
+
+            {lienEnvoye ? (
+              <div style={{
+                marginTop: 4, padding: "12px 14px", borderRadius: 10,
+                background: t.well, color: t.muted, fontSize: 12.5, lineHeight: 1.6,
+              }}>
+                <b style={{ color: t.txt, display: "block", marginBottom: 4 }}>
+                  Regarde ta boîte mail.
+                </b>
+                Si ce compte existe et qu'une adresse lui est rattachée, un lien vient d'y
+                partir. Il vaut quinze minutes et ne fonctionne qu'une fois. Sans adresse
+                sur le compte, il n'y a pas de réinitialisation — c'est voulu.
+              </div>
+            ) : (
+              <button type="submit" disabled={busy || !username.trim()} style={primary}>
+                {busy ? tr("reset.sending") : tr("reset.send")}
+              </button>
+            )}
+
             <BackLink t={t} onBack={onBack}/>
           </form>
         )}
 
-        {/* ── 2. Les deux codes ── */}
+        {/* ── 2. Les preuves, une par une ── */}
         {step === 1 && (
-          <form onSubmit={verify}>
-            <p style={{ color: t.muted, fontSize: 13, margin: "0 0 20px", lineHeight: 1.5 }}>
-              {tr("reset.codesLede")}
-            </p>
+          <div>
+            {/* Réinitialiser exige TOUTES les preuves inscrites : sans mot de
+                passe à opposer, elles sont la seule chose qui protège encore le
+                compte. L'avancement est visible, sinon on ne sait pas où on en est. */}
+            {(faits.length > 0 || restants.length > 1) && (
+              <div style={{
+                display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14,
+                fontFamily: t.monoFont, fontSize: 11,
+              }}>
+                {faits.map((m) => (
+                  <span key={m} style={{
+                    padding: "4px 9px", borderRadius: 999, background: t.wash,
+                    color: t.primary,
+                  }}>✓ {NOM_MOYEN[m] || m}</span>
+                ))}
+                {restants.map((m, i) => (
+                  <span key={m} style={{
+                    padding: "4px 9px", borderRadius: 999,
+                    border: `1px solid ${t.hair}`,
+                    color: i === 0 ? t.txt : t.faint,
+                  }}>{NOM_MOYEN[m] || m}</span>
+                ))}
+              </div>
+            )}
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={label}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-                  <Icon name="chip" size={12} stroke={2}/>{tr("reset.appCode")}
-                </span>
-              </label>
-              <input value={appCode} inputMode="numeric" maxLength={6} autoFocus
-                onChange={(e) => setAppCode(e.target.value.replace(/\D/g, ""))}
-                placeholder="000000" style={codeField}/>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={label}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-                  <Icon name="bot" size={12} stroke={2}/>{tr("reset.tgCode")}
-                </span>
-              </label>
-              <input value={tgCode} inputMode="numeric" maxLength={6}
-                onChange={(e) => setTgCode(e.target.value.replace(/\D/g, ""))}
-                placeholder="000000" style={codeField}/>
-            </div>
+            <SecondeEtape
+              key={restants[0] || "fin"}
+              defi={defi} moyens={restants.slice(0, 1)}
+              code={code} setCode={setCode}
+              onReussite={preuveAcceptee}
+              onErreur={setErr}
+              onAbandon={() => { setStep(0); setErr(""); setCode(""); setLienEnvoye(false); }}
+              t={t} label={label} field={codeField}
+              intro={restants.length > 1
+                ? `Première preuve sur ${restants.length + faits.length}. Chaque moyen inscrit est demandé.`
+                : "Dernière preuve. Le moyen demandé est celui que tu as inscrit."}/>
 
             <div style={{
-              display: "flex", alignItems: "center", gap: 8, marginBottom: 16,
+              display: "flex", alignItems: "center", gap: 8, marginTop: 16,
               color: left < 60 ? t.warn : t.faint, fontFamily: t.monoFont, fontSize: 11.5,
             }}>
               <Icon name="clock" size={12} stroke={2}/>
@@ -176,12 +233,8 @@ export function ResetPasswordPage({ onBack }: { onBack: () => void }) {
             </div>
 
             {err && <ErrBox t={t} msg={err}/>}
-            <button type="submit" disabled={busy || appCode.length !== 6 || tgCode.length !== 6}
-              style={{ ...primary, opacity: busy || appCode.length !== 6 || tgCode.length !== 6 ? 0.5 : 1 }}>
-              {busy ? tr("reset.checking") : tr("reset.verify")}
-            </button>
             <BackLink t={t} onBack={onBack}/>
-          </form>
+          </div>
         )}
 
         {/* ── 3. Le nouveau mot de passe ── */}

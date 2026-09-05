@@ -171,6 +171,10 @@ const DICT: Record<Lang, Record<string, string>> = {
     "view.table": "Tableau",
     "view.vlan": "VLAN",
 
+    // Les deux agencements de la carte, choisis à côté des onglets de vue.
+    "agencement.free": "Libre",
+    "agencement.tree": "Arborescence",
+
     "explorer.title": "Parc",
     "explorer.empty": "Aucun appareil pour le moment.",
 
@@ -215,11 +219,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     "reset.title": "Réinitialiser le mot de passe",
     "reset.step": "Étape {n} sur 3",
     "reset.done": "Terminé",
-    "reset.lede": "Deux preuves seront demandées : le code de votre application d'authentification et un code envoyé sur Telegram.",
+    "reset.lede": "Un lien part à l'adresse rattachée au compte. En l'ouvrant, chaque moyen inscrit sera demandé — puis le nouveau mot de passe.",
     "reset.user": "Identifiant du compte",
-    "reset.send": "Envoyer le code Telegram",
+    "reset.send": "Envoyer le lien",
     "reset.sending": "Envoi…",
-    "reset.codesLede": "Saisissez le code affiché par votre application et celui reçu sur Telegram.",
+    "reset.codesLede": "Prouve que ce compte est le tien.",
     "reset.appCode": "Code de l'application",
     "reset.tgCode": "Code Telegram",
     "reset.expires": "Expire dans {t}",
@@ -231,10 +235,10 @@ const DICT: Record<Lang, Record<string, string>> = {
     "reset.hint": "Au moins 8 caractères.",
     "reset.save": "Enregistrer",
     "reset.saving": "Enregistrement…",
-    "reset.okBody": "Mot de passe modifié. Une notification a été envoyée sur Telegram.",
+    "reset.okBody": "Mot de passe modifié. Les canaux configurés en ont été avertis.",
     "reset.backToLogin": "Retour à la connexion",
     "reset.back": "Annuler",
-    "reset.errCodes": "Codes incorrects",
+    "reset.errCodes": "Preuve refusée",
     "reset.errShort": "Le mot de passe doit faire au moins 8 caractères",
     "reset.errMatch": "Les deux mots de passe ne correspondent pas",
 
@@ -619,6 +623,9 @@ const DICT: Record<Lang, Record<string, string>> = {
     "view.table": "Table",
     "view.vlan": "VLANs",
 
+    "agencement.free": "Free",
+    "agencement.tree": "Tree",
+
     "explorer.title": "Fleet",
     "explorer.empty": "No device yet.",
 
@@ -663,11 +670,11 @@ const DICT: Record<Lang, Record<string, string>> = {
     "reset.title": "Reset your password",
     "reset.step": "Step {n} of 3",
     "reset.done": "Done",
-    "reset.lede": "Two proofs will be required: the code from your authenticator app and a code sent over Telegram.",
+    "reset.lede": "A link is sent to the address attached to the account. Opening it asks for every registered factor, then the new password.",
     "reset.user": "Account username",
-    "reset.send": "Send the Telegram code",
+    "reset.send": "Send the link",
     "reset.sending": "Sending…",
-    "reset.codesLede": "Enter the code shown by your app and the one received on Telegram.",
+    "reset.codesLede": "Prove this account is yours.",
     "reset.appCode": "Authenticator code",
     "reset.tgCode": "Telegram code",
     "reset.expires": "Expires in {t}",
@@ -682,7 +689,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     "reset.okBody": "Password changed. A notice was sent over Telegram.",
     "reset.backToLogin": "Back to sign in",
     "reset.back": "Cancel",
-    "reset.errCodes": "Incorrect codes",
+    "reset.errCodes": "Proof rejected",
     "reset.errShort": "Password must be at least 8 characters",
     "reset.errMatch": "The two passwords do not match",
 

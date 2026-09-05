@@ -24,7 +24,10 @@ const PORTS_WEB = new Set([80, 443, 8080, 8443, 8843, 8880]);
  * ainsi dans l'historique sans tout charger d'un coup.
  */
 const qFlux = z.object({
-  limite: z.coerce.number().int().min(1).max(1000).default(300),
+  // Le plafond était de mille. Un parc ordinaire garde plusieurs milliers de
+  // flux sur trente jours : l'interface ne pouvait donc jamais tout montrer,
+  // même en descendant la liste jusqu'au bout.
+  limite: z.coerce.number().int().min(1).max(5000).default(300),
   avant: z.coerce.number().int().optional(),   // horodatage en millisecondes
   depuis: z.coerce.number().int().optional(),
   /** « sortant », « entrant », ou rien pour les deux. */
@@ -65,6 +68,67 @@ router.get("/flows", async (req, res) => {
     suspect: f.suspect === true,
     raison: f.raison || undefined,
   })));
+});
+
+/**
+ * Les totaux, calculés sur TOUT ce qui est conservé.
+ *
+ * Le bandeau les calculait à partir des lignes chargées par le navigateur :
+ * il affichait donc « 1000 destinations » tant qu'on n'avait pas descendu la
+ * liste jusqu'au bout, et « 2442 » une fois en bas. Un compteur qui change
+ * parce qu'on a scrollé ne compte rien.
+ *
+ * Une ligne par destination — pas une par flux : c'est ce que le bandeau et le
+ * panneau de droite décrivent. Mille sept cents destinations tiennent dans
+ * quelques dizaines de kilo-octets.
+ */
+router.get("/aggregats", async (req, res) => {
+  // Fenêtre de temps demandée par l'interface, en millisecondes depuis
+  // l'époque. Sans elle, on décrit tout ce qui est conservé.
+  const depuis = Number(req.query.depuis);
+  const borne = Number.isFinite(depuis) && depuis > 0 ? new Date(depuis) : null;
+  const filtre = borne ? `WHERE "lastSeen" > $1` : "";
+  const args = borne ? [borne] : [];
+
+  const [compte, destinations, appareils] = await Promise.all([
+    lignesSql(`SELECT COUNT(*)::int AS n FROM "TrafficFlow" ${filtre}`, ...args),
+    lignesSql(
+      `SELECT "dstIp"                       AS dst,
+              MAX("host")                   AS nom,
+              MAX("domain")                 AS domaine,
+              MAX("operator")               AS operateur,
+              MAX("logo")                   AS logo,
+              MAX("country")                AS pays,
+              MAX("direction")              AS sens,
+              BOOL_OR("suspect")            AS suspect,
+              SUM("bytes")::bigint          AS octets,
+              MAX("lastSeen")               AS dernier
+         FROM "TrafficFlow"
+         ${filtre}
+        GROUP BY "dstIp"
+        ORDER BY SUM("bytes") DESC
+        LIMIT 5000`, ...args),
+    lignesSql(
+      `SELECT "srcIp" AS src, SUM("bytes")::bigint AS octets
+         FROM "TrafficFlow"
+         ${filtre}
+        GROUP BY "srcIp"
+        ORDER BY SUM("bytes") DESC
+        LIMIT 300`, ...args),
+  ]);
+
+  res.json({
+    connexions: Number(compte?.[0]?.n || 0),
+    destinations: destinations.map((d) => ({
+      dst: d.dst, nom: d.nom || undefined, domaine: d.domaine || undefined,
+      operateur: d.operateur || undefined, logo: d.logo || undefined,
+      paysRegistre: d.pays || undefined, sens: d.sens || "sortant",
+      suspect: d.suspect === true,
+      octets: Number(d.octets || 0),
+      dernier: d.dernier ? new Date(d.dernier).getTime() : 0,
+    })),
+    appareils: appareils.map((a) => ({ src: a.src, octets: Number(a.octets || 0) })),
+  });
 });
 
 /** De quoi afficher l'en-tête : équipement, dernier relevé, taille conservée. */

@@ -27,6 +27,37 @@ export interface FicheReseau {
   registre?: string;      // RIPE, ARIN, APNIC…
   /** Renseigné quand le registre n'a pas pu être joint, pas quand il ne sait rien. */
   injoignable?: boolean;
+  /**
+   * Le PRÉFIXE que la fiche décrit, en IPv4, borné aux deux bouts.
+   *
+   * Le registre ne répond pas sur une adresse mais sur le bloc qui la
+   * contient : la même fiche vaut donc pour toutes les adresses du bloc.
+   * S'en servir divise le nombre d'interrogations par cent sur un relevé
+   * ordinaire — mille sept cents destinations tiennent dans quelques dizaines
+   * de préfixes — et c'est ce qui évite de se faire limiter par le registre.
+   */
+  debut?: number;
+  fin?: number;
+}
+
+/** Une adresse IPv4 en entier, pour comparer des bornes. Rien d'autre. */
+export function enEntier(ip: string): number | undefined {
+  const p = ip.split(".");
+  if (p.length !== 4) return undefined;
+  let n = 0;
+  for (const o of p) {
+    const v = Number(o);
+    if (!Number.isInteger(v) || v < 0 || v > 255) return undefined;
+    n = n * 256 + v;
+  }
+  return n;
+}
+
+/** L'adresse tombe-t-elle dans le préfixe décrit par cette fiche ? */
+export function dansLePrefixe(f: FicheReseau, ip: string): boolean {
+  if (f.debut === undefined || f.fin === undefined) return false;
+  const n = enEntier(ip);
+  return n !== undefined && n >= f.debut && n <= f.fin;
 }
 
 /** Le parseur est exporté pour être vérifiable sans réseau. */
@@ -37,6 +68,56 @@ export { analyser as analyserRdap };
 const cache = new Map<string, { fiche: FicheReseau; expire: number }>();
 const DUREE_CACHE = 7 * 24 * 3600_000;
 const enCours = new Map<string, Promise<FicheReseau>>();
+
+/**
+ * Les préfixes déjà connus, gardés à part du cache par adresse.
+ *
+ * Une fiche décrit un bloc entier : la retenir par bloc évite de réinterroger
+ * le registre pour chaque adresse d'un même hébergeur. C'est ce qui empêche
+ * de se faire limiter, et donc ce qui fait la différence entre une liste de
+ * destinations nommées et une liste de points d'interrogation.
+ */
+const prefixes: { fiche: FicheReseau; expire: number }[] = [];
+
+function prefixeConnu(ip: string): FicheReseau | undefined {
+  const maintenant = Date.now();
+  for (let i = prefixes.length - 1; i >= 0; i--) {
+    if (prefixes[i].expire <= maintenant) { prefixes.splice(i, 1); continue; }
+    if (dansLePrefixe(prefixes[i].fiche, ip)) return { ...prefixes[i].fiche, ip };
+  }
+  return undefined;
+}
+
+/**
+ * Le registre limite les rafales : au-delà, il répond 429 et on n'apprend
+ * rien. On espace donc les interrogations, et on respecte l'attente qu'il
+ * demande. Mieux vaut nommer lentement que ne rien nommer du tout.
+ */
+const ESPACEMENT_MIN = 120;
+const ESPACEMENT_MAX = 2000;
+let espacement = 300;
+let prochaineFenetre = 0;
+
+async function attendreSonTour(): Promise<void> {
+  const maintenant = Date.now();
+  const quand = Math.max(maintenant, prochaineFenetre);
+  prochaineFenetre = quand + espacement;
+  if (quand > maintenant) await new Promise((r) => setTimeout(r, quand - maintenant));
+}
+
+/** Le registre a répondu : on peut resserrer un peu, sans jamais descendre
+ *  sous le plancher. Nommer mille sept cents destinations à trois cent
+ *  cinquante millisecondes l'unité prend dix minutes ; à cent vingt, trois. */
+function registreContent(): void {
+  espacement = Math.max(ESPACEMENT_MIN, Math.round(espacement * 0.85));
+}
+
+/** Il a dit non : on double, et on attend ce qu'il demande. */
+function registreFache(attenteSecondes?: number): void {
+  espacement = Math.min(ESPACEMENT_MAX, Math.round(espacement * 2));
+  const pause = attenteSecondes && attenteSecondes > 0 ? Math.min(attenteSecondes, 120) * 1000 : 5000;
+  prochaineFenetre = Date.now() + pause;
+}
 
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const IPV6 = /^[0-9a-fA-F:]{2,45}$/;
@@ -162,6 +243,11 @@ const DOMAINE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[
 function analyser(j: any, ip: string): FicheReseau {
   const fiche: FicheReseau = { ip };
   if (typeof j?.name === "string") fiche.reseau = j.name.slice(0, 80);
+  // Les bornes du bloc décrit. Le registre les donne toujours ; on ne les
+  // retient qu'en IPv4, où la comparaison est un simple entier.
+  const d = typeof j?.startAddress === "string" ? enEntier(j.startAddress) : undefined;
+  const f = typeof j?.endAddress === "string" ? enEntier(j.endAddress) : undefined;
+  if (d !== undefined && f !== undefined && f >= d) { fiche.debut = d; fiche.fin = f; }
   if (typeof j?.country === "string") fiche.pays = codePays(j.country);
   if (Array.isArray(j?.rdapConformance)) {
     const src = String(j?.port43 || j?.links?.[0]?.value || "");
@@ -199,6 +285,7 @@ function analyser(j: any, ip: string): FicheReseau {
 }
 
 async function interroger(ip: string): Promise<FicheReseau> {
+  await attendreSonTour();
   const stop = new AbortController();
   const minuteur = setTimeout(() => stop.abort(), 6000);
   try {
@@ -209,6 +296,15 @@ async function interroger(ip: string): Promise<FicheReseau> {
       redirect: "follow",
       headers: { accept: "application/rdap+json, application/json" },
     });
+    // 429 (trop de requêtes) et 5xx ne veulent pas dire « adresse inconnue » :
+    // ils veulent dire « redemande plus tard ». Les confondre gravait un point
+    // d'interrogation pour une heure sur une adresse parfaitement connue du
+    // registre.
+    if (r.status === 429 || r.status >= 500) {
+      registreFache(Number(r.headers.get("retry-after")));
+      return { ip, injoignable: true };
+    }
+    registreContent();
     if (!r.ok) return { ip };
     return analyser(await r.json(), ip);
   } catch {
@@ -223,6 +319,10 @@ async function interroger(ip: string): Promise<FicheReseau> {
 async function fiche(ip: string): Promise<FicheReseau> {
   const vu = cache.get(ip);
   if (vu && vu.expire > Date.now()) return vu.fiche;
+  // Le bloc auquel appartient cette adresse a peut-être déjà été demandé pour
+  // une autre : la réponse est la même, et elle ne coûte rien.
+  const parBloc = prefixeConnu(ip);
+  if (parBloc) return parBloc;
   const deja = enCours.get(ip);
   if (deja) return deja;
 
@@ -231,6 +331,9 @@ async function fiche(ip: string): Promise<FicheReseau> {
     // registre pour une adresse qu'il ne connaît pas.
     const duree = f.organisation || f.reseau ? DUREE_CACHE : f.injoignable ? 60_000 : 3600_000;
     cache.set(ip, { fiche: f, expire: Date.now() + duree });
+    if ((f.organisation || f.reseau) && f.debut !== undefined) {
+      prefixes.push({ fiche: f, expire: Date.now() + DUREE_CACHE });
+    }
     enCours.delete(ip);
     return f;
   }).catch(() => {
@@ -239,6 +342,16 @@ async function fiche(ip: string): Promise<FicheReseau> {
   });
   enCours.set(ip, p);
   return p;
+}
+
+/** Ce que le service sait déjà, pour l'afficher plutôt que de le taire. */
+export function etatRegistre() {
+  return {
+    prefixes: prefixes.length,
+    adresses: cache.size,
+    espacementMs: espacement,
+    enAttente: prochaineFenetre > Date.now() ? prochaineFenetre - Date.now() : 0,
+  };
 }
 
 

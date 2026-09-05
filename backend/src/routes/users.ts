@@ -59,6 +59,10 @@ const publiable = (u: any, fondateur?: string | null) => ({
   createdAt: u.createdAt,
   lastLogin: u.lastLogin,
   totpEnabled: !!u.totpEnabled,
+  // L'adresse à laquelle part le lien de réinitialisation. Sans elle, ce
+  // compte ne peut pas réinitialiser son mot de passe — l'écran doit pouvoir
+  // le dire plutôt que de le laisser découvrir le jour où c'est urgent.
+  email: u.email || null,
   mustChangePassword: !!u.mustChangePassword,
   verrouilleJusqua: u.lockedUntil,
 });
@@ -93,6 +97,7 @@ const schemaCreation = z.object({
   username: z.string(),
   password: z.string(),
   role: z.enum(ROLES).default("viewer"),
+  email: z.string().trim().max(254).optional(),
   mustChangePassword: z.boolean().optional(),
 });
 
@@ -128,20 +133,31 @@ router.post("/", async (req: AuthedRequest, res) => {
       username: nom,
       password: await hacher(password),
       role,
+      email: (parsed.data.email || "").trim() || null,
       // Par défaut le compte change son mot de passe à la première connexion :
       // celui que tu viens de saisir a transité par ton écran et ta mémoire.
       mustChangePassword: parsed.data.mustChangePassword ?? true,
     },
   });
+  // Le second facteur est exigé sur tout compte, pas seulement le premier :
+  // un compte créé plus tard garde les mêmes droits sur le réseau.
+  await exigerA2f(u.id, true).catch(() => {});
+
   await logEvent("info", "users", `Compte créé : ${nom} (${role}) par ${req.user?.username}`);
   res.json(publiable(u, await idFondateur()));
 });
 
 // ── Modification ────────────────────────────────────────────────────────────
 
+const ADRESSE = z.string().trim().max(254).refine(
+  (v) => v === "" || (v.includes("@") && v.indexOf("@") > 0 && v.lastIndexOf(".") > v.indexOf("@")),
+  { message: "Adresse invalide." },
+);
+
 const schemaMaj = z.object({
   username: z.string().optional(),
   role: z.enum(ROLES).optional(),
+  email: ADRESSE.optional(),
   mustChangePassword: z.boolean().optional(),
   deverrouiller: z.boolean().optional(),   // lève le blocage après échecs
 });
@@ -154,6 +170,9 @@ router.patch("/:id", async (req: AuthedRequest, res) => {
   if (!cible) return res.status(404).json({ error: "Compte introuvable" });
 
   const data: any = {};
+
+  // Vider le champ retire l'adresse — et donc la possibilité de réinitialiser.
+  if (parsed.data.email !== undefined) data.email = parsed.data.email.trim() || null;
 
   if (parsed.data.username !== undefined) {
     const nom = parsed.data.username.trim();

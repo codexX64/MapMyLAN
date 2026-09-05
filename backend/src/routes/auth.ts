@@ -7,13 +7,16 @@ import { hacher as hacherMotDePasse, verifier as verifierMotDePasse } from "../s
 import { config } from "../config";
 import { logEvent } from "../services/logger";
 import { authRequired, poserCookiesSession, effacerCookiesSession } from "../middleware/auth";
-import { sendTelegram, getConfig } from "../services/notifier";
+import { sendTelegram, getConfig, envoyerLienReinit } from "../services/notifier";
+import {
+  empreinte, nouveauSecret, lienUtilisable, moyensAExiger, exigenceDe,
+} from "../services/reinit";
 import { generateSecret, verifyTotp, otpauthUri, numericCode } from "../services/totp";
 import {
   generateAuthenticationOptions, verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
 import {
-  moyensDe, clesCompletes, cleParIdentifiant, majCompteur, origineDe, a2fExigee,
+  moyensDe, clesCompletes, cleParIdentifiant, majCompteur, origineDe, a2fExigee, exigerA2f,
   chatTelegramDe, envoyerCodeTelegram, verifierCodeTelegram,
 } from "../services/mfa";
 
@@ -48,6 +51,20 @@ router.post("/bootstrap", async (req, res) => {
     data: { username: String(username).trim(), password: hash, role: "admin" },
   });
 
+  // Le second facteur est exigé dès la création du premier compte.
+  //
+  // Ce compte peut tout faire sur le réseau : couper un appareil, lire le
+  // trafic, exécuter une commande sur la passerelle. Un mot de passe seul ne
+  // suffit pas à le garder. On l'exige donc d'entrée plutôt que de le proposer
+  // — un réglage facultatif dans un écran de configuration n'est jamais posé.
+  //
+  // Exiger n'est pas enfermer dehors : l'inscription se fait APRÈS l'entrée,
+  // pas avant. Le compte se connecte, l'écran réclame un moyen, et propose la
+  // clé d'accès en premier ; si le navigateur ne peut pas en créer — il faut
+  // une origine sûre, donc du HTTPS — l'application d'authentification prend
+  // le relais. Il reste donc toujours un chemin praticable.
+  await exigerA2f(user.id, true).catch(() => {});
+
   const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, config.jwtSecret, { expiresIn: "7d" });
   const setup = await prisma.setting.findUnique({ where: { key: "setup.complete" } });
 
@@ -56,6 +73,7 @@ router.post("/bootstrap", async (req, res) => {
     user: {
       id: user.id, username: user.username, role: user.role,
       mustChangePassword: user.mustChangePassword,
+      doitInscrireA2f: true,
     },
     setupComplete: setup?.value === true,
   });
@@ -130,91 +148,147 @@ router.get("/totp/status", authRequired, async (req: any, res) => {
 const RESET_TTL_MIN = 10;
 const MAX_ATTEMPTS = 5;
 
+// ── Réinitialisation : une seule porte, le courrier ────────────────────────
+//
+// L'ordre est : adresse → lien → toutes les preuves inscrites → nouveau mot de
+// passe. Il n'y a pas de raccourci qui parte de l'écran de connexion : sans
+// adresse sur le compte, il n'y a pas de réinitialisation du tout.
+//
+// Pourquoi passer par le courrier d'abord : la boîte prouve quelque chose que
+// ni le mot de passe (perdu) ni l'écran (public) ne prouvent — qu'on est bien
+// la personne à qui ce compte appartient. Et pourquoi ça ne suffit pas : qui
+// prend la boîte prendrait MapMyLAN. D'où les preuves derrière.
+
 router.post("/reset/start", async (req, res) => {
   const username = String(req.body?.username || "").trim();
-
-  // Réponse volontairement identique que le compte existe ou non : on ne
-  // renseigne pas un attaquant sur les identifiants valides.
-  const generic = { ok: true, ttlMinutes: RESET_TTL_MIN };
+  // Réponse identique dans tous les cas. Ni l'existence du compte, ni celle
+  // d'une adresse, ni le nombre de moyens inscrits ne doivent s'en déduire.
+  const generique = { ok: true, ttlMinutes: LIEN_TTL_MIN };
 
   const user = await prisma.user.findUnique({ where: { username } });
-  if (!user || !user.totpEnabled || !user.totpSecret) return res.json(generic);
+  if (!user) return res.json(generique);
 
-  const tg = await getConfig("telegram");
-  // Même correction qu'au-dessus, et c'est celle qui faisait mal : la demande
-  // partait, la réponse disait « c'est bon », et aucun code n'était jamais
-  // envoyé. L'écran attendait un code qui ne pouvait pas venir.
-  if (!tg?.token || !tg?.chatId) return res.json(generic);
+  // Pas d'adresse sur le compte, pas de réinitialisation. L'adresse commune
+  // sert à ENVOYER, pas à recevoir : elle n'est pas un destinataire de repli,
+  // sinon tous les comptes se réinitialiseraient vers la même boîte.
+  const dest = String(user.email || "").trim();
+  if (!dest) {
+    await logEvent("warn", "auth",
+      `Réinitialisation impossible pour ${user.username} : aucune adresse sur le compte`);
+    return res.json(generique);
+  }
 
-  // On périme les demandes précédentes du même compte.
+  const m = await moyensDe(user);
+  if (m.moyens.length === 0) {
+    // Aucun moyen inscrit : le lien seul ne prouverait rien. On n'envoie pas.
+    await logEvent("warn", "auth",
+      `Réinitialisation impossible pour ${user.username} : aucun moyen inscrit`);
+    return res.json(generique);
+  }
+
+  // Un nouveau lien périme les précédents.
   await prisma.passwordReset.updateMany({
     where: { userId: user.id, consumed: false },
     data: { consumed: true },
   });
 
-  const code = numericCode(6);
-  const reset = await prisma.passwordReset.create({
+  const secret = nouveauSecret();
+  const demande = await prisma.passwordReset.create({
     data: {
       userId: user.id,
-      telegramCode: code,
-      expiresAt: new Date(Date.now() + RESET_TTL_MIN * 60_000),
+      lienHash: empreinte(secret),
+      lienEnvoyeA: dest,
+      expiresAt: new Date(Date.now() + LIEN_TTL_MIN * 60_000),
     },
   });
 
-  const sent = await sendTelegram(
-    `🔐 MapMyLAN — réinitialisation du mot de passe\n\n` +
-    `Code de confirmation : ${code}\n` +
-    `Valable ${RESET_TTL_MIN} minutes.\n\n` +
-    `Si vous n'êtes pas à l'origine de cette demande, ignorez ce message ` +
-    `et changez votre mot de passe.`,
-  );
-  await prisma.passwordReset.update({
-    where: { id: reset.id },
-    data: { telegramSent: sent.ok },
-  });
+  // L'adresse publique vient de l'en-tête Origin, comme pour les clés d'accès :
+  // une instance est jointe par un nom, parfois deux, et une valeur écrite en
+  // dur casserait le second.
+  const base = String(req.headers.origin || "").replace(/\/+$/, "");
+  const lien = `${base}/?reinit=${secret}`;
 
-  await logEvent("warn", "auth", `Réinitialisation demandée pour ${user.username}`);
-  res.json({ ...generic, challengeId: reset.id });
+  const envoi = await envoyerLienReinit(dest, lien, LIEN_TTL_MIN);
+  if (!envoi.ok) {
+    await prisma.passwordReset.update({
+      where: { id: demande.id }, data: { consumed: true },
+    });
+    await logEvent("error", "auth",
+      `Lien de réinitialisation non parti pour ${user.username} : ${envoi.error}`);
+    return res.json(generique);
+  }
+
+  await logEvent("warn", "auth", `Lien de réinitialisation envoyé pour ${user.username}`);
+  res.json(generique);
 });
 
-router.post("/reset/verify", async (req, res) => {
-  const { challengeId, totpCode, telegramCode } = req.body || {};
-  if (!challengeId) return res.status(400).json({ error: "Demande introuvable" });
+// ── Réinitialisation par lien envoyé par courrier ──────────────────────────
+//
+// Voie parallèle à la précédente, pour le jour où l'écran de connexion n'est
+// pas la bonne porte : on demande un lien, il arrive dans la boîte, on
+// l'ouvre, et on retombe sur la même demande de preuve.
+//
+// Ce que le lien apporte : la certitude que le demandeur lit la boîte du
+// compte. Ce qu'il n'apporte pas : la dispense de preuve. Un lien seul ferait
+// du courrier le maillon faible de toute l'authentification — qui prend la
+// boîte prend MapMyLAN.
+//
+// Ce qui le rend inrejouable :
+//   — le secret ne vit qu'ici sous forme d'empreinte SHA-256 ; une base lue ne
+//     donne aucun lien utilisable ;
+//   — il est consommé à la première ouverture réussie ;
+//   — demander un nouveau lien périme le précédent ;
+//   — il expire, et la demande qu'il porte expire avec lui.
+//
+// Le destinataire n'est JAMAIS celui que la requête indique : c'est l'adresse
+// du compte, ou à défaut celle du canal courrier. Sans quoi il suffirait de
+// demander un lien vers sa propre boîte.
 
-  const reset = await prisma.passwordReset.findUnique({ where: { id: String(challengeId) } });
-  if (!reset || reset.consumed) return res.status(400).json({ error: "Demande introuvable ou déjà utilisée" });
-  if (reset.expiresAt < new Date()) return res.status(400).json({ error: "Demande expirée" });
-  if (reset.attempts >= MAX_ATTEMPTS) {
-    await prisma.passwordReset.update({ where: { id: reset.id }, data: { consumed: true } });
-    return res.status(429).json({ error: "Trop d'essais, demande annulée" });
-  }
+const LIEN_TTL_MIN = 15;
 
+router.post("/reset/lien/ouvrir", async (req, res) => {
+  const secret = String(req.body?.secret || "");
+  if (!secret) return res.status(400).json({ error: "Lien incomplet." });
+
+  const demande = await prisma.passwordReset.findUnique({
+    where: { lienHash: empreinte(secret) },
+  });
+  // Une seule et même erreur pour « inconnu », « déjà utilisé » et « expiré » :
+  // distinguer renseignerait sur ce qui existe.
+  //
+  // Le `!demande` est écrit à part alors que `lienUtilisable` le couvre déjà :
+  // c'est ce qui apprend au compilateur que la suite travaille sur un objet
+  // réel. Sans lui, le code est juste mais la construction s'arrête — là où
+  // les types Prisma sont réellement présents, `findUnique` peut rendre null.
+  const refus = { error: "Lien invalide ou déjà utilisé." };
+  if (!demande || !lienUtilisable(demande)) return res.status(400).json(refus);
+
+  const user = await prisma.user.findUnique({ where: { id: demande.userId } });
+  if (!user) return res.status(400).json(refus);
+
+  // Consommé maintenant, pas plus tard : rouvrir le lien ne doit plus rien
+  // donner, même si la preuve qui suit échoue.
   await prisma.passwordReset.update({
-    where: { id: reset.id },
-    data: { attempts: { increment: 1 } },
+    where: { id: demande.id },
+    data: { lienUtiliseLe: new Date() },
   });
 
-  const user = await prisma.user.findUnique({ where: { id: reset.userId } });
-  if (!user?.totpSecret) return res.status(400).json({ error: "Second facteur absent" });
+  const m = await moyensDe(user);
+  const attendus = exigenceDe("reinit", m.moyens);
+  const defi = crypto.randomUUID();
+  secondsFacteurs.set(defi, {
+    userId: user.id, but: "reinit", resetId: demande.id,
+    expire: demande.expiresAt.getTime(),
+    // Tous, pas un seul : sans mot de passe à opposer, ce sont les seules
+    // choses qui protègent encore le compte.
+    restants: attendus,
+  });
 
-  const okApp = verifyTotp(user.totpSecret, String(totpCode || ""));
-  const okTg = String(telegramCode || "").replace(/\D/g, "") === reset.telegramCode;
-
-  // On ne dit pas lequel des deux est faux : ça éviterait à un attaquant de
-  // n'avoir qu'un seul facteur à deviner.
-  if (!okApp || !okTg) {
-    return res.status(401).json({
-      error: "Codes incorrects",
-      remaining: Math.max(0, MAX_ATTEMPTS - reset.attempts - 1),
-    });
-  }
-
-  const resetToken = jwt.sign(
-    { purpose: "password-reset", resetId: reset.id, userId: user.id },
-    config.jwtSecret,
-    { expiresIn: "10m" },
-  );
-  res.json({ resetToken });
+  await logEvent("warn", "auth", `Lien de réinitialisation ouvert pour ${user.username}`);
+  res.json({
+    ok: true, defi, moyens: attendus, restants: attendus, chatMasque: m.chatMasque,
+    ttlMinutes: Math.max(1, Math.round((demande.expiresAt.getTime() - Date.now()) / 60_000)),
+  });
 });
 
 router.post("/reset/complete", async (req, res) => {
@@ -251,8 +325,17 @@ router.post("/reset/complete", async (req, res) => {
 
 // Défis de seconde étape, en mémoire, cinq minutes. Un défi n'est pas un
 // jeton de session : il porte `typ: "sfa"` et `middleware/auth` le refuse.
+//
+// Le même défi sert aux DEUX usages — se connecter, et réinitialiser un mot de
+// passe — parce que la question posée est la même : « prouve que c'est bien
+// toi ». Les dupliquer avait produit exactement le défaut qu'on corrige ici :
+// la connexion demandait les moyens réellement inscrits, la réinitialisation
+// en exigeait deux écrits en dur, dont un qui pouvait ne pas être configuré.
+// Un seul chemin de vérification, deux issues.
+type But = "connexion" | "reinit";
 const secondsFacteurs = new Map<string,
-  { userId: string; defi?: string; expire: number; envois?: number }>();
+  { userId: string; but: But; resetId?: string; defi?: string; expire: number; envois?: number;
+    restants?: string[] }>();
 setInterval(() => {
   const t = Date.now();
   for (const [k, v] of secondsFacteurs) if (v.expire < t) secondsFacteurs.delete(k);
@@ -341,7 +424,7 @@ router.post("/login", async (req, res) => {
   const m = await moyensDe(user);
   if (m.moyens.length > 0) {
     const defi = crypto.randomUUID();
-    secondsFacteurs.set(defi, { userId: user.id, expire: Date.now() + 5 * 60_000 });
+    secondsFacteurs.set(defi, { userId: user.id, but: "connexion", expire: Date.now() + 5 * 60_000 });
     await logEvent("info", "auth", `Mot de passe accepté, second facteur demandé : ${username}`);
     return res.json({ etape: "second-facteur", defi, moyens: m.moyens });
   }
@@ -354,6 +437,57 @@ router.post("/login", async (req, res) => {
 //
 // Le défi est à usage unique : accepté ou refusé, il disparaît. Sans cela, une
 // réponse interceptée serait rejouable tant que le défi vit.
+
+/**
+ * Fin de parcours d'un second facteur réussi.
+ *
+ * Le défi est consommé dans tous les cas — accepté ou refusé, il disparaît :
+ * sans cela, une réponse interceptée serait rejouable tant qu'il vit.
+ *
+ * Puis on branche. Pour une connexion, on ouvre la session. Pour une
+ * réinitialisation, on rend un jeton à usage unique adossé à la demande en
+ * base : il ne vaut que dix minutes, et `POST /reset/complete` la marque
+ * consommée. Ce jeton n'ouvre aucune session — il n'autorise qu'à poser un
+ * nouveau mot de passe.
+ */
+async function facteurAccepte(cle: string, user: any, req: any, res: any, moyen: string) {
+  const d = secondsFacteurs.get(cle);
+  if (!d) return res.status(408).json({ error: "Délai dépassé. Recommence." });
+
+  // ── Connexion : UN moyen suffit ────────────────────────────────────────────
+  // Se connecter demande le mot de passe plus une preuve. En exiger deux à
+  // chaque ouverture rendrait l'usage quotidien pénible sans gagner grand-chose :
+  // le mot de passe est déjà le premier facteur.
+  if (d.but !== "reinit") {
+    secondsFacteurs.delete(cle);
+    await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
+    await logEvent("info", "auth", `Login (${moyen}) : ${user.username}`);
+    return reponseDeConnexion(user, req, res);
+  }
+
+  // ── Réinitialisation : TOUS les moyens inscrits ───────────────────────────
+  // Ici il n'y a pas de mot de passe — c'est justement ce qu'on remplace. La
+  // seule chose qui protège le compte, ce sont les moyens inscrits : on les
+  // demande donc tous, un par un. Deux moyens inscrits, deux preuves.
+  const restants = (d.restants || []).filter((m) => m !== moyen);
+  await logEvent("warn", "auth",
+    `Preuve acceptée (${moyen}) pour la réinitialisation de ${user.username}` +
+    (restants.length ? ` — reste : ${restants.join(", ")}` : ""));
+
+  if (restants.length) {
+    d.restants = restants;
+    // Le défi survit : il porte la suite. Chaque preuve, elle, est consommée
+    // par sa propre vérification.
+    return res.json({ etape: "encore", restants });
+  }
+
+  secondsFacteurs.delete(cle);
+  const resetToken = jwt.sign(
+    { purpose: "password-reset", resetId: d.resetId, userId: user.id },
+    config.jwtSecret, { expiresIn: "10m" },
+  );
+  res.json({ resetToken });
+}
 
 async function compteDuDefi(defi: string) {
   const d = secondsFacteurs.get(String(defi || ""));
@@ -369,10 +503,7 @@ router.post("/2fa/application", async (req, res) => {
     await logEvent("warn", "auth", `Second facteur refusé (application) : ${user.username}`);
     return res.status(401).json({ error: "Code refusé." });
   }
-  secondsFacteurs.delete(defi);
-  await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
-  await logEvent("info", "auth", `Login (application) : ${user.username}`);
-  await reponseDeConnexion(user, req, res);
+  await facteurAccepte(String(defi), user, req, res, "application");
 });
 
 // ── Second facteur par Telegram ─────────────────────────────────────────────
@@ -402,8 +533,9 @@ router.post("/2fa/telegram/envoyer", async (req, res) => {
   const chat = await chatTelegramDe(user.id);
   if (!chat) return res.status(400).json({ error: "Aucune discussion Telegram liée à ce compte." });
 
-  const r = await envoyerCodeTelegram(
-    cle, chat, `Connexion demandée pour « ${user.username} ».`);
+  const r = await envoyerCodeTelegram(cle, chat, d.but === "reinit"
+    ? `Réinitialisation du mot de passe demandée pour « ${user.username} ».`
+    : `Connexion demandée pour « ${user.username} ».`);
   if (!r.ok) return res.status(r.attendre ? 429 : 502).json({ error: r.error });
 
   d.envois = (d.envois || 0) + 1;
@@ -429,10 +561,7 @@ router.post("/2fa/telegram", async (req, res) => {
     return res.status(401).json({ error: "Code refusé." });
   }
 
-  secondsFacteurs.delete(cle);
-  await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
-  await logEvent("info", "auth", `Login (telegram) : ${user.username}`);
-  await reponseDeConnexion(user, req, res);
+  await facteurAccepte(cle, user, req, res, "telegram");
 });
 
 router.post("/2fa/trousseau/options", async (req, res) => {
@@ -485,11 +614,8 @@ router.post("/2fa/trousseau", async (req, res) => {
       await logEvent("warn", "auth", `Second facteur refusé (trousseau) : ${user.username}`);
       return res.status(401).json({ error: "Clé refusée." });
     }
-    secondsFacteurs.delete(cle);
     await majCompteur(enregistree.credentialId, v.authenticationInfo.newCounter);
-    await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
-    await logEvent("info", "auth", `Login (trousseau) : ${user.username}`);
-    await reponseDeConnexion(user, req, res);
+    await facteurAccepte(cle, user, req, res, "trousseau");
   } catch (e: any) {
     res.status(401).json({ error: e?.message || "Clé refusée." });
   }
@@ -517,12 +643,18 @@ router.post("/logout", (_req, res) => {
 router.get("/me", authRequired, async (req: any, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
   if (!user) return res.status(401).json({ error: "Session expirée." });
+  // `doitInscrireA2f` doit figurer ici, pas seulement dans la réponse de
+  // connexion : sans lui, un simple rafraîchissement de page ferait sauter le
+  // verrou d'inscription. C'est exactement le défaut qu'avait
+  // `mustChangePassword` avant d'être ajouté à cette route.
+  const m = await moyensDe(user);
   res.json({
     id: user.id,
     username: user.username,
     role: user.role,
     mustChangePassword: user.mustChangePassword,
     totpEnabled: user.totpEnabled,
+    doitInscrireA2f: m.exigee && m.moyens.length === 0,
   });
 });
 

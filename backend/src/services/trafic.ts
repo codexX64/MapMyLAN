@@ -14,9 +14,12 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { executeOnDevice } from "./ssh";
+import { reverse as dnsInverseRappel } from "node:dns";
+import { promisify } from "node:util";
+const dnsInverse = promisify(dnsInverseRappel);
 import { logEvent } from "./logger";
 import { eventBus } from "../ws/realtime";
-import { ficheRegistre, registreActif } from "./registre";
+import { ficheRegistre, registreActif, dansLePrefixe, type FicheReseau } from "./registre";
 
 
 /**
@@ -174,33 +177,57 @@ export async function cibleDeReleve() {
   return utiles.find((d) => d.isMainRouter) || utiles[0] || null;
 }
 
-// ── Résolution des noms, sur l'équipement lui-même ──────────────────────────
+// ── Résolution des noms inverses ────────────────────────────────────────────
+//
+// Le nom inverse (l'enregistrement PTR) est ce qui donne un DOMAINE à une
+// adresse, et un domaine est ce qui donne un logo. C'est donc la source la
+// plus rentable de la page, avant même le registre : « 17.253.37.195 » devient
+// « apple.com », « 18.213.159.67 » devient « amazonaws.com ».
+//
+// Ces lectures se faisaient sur la passerelle, par SSH, quarante adresses par
+// tour. Une passerelle n'apporte pourtant rien ici : un PTR d'adresse publique
+// est le même depuis n'importe où. Le détour coûtait une connexion SSH, une
+// dépendance à `dig` ou `nslookup` sur un micrologiciel qu'on ne choisit pas,
+// et surtout ce plafond de quarante — mille quatre cents destinations
+// demandaient alors trois heures. On résout donc ici, en parallèle, avec le
+// résolveur du conteneur.
 
 const cacheNoms = new Map<string, string>();
 
-async function resoudreNoms(sshId: string, ips: string[]): Promise<void> {
-  const manquants = ips.filter((ip) => !cacheNoms.has(ip)).slice(0, 40);
-  if (manquants.length === 0) return;
-  // Chaque adresse est validée avant d'entrer dans une commande : elles
-  // viennent du réseau, donc d'appareils qui choisissent ce qu'ils déclarent.
-  const sures = manquants.filter(estIP);
-  if (sures.length === 0) return;
+/** Nombre d'adresses résolues par tour et parallélisme. Le résolveur local
+ *  encaisse sans difficulté ; c'est le réseau qui décide, pas nous. */
+const NOMS_PAR_TOUR = 400;
+const NOMS_EN_PARALLELE = 24;
 
-  const liste = sures.join(" ");
-  const cmd = `for i in ${liste}; do n=$(dig +short +time=1 +tries=1 -x $i 2>/dev/null | head -n1); ` +
-              `[ -z "$n" ] && n=$(nslookup $i 2>/dev/null | sed -n 's/.*name = //p' | head -n1); ` +
-              `[ -z "$n" ] && n=$(getent hosts $i 2>/dev/null | awk '{print $2}' | head -n1); ` +
-              `echo "$i $n"; done`;
+/** Un PTR, ou la chaîne vide si l'adresse n'en a pas. Jamais d'exception. */
+async function nomInverse(ip: string): Promise<string> {
   try {
-    const r = await executeOnDevice(sshId, cmd);
-    for (const ligne of String(r.stdout || "").split("\n")) {
-      const [ip, nom] = ligne.trim().split(/\s+/);
-      if (!ip) continue;
-      cacheNoms.set(ip, (nom || "").replace(/\.$/, ""));
-    }
+    const noms = await Promise.race([
+      dnsInverse(ip),
+      new Promise<string[]>((r) => setTimeout(() => r([]), 2500)),
+    ]);
+    return (noms[0] || "").replace(/\.$/, "");
   } catch {
-    for (const ip of sures) cacheNoms.set(ip, "");
+    // « Pas de PTR » est une réponse, pas une panne : on la retient comme
+    // telle pour ne pas redemander à chaque relevé.
+    return "";
   }
+}
+
+async function resoudreNoms(_sshId: string, ips: string[]): Promise<void> {
+  const manquants = ips.filter((ip) => !cacheNoms.has(ip) && estIP(ip)).slice(0, NOMS_PAR_TOUR);
+  if (!manquants.length) return;
+
+  let i = 0;
+  const ouvriers = Array.from({ length: Math.min(NOMS_EN_PARALLELE, manquants.length) }, async () => {
+    for (;;) {
+      const k = i++;
+      if (k >= manquants.length) return;
+      const ip = manquants[k];
+      cacheNoms.set(ip, await nomInverse(ip));
+    }
+  });
+  await Promise.all(ouvriers);
 }
 
 /** Le domaine enregistrable d'un nom d'hôte, sans la table publique des suffixes. */
@@ -285,6 +312,37 @@ function estPanneDeLiaison(message: string): boolean {
 
 let commandeRetenue: string | undefined;
 
+/**
+ * Applique une fiche de registre à tout ce qui dort déjà en base dans le même
+ * bloc et n'a pas de titulaire.
+ *
+ * Sans ça, une destination écrite avant que le registre ne réponde reste un
+ * point d'interrogation pour toujours : elle n'est réinterrogée que si du
+ * trafic repart vers elle. Le registre a déclaré le bloc entier — l'appliquer
+ * au bloc entier n'ajoute aucune supposition.
+ */
+async function rattraperLePasse(f: FicheReseau): Promise<void> {
+  if (f.debut === undefined || f.fin === undefined) return;
+  const nom = f.organisation || f.reseau;
+  if (!nom) return;
+  const enTexte = (n: number) =>
+    [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
+  try {
+    await prisma.$executeRawUnsafe(
+      `UPDATE "TrafficFlow"
+          SET "operator" = COALESCE("operator", $1),
+              "country"  = COALESCE("country", $2),
+              "domain"   = COALESCE("domain", $3),
+              "logo"     = COALESCE("logo", $3)
+        WHERE "dstIp" ~ '^[0-9.]+$'
+          AND "dstIp"::inet >= $4::inet
+          AND "dstIp"::inet <= $5::inet
+          AND ("operator" IS NULL OR "operator" = '')`,
+      nom, f.pays || null, f.domaine || null, enTexte(f.debut), enTexte(f.fin),
+    );
+  } catch { /* le rattrapage est un confort, jamais un bloquant */ }
+}
+
 export async function collecter(): Promise<EtatCollecte> {
   const cible = await cibleDeReleve();
   if (!cible) { etat = { erreur: "Aucun équipement interrogeable." }; return etat; }
@@ -357,9 +415,24 @@ export async function collecter(): Promise<EtatCollecte> {
       )
     : [];
   const dejaNommees = new Set(connues.map((c) => c.dstIp));
-  const aNommer = destinations.filter((ip) => !dejaNommees.has(ip));
+  // Les plus gros échanges d'abord.
+  //
+  // Nommer se fait par tours successifs : quand mille quatre cents
+  // destinations attendent, l'ordre décide de ce qu'on voit à l'écran au bout
+  // de cinq minutes. Une destination qui a échangé cinq cents gigaoctets est
+  // en haut de la liste de l'utilisateur ; c'est elle qu'il faut nommer en
+  // premier, pas une adresse contactée une fois pour deux kilooctets.
+  const volume = new Map<string, number>();
+  for (const f of flux) volume.set(f.dst, (volume.get(f.dst) || 0) + (f.octets || 0));
+  const aNommer = destinations
+    .filter((ip) => !dejaNommees.has(ip))
+    .sort((a, b) => (volume.get(b) || 0) - (volume.get(a) || 0));
 
-  await resoudreNoms(cible.id, aNommer);
+  // Toutes les destinations du relevé, pas seulement celles qui n'ont pas de
+  // titulaire : une adresse nommée par le registre peut n'avoir toujours pas
+  // de DOMAINE, et c'est le domaine qui porte le logo. Le cache fait que les
+  // adresses déjà vues ne coûtent rien.
+  await resoudreNoms(cible.id, destinations);
 
   // Le registre est interrogé pour **toutes** les destinations nouvelles, et
   // plus seulement pour celles sans nom inverse. Un nom inverse donne rarement
@@ -368,9 +441,31 @@ export async function collecter(): Promise<EtatCollecte> {
   // sont mises en cache une semaine : le coût est payé une fois par préfixe.
   const fiches = new Map<string, Awaited<ReturnType<typeof ficheRegistre>>>();
   if (aNommer.length && await registreActif()) {
-    for (let i = 0; i < aNommer.length; i += 8) {
-      const lot = await Promise.all(aNommer.slice(i, i + 8).map(ficheRegistre));
-      for (const f of lot) fiches.set(f.ip, f);
+    // Une par une, et pas huit à la fois.
+    //
+    // Le registre limite les rafales : en paralléliser huit revenait à se
+    // faire répondre 429, donc à ne rien apprendre — c'est ce qui laissait des
+    // centaines de destinations en point d'interrogation. Le service espace
+    // désormais ses appels lui-même ; ici on se contente de ne pas bloquer le
+    // relevé : ce qui n'a pas pu être nommé dans le temps imparti le sera au
+    // tour suivant, et les blocs déjà connus ne coûtent rien.
+    // Une minute par tour, et un tour toutes les cinq minutes : le relevé n'est
+    // jamais retardé, et la liste se remplit quatre fois plus vite qu'avec les
+    // vingt-cinq secondes précédentes.
+    const echeance = Date.now() + 60_000;
+    for (const ip of aNommer) {
+      const f = await ficheRegistre(ip);
+      fiches.set(f.ip, f);
+      // Une fiche décrit un bloc entier : toutes les autres destinations du
+      // même bloc sont nommées sans rien redemander.
+      if (f.organisation || f.reseau) {
+        for (const autre of aNommer) {
+          if (fiches.has(autre) || !dansLePrefixe(f, autre)) continue;
+          fiches.set(autre, { ...f, ip: autre });
+        }
+        await rattraperLePasse(f);
+      }
+      if (Date.now() > echeance) break;
     }
   }
 

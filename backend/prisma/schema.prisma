@@ -28,16 +28,32 @@ model User {
   // Verrouillage temporaire après une série d'échecs.
   failedLogins Int       @default(0)
   lockedUntil  DateTime?
+  // Adresse propre au compte, pour le lien de réinitialisation. Vide, c'est
+  // l'adresse commune du canal courrier qui sert : une installation à un seul
+  // administrateur n'a rien à renseigner.
+  email        String?
 }
 
-// Demande de réinitialisation en cours. Deux facteurs indépendants sont exigés :
-// le code de l'application et celui envoyé sur Telegram. Expire vite, essais
-// plafonnés.
+// Demande de réinitialisation en cours.
+//
+// La preuve exigée est celle que le compte a réellement inscrite — clé
+// d'accès, application, Telegram — vérifiée par les mêmes routes que la
+// connexion. Expire vite, essais plafonnés, consommée à l'usage.
+//
+// `lienHash` porte l'empreinte du secret envoyé par courrier, jamais le secret
+// lui-même : une base lue ne donne aucun lien utilisable. Le lien ne dispense
+// pas de la preuve, il ouvre seulement la porte.
 model PasswordReset {
   id            String   @id @default(cuid())
   userId        String
-  telegramCode  String
+  // Héritage de l'ancien flux à deux codes écrits en dur. Plus alimenté.
+  telegramCode  String?
   telegramSent  Boolean  @default(false)
+  // Lien envoyé par courrier : empreinte SHA-256 du secret, et l'adresse
+  // servie — pour pouvoir dire où il est parti sans le redemander.
+  lienHash      String?  @unique
+  lienEnvoyeA   String?
+  lienUtiliseLe DateTime?
   attempts      Int      @default(0)
   consumed      Boolean  @default(false)
   expiresAt     DateTime
