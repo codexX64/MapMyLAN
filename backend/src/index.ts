@@ -18,6 +18,7 @@ import routerRoute from "./routes/router";
 import netRoute from "./routes/net";
 import trafficRoute from "./routes/traffic";
 import usersRoute from "./routes/users";
+import integrationsRoute from "./routes/integrations";
 import mfaRoute from "./routes/mfa";
 import mailRoute from "./routes/mail";
 import { dedupeDevices } from "./services/dedupe";
@@ -119,6 +120,7 @@ async function main() {
   app.use("/api/net", netRoute);
   app.use("/api/traffic", trafficRoute);
   app.use("/api/users", usersRoute);
+  app.use("/api/integrations", integrationsRoute);
   app.use("/api/mfa", mfaRoute);
   app.use("/api/mail", mailRoute);
   app.use("/api", systemRoute);

@@ -469,3 +469,28 @@ model UserSecurity {
   /// Discussion Telegram à laquelle envoyer le code, si ce facteur est choisi.
   telegramChatId String?
 }
+
+/// Jeton d'intégration : ce qui permet à un programme tiers d'interroger
+/// l'API sans être un compte.
+///
+/// `hash` porte l'empreinte SHA-256 du jeton, jamais le jeton. `prefix` en
+/// reprend les huit premiers caractères : de quoi reconnaître une ligne dans
+/// la liste sans rien donner d'utilisable. Révoquer n'efface pas la ligne —
+/// on garde la trace de ce qui a existé et de sa dernière utilisation.
+model IntegrationToken {
+  id          String    @id @default(cuid())
+  /// Nom donné à la création, pour savoir quel programme s'en sert.
+  name        String
+  prefix      String
+  hash        String    @unique
+  /// « viewer » ou « operator ». Jamais « admin » : la route de création le
+  /// refuse, et le middleware ne fabrique pas ce rôle.
+  role        String
+  createdById String?
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+
+  @@index([revokedAt])
+}

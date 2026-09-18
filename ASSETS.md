@@ -12,6 +12,7 @@ _Dernière révision : 2026-08-18 (audit de sécurité)._
 |---------|--------|
 | Frontend | SPA statique servie par nginx (port publié `8090:80`). En-têtes de sécurité + CSP posés par nginx. |
 | API | `/api/*`, proxifiée par nginx vers le backend `:4000`. Toutes les routes sauf `/api/health` et `/api/auth/login` exigent une session. |
+| API — jetons d'intégration | `Authorization: Bearer mml_…`, sans cookie donc hors CSRF. Rôle `viewer` ou `operator`, jamais `admin`. 120 requêtes/min par jeton. |
 | Temps réel | WebSocket `/ws` (socket.io), authentifié par le cookie de session (vérif. signature + version de jeton). |
 | Base de données | PostgreSQL, publié sur `127.0.0.1:5432` uniquement. |
 | Cache | Redis, publié sur `127.0.0.1:6379` uniquement. |
@@ -22,6 +23,7 @@ _Dernière révision : 2026-08-18 (audit de sécurité)._
 | Montage | Auth | Rôle requis |
 |---------|------|-------------|
 | `/auth` (`login`, `logout`, `change-password`) | publique / session | — |
+| `/integrations` | session | `admin` ; **fermée aux jetons d'intégration eux-mêmes** |
 | `/devices` | session | lecture : tout compte ; écriture : `admin`+`operator` |
 | `/vlans` | session | lecture : tout compte ; écriture : `admin`+`operator` |
 | `/ssh` | session | `admin` (création/suppression), `admin`+`operator` (exec) |
@@ -40,6 +42,7 @@ _Dernière révision : 2026-08-18 (audit de sécurité)._
 | `SshDevice` | hôte/port/utilisateur d'équipement + secrets **chiffrés** (`passwordEnc`, `privateKeyEnc`, `passphraseEnc`, AES-256-GCM) | **Critique** (accès routeur) |
 | `Device`, `Interface`, `Port`, `CveMatch`, `DeviceHistory` | inventaire réseau (IP, MAC, noms, CVE) | Moyenne (données personnelles au sens RGPD : cartographie d'un réseau) |
 | `TopologyLink`, `Zone`, `Vlan` | topologie et segmentation | Faible |
+| `IntegrationToken` | jetons d'API : nom, préfixe affichable, **empreinte SHA-256** du jeton, rôle, révocation | **Élevée** (accès API durable ; le jeton lui-même n'est jamais stocké) |
 | `Alert`, `LogEntry`, `ScanRun`, `HostMetric` | événements, journaux, métriques | Faible→Moyenne (les journaux ne contiennent pas de secret) |
 | `Setting`, `NotificationConfig` | réglages ; `NotificationConfig` porte des clés de notification (token Telegram, SMTP, Twilio) | **Élevée** (clés tierces) |
 | `BotCommand`, `NotificationCommand`, `SecurityRule` | automatisations définies par l'admin (dont `exec_ssh`) | Élevée (peuvent déclencher des actions) |

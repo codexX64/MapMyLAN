@@ -2,6 +2,10 @@ import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config";
 import { prisma } from "../db";
+import { logEvent } from "../services/logger";
+import {
+  estJetonIntegration, porteeRefusee, verifierJeton, noterUsage, debitDepasse,
+} from "../services/integrations";
 
 export interface AuthedRequest extends Request {
   user?: { id: string; username: string; role: string };
@@ -84,6 +88,11 @@ export async function authRequired(req: AuthedRequest, res: Response, next: Next
   const token = extraireJeton(req);
   if (!token) return res.status(401).json({ error: "Missing token" });
 
+  // Un jeton d'intégration se reconnaît à son préfixe et ne suit pas du tout le
+  // même chemin : il n'est pas signé, il est cherché en base par son empreinte.
+  // Le chemin JWT ci-dessous reste exactement ce qu'il était.
+  if (estJetonIntegration(token)) return authIntegration(req, res, next, token);
+
   let payload: any;
   try {
     payload = jwt.verify(token, config.jwtSecret, { algorithms: ["HS256"] });
@@ -111,6 +120,65 @@ export async function authRequired(req: AuthedRequest, res: Response, next: Next
   } catch {
     return res.status(503).json({ error: "Vérification impossible." });
   }
+  next();
+}
+
+/**
+ * Chemin d'authentification d'un jeton d'intégration.
+ *
+ * Trois refus successifs, dans cet ordre : le débit, puis l'existence du
+ * jeton, puis la portée. Compter le débit avant de lire la base est
+ * volontaire — sans cela, un jeton inconnu ferait travailler la base autant
+ * qu'il le voudrait.
+ *
+ * Le jeton n'est jamais recopié dans le journal, ni en clair ni en empreinte :
+ * seul le motif du refus y figure.
+ */
+async function authIntegration(
+  req: AuthedRequest, res: Response, next: NextFunction, token: string,
+) {
+  const url = req.originalUrl || req.url || "/";
+  const chemin = url.split("?")[0];
+  const ip = req.ip || "inconnue";
+
+  if (debitDepasse(`ip:${ip}`)) {
+    return res.status(429).json({ error: "Trop de requêtes" });
+  }
+
+  let verdict;
+  try {
+    verdict = await verifierJeton(token);
+  } catch {
+    return res.status(503).json({ error: "Vérification impossible." });
+  }
+
+  if (!verdict.ok) {
+    await logEvent("warn", "integrations",
+      `Jeton d'intégration refusé (${verdict.raison})`, { chemin, methode: req.method });
+    return res.status(401).json({ error: "Invalid token" });
+  }
+
+  if (debitDepasse(`jeton:${verdict.jeton.id}`)) {
+    return res.status(429).json({ error: "Trop de requêtes" });
+  }
+
+  const ferme = porteeRefusee(req.method, url);
+  if (ferme) {
+    await logEvent("warn", "integrations",
+      `Jeton « ${verdict.jeton.name} » écarté de ${ferme}`, { chemin, methode: req.method });
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  // L'identité porte le préfixe « integration: » : ce qui la lit ensuite —
+  // journal, contrôle de rôle, pistes d'audit — ne peut pas la confondre avec
+  // un compte, et aucun identifiant de compte ne peut la contrefaire (les
+  // identifiants refusent le deux-points).
+  req.user = {
+    id: `integration:${verdict.jeton.id}`,
+    username: `integration:${verdict.jeton.name}`,
+    role: verdict.jeton.role,
+  };
+  noterUsage(verdict.jeton.id);
   next();
 }
 
