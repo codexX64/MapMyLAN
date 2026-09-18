@@ -47,9 +47,9 @@ Statut : **FIXED** = corrigé dans le code livré.
 | H-03 | HIGH | ⚠️ PARTIEL | `middleware/auth.ts`, `middleware/csrf.ts`, `routes/auth.ts`, `ws/realtime.ts`, `frontend/src/api/*`, `stores/app.ts` | Jeton JWT en `localStorage` → vol par XSS. | **Cookie `HttpOnly; SameSite=Strict`** (`Secure` sous HTTPS) + **anti-CSRF double soumission** ; WS authentifié par le cookie avec vérification de version de jeton ; route `/auth/logout` qui efface les cookies. **La copie en `localStorage` subsiste** : voir section 7. |
 | H-04 | HIGH | ✅ FIXED | `frontend/nginx.conf` | Aucun en-tête de sécurité sur le document servi. | CSP, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy (+ HSTS prêt pour HTTPS) ; `X-Forwarded-For` transmis. |
 | H-05 | HIGH | ✅ FIXED | `services/defense.ts` | Cible de bannissement non validée avant construction de commande. | `validerCible()` appelée dans `act()`. |
-| S-01 | HIGH | ✅ FIXED | `extensions/synapse.js` *(homelab)* | Spool `/var/tmp` partagé en 0644 : faux événements rejoués avec le token, lecture de l'inventaire. | Spool privé (`mkdir 0700`, fichiers `0600`), refus non-propriétaire/symlink, **vérif. de hash** avant rejeu. |
+| S-01 | HIGH | ✅ FIXED | extension locale *(hors dépôt)* | Spool `/var/tmp` partagé en 0644 : faux événements rejoués avec le token, lecture de l'inventaire. | Spool privé (`mkdir 0700`, fichiers `0600`), refus non-propriétaire/symlink, **vérif. de hash** avant rejeu. |
 | M-01 | MEDIUM | ✅ FIXED | `index.ts` | `CORS_ORIGIN=*` avec `credentials:true`. | `credentials` désactivé si origine `*` + avertissement au démarrage. |
-| M-02 | MEDIUM | ✅ FIXED | `extensions/synapse.js` *(homelab)* | Token Bearer en clair vers URL non validée. | `urlSynapseSure()` : HTTPS exigé sauf hôte interne ; token non attaché sinon. |
+| M-02 | MEDIUM | ✅ FIXED | extension locale *(hors dépôt)* | Token Bearer en clair vers URL non validée. | Garde d'URL : HTTPS exigé sauf hôte interne ; jeton non attaché sinon. |
 | M-03 | MEDIUM | ✅ FIXED | `src/ticket.ts` | Injection d'en-tête courriel via nom d'hôte. | `S()` retire caractères de contrôle et marques invisibles. |
 | M-04 | MEDIUM | ✅ FIXED | `src/ticket.ts` | SSRF + fuite de clé via URL de billetterie arbitraire. | `urlBilletterieSure()` : HTTPS exigé sauf RFC1918 ; **169.254/16 exclu** ; identifiants d'URL refusés. |
 | M-05 | MEDIUM | ✅ FIXED | `src/extensions.ts` | Chargeur `require()` exécutant tout fichier du dossier. | Refus des fichiers inscriptibles groupe/autres, symlinks, non-possédés. |
@@ -57,7 +57,7 @@ Statut : **FIXED** = corrigé dans le code livré.
 | S-06 | LOW | ✅ FIXED | `src/ticket.ts` | Override d'urgence pouvant forcer P1. | Override limité aux déclassements. |
 | F-07 | LOW | ✅ FIXED | `frontend/src/lib/icons.tsx` | Sink XSS latent dans `title` de SVG. | `escapeXml(title)`. |
 | INFRA-XFF | LOW | ✅ FIXED | `frontend/nginx.conf` | `X-Forwarded-For` non transmis. | En-tête ajouté (`/api/` et `/ws/`). |
-| S-07 | LOW | ✅ FIXED | `extensions/synapse.js` *(homelab)* | Domaine interne cité dans un commentaire. | Commentaire reformulé sans nom réel. |
+| S-07 | LOW | ✅ FIXED | extension locale *(hors dépôt)* | Domaine interne cité dans un commentaire. | Commentaire reformulé sans nom réel. |
 | S-08 | LOW | ✅ FIXED | `src/WorldTrafficView.tsx` | Favicons chargés depuis Google → fuite de domaines + IP. | Remplacé par une pastille locale (initiale, teinte déterministe) — **aucun appel réseau**. |
 | S-09 | LOW | ✅ FIXED | `src/detourage.ts` | Bombe de décompression image → DoS onglet. | Plafond de dimensions (10 000 px/côté, 40 Mpx) avant allocation. |
 
@@ -70,7 +70,7 @@ Une catégorie **PASSE** si tous ses contrôles CRITICAL+HIGH passent.
 | Catégorie | Résultat | Contrôles déterminants |
 |-----------|:--------:|------------------------|
 | **A01 – Broken Access Control** | ✅ PASS | C-01 corrigé ; session en cookie `HttpOnly` (H-03, partiel) ; `authRequired`/`requireRole` sur tout le reste. |
-| **A02 – Cryptographic Failures** | ✅ PASS | Argon2id+poivre, AES-256-GCM, `timingSafeEqual` ; token synapse protégé (M-02). |
+| **A02 – Cryptographic Failures** | ✅ PASS | Argon2id+poivre, AES-256-GCM, `timingSafeEqual` ; jeton d'extension protégé (M-02). |
 | **A03 – Software Supply Chain** | ✅ PASS | Chargeur d'extensions durci (M-05) ; builds reproductibles (`npm ci`, SEC-DEP-001) ; SBOM CycloneDX et gitleaks en CI. |
 | **A04 – Insecure Design** | ✅ PASS | « Refus par défaut » (`valider.ts`), garde de commande, verrouillage de compte, anti-CSRF. |
 | **A05 – Injection** | ✅ PASS | C-02, H-05, M-03 corrigés ; requêtes DB paramétrées (Prisma). |
@@ -98,7 +98,7 @@ Une catégorie **PASSE** si tous ses contrôles CRITICAL+HIGH passent.
 
 Le code est corrigé ; ces gestes relèvent de la mise en production, pas d'une faille ouverte :
 
-- **Rotation des secrets** si `admin/admin` a pu être en service : mot de passe admin, `JWT_SECRET` (invalide les sessions), et `SYNAPSE_TOKEN` si l'édition homelab a tourné.
+- **Rotation des secrets** si `admin/admin` a pu être en service : mot de passe admin, `JWT_SECRET` (invalide les sessions), et le jeton de toute extension d'ingestion qui aurait tourné.
 - **Activer HTTPS** puis décommenter la ligne `Strict-Transport-Security` de `nginx.conf`. Sous HTTPS, le cookie de session devient automatiquement `Secure`.
 - **Fixer `CORS_ORIGIN`** sur l'URL exacte du frontend en production (le défaut `*` est signalé au démarrage).
 - **Premier passage CI** : lancer le workflow une fois pour confirmer que `npm audit` est vert sur les versions actuellement épinglées ; activer Dependabot pour les mises à jour.

@@ -18,7 +18,7 @@ export const config = {
   hostProc: process.env.HOST_PROC || "/proc",
   hostSys: process.env.HOST_SYS || "/sys",
   scan: {
-    subnet: process.env.SCAN_SUBNET || "192.168.1.0/24",
+    subnet: process.env.SCAN_SUBNET || "192.0.2.0/24",
     interval: parseInt(process.env.SCAN_INTERVAL || "300"),
     iface: process.env.SCAN_INTERFACE || "",
   },

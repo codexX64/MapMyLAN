@@ -52,7 +52,7 @@ _Dernière révision : 2026-08-18 (audit de sécurité)._
 | SMTP (nodemailer) | courriels d'alerte | identifiants SMTP | `NotificationConfig` |
 | Twilio | SMS d'alerte | SID + auth token | `NotificationConfig` |
 | Équipements réseau (SSH/UniFi) | scan, défense, provisioning | identifiants chiffrés | `SshDevice` (`*Enc`, AES-256-GCM) |
-| SYNAPSE (édition homelab uniquement) | envoi d'événements internes | `SYNAPSE_TOKEN` (Bearer) | variable d'environnement ; URL restreinte au réseau interne |
+| Extension d'ingestion *(hors dépôt)* | envoi d'événements vers un collecteur propre à l'installation | jeton porteur, nommé par l'extension | variable d'environnement ; URL restreinte au réseau interne |
 
 Aucune clé tierce n'est exposée au navigateur. Aucune variable `VITE_*` secrète n'est compilée dans le bundle.
 
@@ -65,7 +65,6 @@ Aucune clé tierce n'est exposée au navigateur. Aucune variable `VITE_*` secrè
 | `PASSWORD_PEPPER` | poivre HMAC des mots de passe | environnement (hors base) | change l'empreinte de tous les mots de passe |
 | `POSTGRES_PASSWORD` | accès base | environnement | — |
 | `DEFAULT_ADMIN_PASSWORD` | reprise en main du compte admin | environnement (vide en fonctionnement normal) | à revider après usage |
-| `SYNAPSE_TOKEN` | Bearer d'ingestion (homelab) | environnement | par service |
 
 Tous vivent dans l'environnement / un gestionnaire de secrets, jamais dans le dépôt.
 `.gitignore` exclut `.env`, `.env.*`, `*.pem`, `*.key`, dumps et journaux.

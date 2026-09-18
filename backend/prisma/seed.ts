@@ -46,7 +46,7 @@ async function main() {
   await prisma.setting.upsert({
     where: { key: "scan.subnet" },
     update: {},
-    create: { key: "scan.subnet", value: process.env.SCAN_SUBNET || "192.168.1.0/24" },
+    create: { key: "scan.subnet", value: process.env.SCAN_SUBNET || "192.0.2.0/24" },
   });
   await prisma.setting.upsert({
     where: { key: "scan.interval" },
