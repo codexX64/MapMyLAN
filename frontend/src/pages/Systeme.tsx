@@ -8,6 +8,7 @@ import { Icon } from "../lib/icons";
 import { ScanRangesPanel } from "../components/scan/ScanRangesPanel";
 import { TotpPanel } from "../components/security/TotpPanel";
 import { MailboxPanel } from "../components/mail/MailboxPanel";
+import { IntegrationsPanel } from "../components/security/IntegrationsPanel";
 import {
   Page, Card, Pad, Btn, Chip, Toggle, WhoCell, Empty, Note, Field, Lbl,
 } from "../components/ui/Primitives";
@@ -56,6 +57,9 @@ export function SettingsPage({ t }: { t?: any }) {
       <ScanRangesPanel t={t}/>
       <TotpPanel t={t}/>
       <MailboxPanel t={t}/>
+      {/* Ne s'affiche que pour un administrateur : la liste des jetons lui est
+          réservée, et le panneau se retire de lui-même si elle est refusée. */}
+      <IntegrationsPanel t={t}/>
 
       <Bloc icon="refresh" titre="Cadence du balayage"
         texte="À quel rythme le parc est parcouru, et sur quel sous-réseau par défaut.">
