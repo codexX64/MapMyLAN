@@ -22,10 +22,10 @@ _Dernière révision : 2026-08-18 (audit de sécurité)._
 | Montage | Auth | Rôle requis |
 |---------|------|-------------|
 | `/auth` (`login`, `logout`, `change-password`) | publique / session | — |
-| `/devices` | session | mutations ouvertes aux utilisateurs authentifiés |
-| `/vlans` | session | — |
+| `/devices` | session | lecture : tout compte ; écriture : `admin`+`operator` |
+| `/vlans` | session | lecture : tout compte ; écriture : `admin`+`operator` |
 | `/ssh` | session | `admin` (création/suppression), `admin`+`operator` (exec) |
-| `/topology` | session | — |
+| `/topology` | session | lecture : tout compte ; écriture : `admin`+`operator` |
 | `/host` | session | — |
 | `/commands` | session | `admin` (création/modif/suppression/déclenchement) |
 | `/bot-commands` | session | `admin` (création/modif/suppression/exécution) |

@@ -5,13 +5,22 @@ import { dedupeDevices } from "../services/dedupe";
 import { fullScan, fullScanAll, plagesActives, pingHost, nmapDeepScan } from "../services/scanner";
 import { scoreDevice, scoreAllDevices, globalHealthScore } from "../services/scoring";
 import { banDevice, quarantineDevice, unbanDevice } from "../services/defense";
-import { authRequired } from "../middleware/auth";
+import { authRequired, requireRole } from "../middleware/auth";
 import { mainRouter } from "../adapters";
 import { plageUtilisable, verifierAdresse } from "../services/vlanReleve";
 import { logEvent } from "../services/logger";
 
 const router = Router();
 router.use(authRequired);
+// Lecture ouverte à tout compte authentifié, écriture réservée aux rôles qui
+// pilotent le réseau. Un `viewer` pouvait bannir un appareil : ce n'est plus le
+// cas. La garde est posée sur le routeur entier plutôt que route par route —
+// une route ajoutée plus tard est protégée d'office, au lieu de l'être si on y
+// pense.
+const ecriture = requireRole("admin", "operator");
+router.use((req, res, next) =>
+  req.method === "GET" || req.method === "HEAD" ? next() : ecriture(req, res, next));
+
 
 router.get("/", async (_req, res) => {
   const devices = await prisma.device.findMany({

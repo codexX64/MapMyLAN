@@ -54,7 +54,7 @@ router.get("/alerts", async (req, res) => {
   res.json(await prisma.alert.findMany({ orderBy: { createdAt: "desc" }, take: limit }));
 });
 
-router.post("/alerts/:id/ack", async (req, res) => {
+router.post("/alerts/:id/ack", requireRole("admin", "operator"), async (req, res) => {
   await prisma.alert.update({ where: { id: req.params.id }, data: { acknowledged: true } });
   res.json({ ok: true });
 });

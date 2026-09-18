@@ -1,12 +1,21 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
-import { authRequired } from "../middleware/auth";
+import { authRequired, requireRole } from "../middleware/auth";
 import { provisionVlanOnRouter, deprovisionVlanOnRouter } from "../services/vlanProvision";
 import { relever } from "../services/vlanReleve";
 
 const router = Router();
 router.use(authRequired);
+// Lecture ouverte à tout compte authentifié, écriture réservée aux rôles qui
+// pilotent le réseau. Un `viewer` pouvait bannir un appareil : ce n'est plus le
+// cas. La garde est posée sur le routeur entier plutôt que route par route —
+// une route ajoutée plus tard est protégée d'office, au lieu de l'être si on y
+// pense.
+const ecriture = requireRole("admin", "operator");
+router.use((req, res, next) =>
+  req.method === "GET" || req.method === "HEAD" ? next() : ecriture(req, res, next));
+
 
 router.get("/", async (_req, res) => {
   // Par numéro croissant : 1, 10, 20, 30. C'est l'ordre dans lequel on les
