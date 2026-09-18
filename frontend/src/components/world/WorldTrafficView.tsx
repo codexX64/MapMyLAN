@@ -19,14 +19,29 @@ import { Icon, deviceIcon } from "../../lib/icons";
 import { useT } from "../../lib/i18n";
 import { terre, traits, vec, type Point3 } from "../../lib/geo-globe";
 import {
-  etatTrafic, lireFlux, estPrivee,
+  etatTrafic, lireFlux, lireAggregats, estPrivee,
   type Connexion, type EtatTrafic,
 } from "../../lib/trafic";
 
-// Paliers du curseur de rétention : libellé, nombre de liaisons gardées.
+// Paliers du curseur : libellé, et durée de la fenêtre en millisecondes.
+//
+// Le curseur réglait le nombre d'arcs dessinés sur le globe, et s'appelait
+// « Rétention » — le même mot que la durée de conservation du serveur, en bas
+// du panneau. Deux choses différentes sous un seul nom, dont aucune ne
+// répondait à la question « combien de connexions sur la période que je
+// regarde ? ». C'est maintenant une vraie fenêtre de temps : le journal, les
+// quatre compteurs et les deux classements décrivent tous cette période.
 const PALIERS: [string, number][] = [
-  ["court", 30], ["moyen", 90], ["long", 200], ["très long", 420], ["tout", 1200],
+  ["1 h", 3_600_000],
+  ["24 h", 86_400_000],
+  ["7 j", 604_800_000],
+  ["30 j", 2_592_000_000],
+  ["tout", 0],
 ];
+
+/** Nombre d'arcs gardés sur le globe. Une constante : c'est une question de
+ *  lisibilité du dessin, pas un réglage de période. */
+const ARCS_GARDES = 300;
 
 // Cadence du relevé. En cas d'échec on espace, au lieu d'insister : une
 // passerelle qui refuse la connexion la refusera encore trois secondes plus
@@ -218,7 +233,20 @@ export function WorldTrafficView({ t }: { t?: any }) {
   const dernierRef = useRef(0);          // horodatage du flux le plus récent connu
   const plusVieuxRef = useRef(0);        // horodatage du plus ancien déjà chargé
   const [evenements, setEvenements] = useState<Evenement[]>([]);
+  // Fenêtre regardée : 7 jours par défaut.
   const [retention, setRetention] = useState(2);
+  const fenetre = PALIERS[retention][1];
+  /**
+   * La même valeur, dans une référence.
+   *
+   * La boucle de scrutation est installée une seule fois, au montage : elle
+   * emprisonne donc la fenêtre du premier rendu. Sans cette référence, changer
+   * de fenêtre changeait l'étiquette et rien d'autre — le serveur continuait
+   * d'être interrogé sur les sept jours d'origine, et les compteurs ne
+   * bougeaient pas d'un chiffre.
+   */
+  const fenetreRef = useRef(fenetre);
+  const depuis = fenetre ? Date.now() - fenetre : 0;
   const [origine, setOrigine] = useState({ lat: 48.86, lon: 2.35, nom: "" });
   const [age, setAge] = useState(0);
 
@@ -266,10 +294,38 @@ export function WorldTrafficView({ t }: { t?: any }) {
   const relancerRef = useRef<() => void>(() => {});
   const [prochain, setProchain] = useState(0);
   const [nouveaux, setNouveaux] = useState<Connexion[]>([]);
+  /**
+   * Les totaux du serveur, sur TOUT l'historique conservé.
+   *
+   * Les quatre chiffres du bandeau et les deux classements de droite se
+   * calculaient sur les lignes chargées par le navigateur : ils changeaient
+   * donc quand on descendait la liste. Ils viennent maintenant du serveur.
+   */
+  const [totaux, setTotaux] = useState<{
+    connexions: number;
+    destinations: Connexion[];
+    appareils: { src: string; octets: number }[];
+  }>({ connexions: 0, destinations: [], appareils: [] });
+  const totauxPourRef = useRef("");
   /** Le flux ouvert en détail, et si sa fiche a été détachée du panneau. */
   const [detail, setDetail] = useState<Connexion | null>(null);
   const [detache, setDetache] = useState(false);
   const [posFiche, setPosFiche] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Changer de fenêtre repart de zéro : le journal, les compteurs et les
+  // classements doivent tous décrire la même période, pas un mélange. Et on
+  // relance tout de suite, sans attendre le prochain tour de scrutation.
+  const rafraichirRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    fenetreRef.current = fenetre;
+    dernierRef.current = 0;
+    plusVieuxRef.current = 0;
+    vuesRef.current.clear();
+    setEvenements([]);
+    setFinHistorique(false);
+    totauxPourRef.current = "";
+    rafraichirRef.current();
+  }, [fenetre]);
 
   const enEvenement = (c: Connexion): Evenement => {
     const app = parIpRef.current.get(c.src);
@@ -285,7 +341,10 @@ export function WorldTrafficView({ t }: { t?: any }) {
     if (chargeEncore || finHistorique || !plusVieuxRef.current) return;
     setChargeEncore(true);
     try {
-      const anciens = await lireFlux({ limite: 200, avant: plusVieuxRef.current });
+      const borne = fenetre ? Date.now() - fenetre : 0;
+      if (borne && plusVieuxRef.current <= borne) { setFinHistorique(true); return; }
+      const anciens = (await lireFlux({ limite: 500, avant: plusVieuxRef.current }))
+        .filter((c) => !borne || (c.dernier || 0) > borne);
       if (anciens.length === 0) { setFinHistorique(true); return; }
       plusVieuxRef.current = Math.min(...anciens.map((c) => c.dernier || 0));
       for (const c of anciens) vuesRef.current.add(c.cle);
@@ -318,10 +377,28 @@ export function WorldTrafficView({ t }: { t?: any }) {
         if (!vivant) return;
         setEtat(e);
 
+        // Les totaux ne sont redemandés que lorsque le nombre de flux
+        // conservés a bougé : inutile de recalculer un agrégat identique
+        // toutes les quinze secondes.
+        // Redemandés quand le nombre de flux conservés bouge, ou quand on
+        // change de fenêtre : ce sont les deux seuls cas où le résultat change.
+        const f = fenetreRef.current;
+        const signature = `${e?.total ?? 0}|${f}`;
+        if (signature !== totauxPourRef.current) {
+          totauxPourRef.current = signature;
+          const borne = f ? Date.now() - f : undefined;
+          lireAggregats(borne).then((t) => { if (vivant) setTotaux(t); }).catch(() => {});
+        }
+
         if (dernierRef.current === 0) {
           // Première ouverture : on remplit le journal avec l'historique
           // récent, sans lancer d'arc — ces connexions ne sont pas nouvelles.
-          const debut = await lireFlux({ limite: 300 });
+          // Mille, pas trois cents : le compteur affichait « 300 » quoi qu'il
+          // arrive, et les quatre chiffres du bandeau ne décrivaient que ce
+          // que le navigateur avait chargé — pas ce que le serveur conserve.
+          const debut = await lireFlux(fenetreRef.current
+            ? { limite: 1000, depuis: Date.now() - fenetreRef.current }
+            : { limite: 1000 });
           if (!vivant) return;
           if (debut.length) {
             dernierRef.current = Math.max(...debut.map((c) => c.dernier || 0));
@@ -354,6 +431,9 @@ export function WorldTrafficView({ t }: { t?: any }) {
       api.trafficCollect().catch(() => {});
       planifier(1200);
     };
+    // Relancer sans déclencher de relevé : c'est ce qu'il faut au changement
+    // de fenêtre, où seules les données à afficher changent.
+    rafraichirRef.current = () => planifier(0);
 
     void tour();
 
@@ -636,9 +716,9 @@ export function WorldTrafficView({ t }: { t?: any }) {
   }, [etat, prochain]);
 
   useEffect(() => {
-    retRef.current = PALIERS[retention][1];
+    retRef.current = ARCS_GARDES;
     while (histoRef.current.length > retRef.current) histoRef.current.shift();
-  }, [retention]);
+  }, []);
 
   // ── Classements ─────────────────────────────────────────────────────────
   // Les panneaux résument ce que le journal montre — donc l'historique chargé,
@@ -647,18 +727,22 @@ export function WorldTrafficView({ t }: { t?: any }) {
 
   const parDomaine = useMemo(() => {
     const m = new Map<string, { poids: number; domaine?: string }>();
-    for (const c of cx) {
+    // Sur les totaux du serveur quand ils sont là, sinon sur ce qui est chargé.
+    for (const c of (totaux.destinations.length ? totaux.destinations : cx)) {
       const nom = c.operateur || c.domaine || c.nom || c.dst;
       const p = m.get(nom) || { poids: 0, domaine: c.logo };
       p.poids += c.octets || 1;
       m.set(nom, p);
     }
     return [...m.entries()].sort((a, b) => b[1].poids - a[1].poids).slice(0, 6);
-  }, [cx]);
+  }, [cx, totaux]);
 
   const parAppareil = useMemo(() => {
     const m = new Map<string, { poids: number; icone: string }>();
-    for (const c of cx) {
+    const source = totaux.appareils.length
+      ? totaux.appareils.map((a) => ({ src: a.src, octets: a.octets }))
+      : cx.map((c) => ({ src: c.src, octets: c.octets || 1 }));
+    for (const c of source) {
       const app = parIp.get(c.src);
       const nom = app?.nom || c.src;
       const p = m.get(nom) || { poids: 0, icone: app?.icone || "unknown" };
@@ -666,7 +750,7 @@ export function WorldTrafficView({ t }: { t?: any }) {
       m.set(nom, p);
     }
     return [...m.entries()].sort((a, b) => b[1].poids - a[1].poids).slice(0, 6);
-  }, [cx, parIp]);
+  }, [cx, parIp, totaux]);
 
   /**
    * Ce qui est signalé, épinglé en haut du panneau.
@@ -687,9 +771,14 @@ export function WorldTrafficView({ t }: { t?: any }) {
 
   const maxDom = parDomaine.length ? parDomaine[0][1].poids : 1;
   const maxApp = parAppareil.length ? parAppareil[0][1].poids : 1;
-  const situees = cx.filter((c) => c.lieu).length;
-  const parPays = cx.filter((c) => !c.lieu && c.pays).length;
-  const destinations = new Set(cx.map((c) => c.dst)).size;
+  // Les quatre chiffres décrivent tout l'historique conservé, pas la fenêtre
+  // chargée : c'est le serveur qui les compte.
+  const base = totaux.destinations.length ? totaux.destinations : cx;
+  const situees = base.filter((c) => c.lieu).length;
+  const parPays = base.filter((c) => !c.lieu && c.pays).length;
+  const destinations = totaux.destinations.length
+    ? totaux.destinations.length
+    : new Set(cx.map((c) => c.dst)).size;
   const avecOctets = cx.some((c) => c.octets);
 
   // ── Aucun équipement à interroger ───────────────────────────────────────
@@ -761,7 +850,16 @@ export function WorldTrafficView({ t }: { t?: any }) {
       <div className="panel pw-l">
         <div className="ph">
           <span>{s("world.log")}</span>
-          <em>{cx.length}</em>
+          {/* Le journal est une fenêtre sur l'historique : afficher son seul
+              nombre de lignes à côté d'un bandeau qui en annonce deux mille
+              cinq cents, sous le même mot « connexions », se contredit. */}
+          <em title={totaux.connexions > cx.length
+            ? `${cx.length} lignes chargées sur ${totaux.connexions} dans la fenêtre « ${PALIERS[retention][0]} »`
+            : undefined}>
+            {totaux.connexions > cx.length
+              ? <>{cx.length}<span style={{ color: "var(--faint)" }}> / {totaux.connexions}</span></>
+              : cx.length}
+          </em>
         </div>
         <div className="flux"
           onScroll={(e) => {
@@ -863,7 +961,20 @@ export function WorldTrafficView({ t }: { t?: any }) {
           </p>
         </div>
         <div className="kpis">
-          <div className="kpi"><span>Connexions</span><b className="a">{cx.length}</b></div>
+          {/* Ce qui est affiché, et ce que le serveur conserve : tant que la
+              liste n'est pas descendue jusqu'au bout, les quatre chiffres ne
+              décrivent qu'une fenêtre. Le dire évite de faire passer 300 pour
+              un total. */}
+          <div className="kpi" title={`Sur la fenêtre « ${PALIERS[retention][0]} »`
+            + (totaux.connexions > cx.length ? ` · ${cx.length} chargées dans le journal` : "")}>
+            <span>Connexions</span>
+            <b className="a">
+              {totaux.connexions || cx.length}
+              {totaux.connexions > cx.length
+                ? <em style={{ fontStyle: "normal", color: "var(--faint)", fontSize: "0.7em" }}> · {cx.length} affichées</em>
+                : null}
+            </b>
+          </div>
           <div className="kpi"><span>Destinations</span><b>{destinations}</b></div>
           <div className="kpi" title="Destinations dont le nom d'hôte porte un code de ville reconnu">
             <span>Situées</span><b>{situees}</b>
@@ -889,8 +1000,8 @@ export function WorldTrafficView({ t }: { t?: any }) {
             pays d'enregistrement
           </div>
           <div><i style={{ background: "var(--faint)" }}/>{s("world.legLand")}</div>
-          <div className="retention">
-            <label>Rétention</label>
+          <div className="retention" title="Période décrite par le journal, les compteurs et les classements">
+            <label>Fenêtre</label>
             <input type="range" min={0} max={PALIERS.length - 1} step={1} value={retention}
               onChange={(e) => setRetention(Number(e.target.value))}/>
             <b>{PALIERS[retention][0]}</b>

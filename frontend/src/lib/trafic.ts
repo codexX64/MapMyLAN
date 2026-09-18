@@ -326,6 +326,26 @@ function habiller(f: any): Connexion {
  *   depuis — ne rend que ce qui a bougé après cet instant (rafraîchissement)
  *   avant  — ne rend que ce qui est plus ancien (descente dans l'historique)
  */
+/**
+ * Les totaux du serveur : une ligne par destination, sur tout l'historique.
+ *
+ * Elles passent par le même habillage que les flux — ville déduite du nom
+ * d'hôte, pays d'enregistrement — pour que les compteurs et le panneau de
+ * droite disent exactement la même chose que le journal.
+ */
+export async function lireAggregats(depuis?: number): Promise<{
+  connexions: number;
+  destinations: Connexion[];
+  appareils: { src: string; octets: number }[];
+}> {
+  const r = await api.trafficAggregats(depuis);
+  return {
+    connexions: Number(r?.connexions || 0),
+    destinations: (r?.destinations || []).map((d: any) => habiller({ ...d, id: d.dst, src: "" })),
+    appareils: r?.appareils || [],
+  };
+}
+
 export async function lireFlux(opts: { limite?: number; depuis?: number; avant?: number } = {}): Promise<Connexion[]> {
   const flux = await api.trafficFlows(opts);
   return (flux || []).map(habiller);

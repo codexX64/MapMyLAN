@@ -115,6 +115,45 @@ export async function sendEmail(opts: { subject: string; title: string; severity
   } catch (err: any) { return { ok: false, error: err.message }; }
 }
 
+// ─── Lien de réinitialisation ──────────────────────────────────────────────
+//
+// Un courrier à part, hors du gabarit d'alerte : ce n'est pas un incident, et
+// le destinataire n'est pas forcément celui qui reçoit les alertes.
+//
+// Rien de sensible dans le corps hormis le lien lui-même — ni identifiant, ni
+// indication sur les moyens inscrits sur le compte. Le lien ne suffit d'ailleurs
+// pas : la page demandera encore une preuve.
+export async function envoyerLienReinit(
+  destinataire: string, lien: string, minutes: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const c = await getConfig("email");
+  if (!c?.address || !c?.password) return { ok: false, error: "Courrier non configuré" };
+  const preset = SMTP_PRESETS[c.provider];
+  const smtpCfg = preset || { host: c.host, port: c.port || 587, secure: c.secure || false };
+
+  const texte =
+    `Une réinitialisation de mot de passe a été demandée sur MapMyLAN.\n\n` +
+    `${lien}\n\n` +
+    `Ce lien est valable ${minutes} minutes et ne fonctionne qu'une fois. ` +
+    `Il ne suffit pas à changer le mot de passe : une preuve vous sera encore ` +
+    `demandée.\n\n` +
+    `Si vous n'êtes pas à l'origine de cette demande, ignorez ce message. ` +
+    `Aucun changement n'a eu lieu.`;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      ...smtpCfg, auth: { user: c.address, pass: c.password },
+    });
+    await transporter.sendMail({
+      from: c.from || c.address,
+      to: destinataire,
+      subject: "MapMyLAN — réinitialisation du mot de passe",
+      text: texte,
+    });
+    return { ok: true };
+  } catch (err: any) { return { ok: false, error: err.message }; }
+}
+
 // ─── SMS ───────────────────────────────────────────────────────────────────
 export async function sendSMS(message: string, cfg?: any): Promise<{ ok: boolean; error?: string }> {
   const c = cfg || (await getConfig("sms"));

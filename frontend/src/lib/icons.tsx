@@ -22,6 +22,11 @@ const PATHS: Record<string, string> = {
   "pi": "<rect x=\"4\" y=\"6\" width=\"16\" height=\"12\" rx=\"2\"/><path d=\"M7.5 9.5h4M7.5 12.5h2\"/><rect x=\"14\" y=\"9.5\" width=\"3.5\" height=\"5\" rx=\"1\"/>",
   "unknown": "<circle cx=\"12\" cy=\"12\" r=\"8.6\" stroke-dasharray=\"3.2 3.4\"/><path d=\"M9.7 9.9a2.4 2.4 0 1 1 2.9 2.35v1.05\"/><path d=\"M12.6 16.4h.01\"/>",
   "wired": "<path d=\"M4 12h5M15 12h5\"/><rect x=\"9\" y=\"8.6\" width=\"6\" height=\"6.8\" rx=\"1.6\"/>",
+  // Les deux agencements de la carte. « libre » : des plaques posées où on
+  // veut, reliées par des traits obliques. « arbre » : une racine et des
+  // branches à angle droit — la forme même du dessin qu'ils produisent.
+  "libre": "<rect x=\"3\" y=\"4\" width=\"5\" height=\"4.4\" rx=\"1.5\"/><rect x=\"15.5\" y=\"8\" width=\"5\" height=\"4.4\" rx=\"1.5\"/><rect x=\"7\" y=\"15.4\" width=\"5\" height=\"4.4\" rx=\"1.5\"/><path d=\"M8.2 7.1 15.4 10M15.8 12.6 11.9 15.5\"/>",
+  "arbre": "<rect x=\"2.5\" y=\"9.6\" width=\"5\" height=\"4.8\" rx=\"1.5\"/><rect x=\"16.5\" y=\"3.6\" width=\"5\" height=\"4.4\" rx=\"1.5\"/><rect x=\"16.5\" y=\"15.6\" width=\"5\" height=\"4.4\" rx=\"1.5\"/><path d=\"M7.5 12h4.6V5.8h4.4M12.1 12v5.8h4.4\"/>",
   "air": "<g transform=\"translate(0.0 -1.11)\"><path d=\"M8.6 13.6a4.8 4.8 0 0 1 6.8 0M5.6 10.4a9 9 0 0 1 12.8 0\"/><circle cx=\"12\" cy=\"17.4\" r=\"1.1\" fill=\"currentColor\" stroke=\"none\"/></g>",
   "search": "<g transform=\"translate(-0.5 -0.5)\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"M16 16l4.5 4.5\"/></g>",
   "refresh": "<path d=\"M20 11.4a8.2 8.2 0 1 0-1.9 6.2\"/><path d=\"M20.5 5v5h-5\"/>",

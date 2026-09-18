@@ -236,8 +236,24 @@ export async function autoBuildTopology(opts: { force?: boolean } = {}): Promise
     }
   }
 
+  // Jamais deux fois la même liaison entre deux appareils.
+  //
+  // La clé d'unicité du schéma porte sur (fromId, toId, fromIfaceId, toIfaceId)
+  // et les deux identifiants d'interface sont nuls ici. PostgreSQL considère
+  // deux NULL comme distincts : la contrainte ne joue donc pas, et une liaison
+  // tracée à la main se retrouvait doublée par la reconstruction — deux traits
+  // superposés sur la carte, entre les deux mêmes appareils.
+  const deja = new Set<string>();
+  const cleDe = (a: string, b: string) => [a, b].sort().join("|");
+  for (const l of await prisma.topologyLink.findMany({ select: { fromId: true, toId: true } })) {
+    deja.add(cleDe(l.fromId, l.toId));
+  }
+
   let created = 0;
   for (const l of links) {
+    const cle = cleDe(l.fromId, l.toId);
+    if (deja.has(cle)) continue;
+    deja.add(cle);
     const ok = await prisma.topologyLink
       .create({ data: { ...l, manual: false } })
       .then(() => true)

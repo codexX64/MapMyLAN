@@ -13,5 +13,9 @@
     "moduleResolution": "node",
     "noImplicitAny": false
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  // Les tests ne partent pas dans l'image : ils importent vitest, qui n'a rien
+  // à faire dans un conteneur de production. Sans cette exclusion, la
+  // construction de l'image échoue sur « Cannot find module 'vitest' ».
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
 }

@@ -279,14 +279,29 @@ export function OnboardingPage() {
         )}
 
         {step === 4 && (
-          <Step title="Email" subtitle="Optional — daily summaries and high-severity alerts via email">
+          <Step title="Sending address"
+                subtitle="The account MapMyLAN sends from — alerts, and the password reset link">
             <Toggle label="Enable Email" value={data.email.enabled} onChange={(v) => upd("email", { enabled: v })}/>
             {data.email.enabled && <>
               <SelectField label="Provider" value={data.email.provider} onChange={(v) => upd("email", { provider: v })}
                 options={["gmail", "icloud", "outlook"]}/>
-              <Field label="Email address" type="email" value={data.email.address} onChange={(v) => upd("email", { address: v })}/>
+              <Field label="Sending address (e.g. no-reply@…)" type="email" value={data.email.address} onChange={(v) => upd("email", { address: v })}/>
               <Field label="App password" type="password" value={data.email.password} onChange={(v) => upd("email", { password: v })}/>
             </>}
+            {/* Deux adresses, deux rôles, et il ne faut pas les confondre :
+                celle-ci ENVOIE, celle de chaque compte REÇOIT. Sans celle-ci,
+                aucun lien ne peut partir et plus personne ne peut réinitialiser
+                son mot de passe. */}
+            <div style={{
+              marginTop: 14, padding: "10px 12px", borderRadius: 9,
+              background: data.email.enabled ? "rgba(56,189,248,0.08)" : "rgba(251,191,36,0.10)",
+              color: data.email.enabled ? "#7dd3fc" : "#fcd34d",
+              fontSize: 12.5, lineHeight: 1.55,
+            }}>
+              {data.email.enabled
+                ? "Cette adresse envoie. Celle qui reçoit se règle sur chaque compte : sans elle, ce compte ne peut pas réinitialiser son mot de passe."
+                : "Sans adresse d'envoi, aucun lien de réinitialisation ne peut partir — plus aucun compte ne pourra retrouver son mot de passe. La reprise par le fichier .env resterait la seule sortie."}
+            </div>
           </Step>
         )}
 

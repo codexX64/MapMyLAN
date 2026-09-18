@@ -28,6 +28,7 @@ interface AppState {
   setTheme: (t: string) => void;
   setShell: (k: "reading" | "workshop") => void;
   clearMustChange: () => void;
+  finirInscriptionA2f: () => Promise<void>;
   bootstrap: (username: string, password: string) => Promise<void>;
   selectDevice: (id: string | null) => void;
 
@@ -73,6 +74,17 @@ export const useStore = create<AppState>((set, get) => ({
   setTheme: (t) => { localStorage.setItem("mapmylan_theme", t); set({ themeKey: t }); },
   setShell: (k) => { localStorage.setItem("mapmylan_shell", k); set({ shell: k }); },
   clearMustChange: () => set(st => ({ user: { ...st.user, mustChangePassword: false } })),
+
+  // Le second facteur vient d'être inscrit : on relit l'état auprès du serveur
+  // plutôt que de le décréter côté navigateur. Si l'inscription n'a pas pris,
+  // le verrou reste — c'est le serveur qui tranche, pas l'écran.
+  finirInscriptionA2f: async () => {
+    const e = await api.mfaEtat().catch(() => null);
+    const inscrit = !!(e && ((e.cles || 0) > 0 || e.application || e.telegram));
+    if (inscrit) set(st => ({ user: { ...st.user, doitInscrireA2f: false } }));
+    else throw new Error("Aucun moyen n'a été enregistré. Réessaie.");
+    await get().loadInitialData();
+  },
   selectDevice: (id) => set({ selectedDeviceId: id }),
 
   setSetupComplete: (v) => set({ setupComplete: v }),
