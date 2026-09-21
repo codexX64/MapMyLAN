@@ -6,7 +6,7 @@
   "version": "1.0.0",
   "description": "Cartographie du réseau local : appareils, scans, scores de risque, alertes, quarantaine.",
   "icon": "map",
-  "repository": "https://github.com/CodexX64/mapmylan",
+  "repository": "https://github.com/codexX64/MapMyLAN",
   "license": "MIT",
   "minHubVersion": "0.1.0",
 
@@ -15,8 +15,8 @@
     "remote": {
       "supported": true,
       "label": "Adresse de MapMyLAN",
-      "placeholder": "http://192.168.1.20:8120",
-      "defaultPort": 8120,
+      "placeholder": "http://192.0.2.20:8090",
+      "defaultPort": 8090,
       "setupHelp": "MapMyLAN s'installe sur une machine du segment à scanner (réseau hôte, arp-scan) avec sa propre procédure : docs/INSTALL.md. Dans MapMyLAN, Réglages → Intégrations : créer un jeton « Hub » (rôle opérateur) et le coller ici. N'autoriser l'interface que depuis l'IP du Hub."
     },
     "healthcheck": { "type": "http", "path": "/api/health", "expect": 200, "timeout": "5s" }
@@ -46,7 +46,7 @@
       "group": "Alertes",
       "delivery": { "type": "poll", "request": { "method": "GET", "path": "/api/alerts", "query": { "limit": "50" } }, "interval": "30s", "items": "$", "dedupeKey": "$.id" },
       "output": { "type": "object", "properties": { "id": { "type": "string" }, "severity": { "type": "string" }, "source": { "type": "string" }, "message": { "type": "string" }, "deviceId": { "type": "string" }, "deviceIp": { "type": "string" }, "deviceMac": { "type": "string" }, "createdAt": { "type": "string" } } },
-      "sample": { "id": "clx1a2b3c", "severity": "high", "source": "scanner", "message": "Nouvel appareil inconnu détecté", "deviceId": "clx9z8y7x", "deviceIp": "192.168.1.77", "deviceMac": "AA:BB:CC:00:11:22", "createdAt": "2026-09-17T10:12:00.000Z" }
+      "sample": { "id": "clx1a2b3c", "severity": "high", "source": "scanner", "message": "Nouvel appareil inconnu détecté", "deviceId": "clx9z8y7x", "deviceIp": "198.51.100.77", "deviceMac": "AA:BB:CC:00:11:22", "createdAt": "2026-09-17T10:12:00.000Z" }
     },
     {
       "id": "device.new",
@@ -56,7 +56,7 @@
       "group": "Appareils",
       "delivery": { "type": "poll", "request": { "method": "GET", "path": "/api/devices" }, "interval": "1m", "items": "$", "dedupeKey": "$.id" },
       "output": { "type": "object", "properties": { "id": { "type": "string" }, "ip": { "type": "string" }, "mac": { "type": "string" }, "hostname": { "type": "string" }, "vendor": { "type": "string" }, "type": { "type": "string" }, "status": { "type": "string" }, "dangerScore": { "type": "integer" } } },
-      "sample": { "id": "clx9z8y7x", "ip": "192.168.1.77", "mac": "AA:BB:CC:00:11:22", "hostname": "android-3f2a", "vendor": "Samsung", "type": "phone", "status": "online", "dangerScore": 42 }
+      "sample": { "id": "clx9z8y7x", "ip": "198.51.100.77", "mac": "AA:BB:CC:00:11:22", "hostname": "android-3f2a", "vendor": "Samsung", "type": "phone", "status": "online", "dangerScore": 42 }
     },
     {
       "id": "scan.complete",
@@ -65,8 +65,8 @@
       "icon": "search",
       "group": "Scans",
       "delivery": { "type": "poll", "request": { "method": "GET", "path": "/api/devices/scans/latest" }, "interval": "30s", "dedupeKey": "$.endedAt" },
-      "output": { "type": "object", "properties": { "id": { "type": "string" }, "type": { "type": "string" }, "subnet": { "type": "string" }, "status": { "type": "string" }, "hostsFound": { "type": "integer" }, "endedAt": { "type": "string" }, "error": { "type": "string" } } },
-      "sample": { "id": "clxscan01", "type": "full", "subnet": "192.168.1.0/24", "status": "complete", "hostsFound": 38, "startedAt": "2026-09-17T10:00:00.000Z", "endedAt": "2026-09-17T10:02:41.000Z", "error": null }
+      "output": { "type": "object", "properties": { "id": { "type": "string" }, "type": { "type": "string" }, "subnet": { "type": "string" }, "status": { "type": "string" }, "hostsFound": { "type": "integer" }, "startedAt": { "type": "string" }, "endedAt": { "type": "string" }, "error": { "type": "string" } } },
+      "sample": { "id": "clxscan01", "type": "full", "subnet": "198.51.100.0/24", "status": "complete", "hostsFound": 38, "startedAt": "2026-09-17T10:00:00.000Z", "endedAt": "2026-09-17T10:02:41.000Z", "error": null }
     }
   ],
 
@@ -97,7 +97,7 @@
       "risk": "read",
       "idempotent": true,
       "output": { "type": "array", "items": { "type": "object" } },
-      "sample": [{ "id": "clx9z8y7x", "ip": "192.168.1.77", "hostname": "android-3f2a", "status": "online", "dangerScore": 42 }]
+      "sample": [{ "id": "clx9z8y7x", "ip": "198.51.100.77", "hostname": "android-3f2a", "status": "online", "dangerScore": 42 }]
     },
     {
       "id": "device.get",
@@ -110,7 +110,7 @@
       "risk": "read",
       "idempotent": true,
       "output": { "type": "object" },
-      "sample": { "id": "clx9z8y7x", "ip": "192.168.1.77", "status": "online", "ports": [], "cves": [] }
+      "sample": { "id": "clx9z8y7x", "ip": "198.51.100.77", "status": "online", "ports": [], "cves": [] }
     },
     {
       "id": "device.ping",
@@ -151,8 +151,8 @@
       ],
       "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/quarantine", "body": { "reason": "{{params.reason}}" } },
       "risk": "destructive",
-      "output": { "type": "object" },
-      "sample": { "ok": true, "status": "quarantined" }
+      "output": { "type": "object", "properties": { "ok": { "type": "boolean" }, "output": { "type": "string" } } },
+      "sample": { "ok": true, "output": "iptables: rule added" }
     },
     {
       "id": "device.ban",
@@ -166,8 +166,8 @@
       ],
       "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/ban", "body": { "reason": "{{params.reason}}" } },
       "risk": "destructive",
-      "output": { "type": "object" },
-      "sample": { "ok": true, "status": "banned" }
+      "output": { "type": "object", "properties": { "ok": { "type": "boolean" }, "output": { "type": "string" } } },
+      "sample": { "ok": true, "output": "iptables: rule added" }
     },
     {
       "id": "device.unban",
@@ -178,8 +178,8 @@
       "params": [ { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } } ],
       "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/unban" },
       "risk": "reversible",
-      "output": { "type": "object" },
-      "sample": { "ok": true, "status": "online" }
+      "output": { "type": "object", "properties": { "ok": { "type": "boolean" }, "output": { "type": "string" } } },
+      "sample": { "ok": true, "output": "iptables: rule removed" }
     },
     {
       "id": "alerts.list",
@@ -229,13 +229,13 @@
       "group": "Topologie",
       "request": { "method": "POST", "path": "/api/topology/auto-build" },
       "risk": "reversible",
-      "output": { "type": "object" },
-      "sample": { "ok": true }
+      "output": { "type": "object", "properties": { "created": { "type": "integer" }, "deleted": { "type": "integer" } } },
+      "sample": { "created": 11, "deleted": 9 }
     }
   ],
 
   "probes": [
-    { "id": "reachable", "name": "Joignable", "kind": "state", "request": { "method": "GET", "path": "/api/health" }, "value": "$.status", "states": { "ok": ["ok"], "crit": ["degraded"] }, "interval": "30s" },
+    { "id": "reachable", "name": "Joignable", "kind": "state", "request": { "method": "GET", "path": "/api/health" }, "value": "$.status", "states": { "ok": ["ok"] }, "interval": "30s" },
     { "id": "health.score", "name": "Score de santé du réseau", "kind": "gauge", "unit": "/100", "request": { "method": "GET", "path": "/api/devices/health/score" }, "value": "$.score", "thresholds": { "warn": 70, "crit": 50, "direction": "below" }, "interval": "5m" },
     { "id": "devices.count", "name": "Appareils connus", "kind": "gauge", "request": { "method": "GET", "path": "/api/devices" }, "value": "$.length", "interval": "5m" },
     { "id": "host.cpu", "name": "CPU", "kind": "gauge", "unit": "%", "request": { "method": "GET", "path": "/api/host/stats" }, "value": "$.cpuPct", "thresholds": { "warn": 80, "crit": 95 }, "interval": "1m" },
