@@ -91,10 +91,6 @@ raison qui l'a signalé — aucun score global, aucune appréciation.
 
 ---
 
-> **Note du mainteneur** — ce dépôt ne contient pas encore la totalité du
-> travail réalisé. Voir [docs/ETAT.md](docs/ETAT.md) pour la liste des éléments
-> à récupérer, dont plusieurs correctifs de sécurité.
-
 ## Installation
 
 ### Prérequis
@@ -106,8 +102,8 @@ raison qui l'a signalé — aucun score global, aucune appréciation.
 ### Mise en route
 
 ```bash
-git clone https://github.com/CodexX64/mapmylan.git
-cd mapmylan
+git clone https://github.com/codexX64/MapMyLAN.git
+cd MapMyLAN
 cp .env.example .env
 ```
 
@@ -126,7 +122,7 @@ Puis :
 docker compose up -d --build
 ```
 
-L'interface écoute sur `http://localhost:8120`. Au premier lancement, un
+L'interface écoute sur `http://localhost:8090`. Au premier lancement, un
 assistant te guide : création du compte, choix de l'authentification, connexion
 à l'équipement, déclaration des plages, premier balayage.
 

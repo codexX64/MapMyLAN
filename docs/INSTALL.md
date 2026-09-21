@@ -12,8 +12,8 @@ activée par défaut sur les bornes — empêche de voir les autres appareils.
 ## 2 · Récupérer le projet
 
 ```bash
-git clone https://github.com/CodexX64/mapmylan.git
-cd mapmylan
+git clone https://github.com/codexX64/MapMyLAN.git
+cd MapMyLAN
 cp .env.example .env
 ```
 
@@ -53,7 +53,7 @@ docker compose up -d --build
 docker compose logs -f backend
 ```
 
-Attendez la ligne annonçant l'écoute, puis ouvrez `http://localhost:8120`.
+Attendez la ligne annonçant l'écoute, puis ouvrez `http://localhost:8090`.
 
 ## 6 · Suivre l'assistant
 
