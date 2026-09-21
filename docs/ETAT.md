@@ -56,6 +56,19 @@ qu'attend le nouveau `i18n.ts`, et de vérifier que les clés se recouvrent : le
 écrans ont changé, une partie des anciennes clés n'existe plus. Ce n'est pas
 fait, et ce n'est pas une régression silencieuse : c'est écrit ici.
 
+## Deux modules livrés mais non câblés
+
+`services/ticket.ts` et `services/alerte.ts` compilent, sont testés, et rien
+ne les appelle : en traçant les imports depuis `index.ts`, ils ne sont jamais
+atteints. Ils construisent un ticket structuré et l'aiguillent vers des canaux
+selon le format de chacun — ce que fait déjà, autrement, le mécanisme de
+`NotificationConfig` et `services/poste.ts`.
+
+Les brancher n'est pas un correctif, c'est un choix : il faudrait décider
+lequel des deux chemins d'alerte reste. Tant que ce n'est pas tranché, ils sont
+là, corrects, et inertes. C'est écrit ici plutôt que découvert par quelqu'un
+qui cherche pourquoi son canal ne reçoit rien.
+
 ## Avant de publier
 
 ```bash
