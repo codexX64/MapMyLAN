@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/CodexX64/hub-registry/main/schema/hub-extension.v1.json",
   "manifestVersion": 1,
   "id": "mapmylan",
   "name": "MapMyLAN",
@@ -9,34 +8,152 @@
   "repository": "https://github.com/codexX64/MapMyLAN",
   "license": "MIT",
   "minHubVersion": "0.1.0",
-
   "install": {
-    "type": "external",
+    "type": "compose",
+    "compose": "deploy/compose.hub.yml",
     "remote": {
       "supported": true,
       "label": "Adresse de MapMyLAN",
       "placeholder": "http://192.0.2.20:8090",
       "defaultPort": 8090,
-      "setupHelp": "MapMyLAN s'installe sur une machine du segment à scanner (réseau hôte, arp-scan) avec sa propre procédure : docs/INSTALL.md. Dans MapMyLAN, Réglages → Intégrations : créer un jeton « Hub » (rôle opérateur) et le coller ici. N'autoriser l'interface que depuis l'IP du Hub."
+      "setupHelp": "Pour surveiller un autre segment que celui du Hub : installer MapMyLAN sur une machine de ce segment (docs/INSTALL.md), puis dans Réglages → Intégrations créer un jeton de rôle opérateur et le coller ici. N'autoriser l'accès que depuis l'adresse du Hub."
     },
-    "healthcheck": { "type": "http", "path": "/api/health", "expect": 200, "timeout": "5s" }
+    "arch": [
+      "amd64",
+      "arm64"
+    ],
+    "resources": {
+      "ramMb": 1024,
+      "cpu": 1.0,
+      "diskMb": 2048
+    },
+    "ports": [
+      {
+        "name": "web",
+        "container": 80,
+        "protocol": "http",
+        "expose": "proxy"
+      },
+      {
+        "name": "db",
+        "container": 5432,
+        "protocol": "tcp",
+        "expose": "host"
+      },
+      {
+        "name": "cache",
+        "container": 6379,
+        "protocol": "tcp",
+        "expose": "host"
+      }
+    ],
+    "volumes": [
+      {
+        "name": "pgdata",
+        "path": "/var/lib/postgresql/data"
+      }
+    ],
+    "healthcheck": {
+      "type": "http",
+      "path": "/api/health",
+      "expect": 200,
+      "timeout": "5s"
+    }
   },
-
   "config": [
-    { "key": "HUB_TOKEN", "label": "Jeton d'intégration", "type": "secret", "required": true, "help": "Créé dans MapMyLAN, Réglages → Intégrations. Rôle opérateur conseillé." }
+    {
+      "key": "IMAGE_TAG",
+      "label": "Version de l'image",
+      "type": "string",
+      "default": "latest",
+      "advanced": true,
+      "help": "Étiquette des images publiées sur ghcr.io."
+    },
+    {
+      "key": "SCAN_INTERFACE",
+      "label": "Interface réseau à balayer",
+      "type": "string",
+      "required": true,
+      "default": "eth0",
+      "help": "Celle qui porte le segment à cartographier, jamais une interface Docker."
+    },
+    {
+      "key": "SCAN_SUBNET",
+      "label": "Plage initiale (CIDR)",
+      "type": "string",
+      "required": true,
+      "default": "192.168.1.0/24",
+      "help": "D'autres plages s'ajoutent ensuite depuis MapMyLAN."
+    },
+    {
+      "key": "SCAN_INTERVAL",
+      "label": "Intervalle de balayage (s)",
+      "type": "number",
+      "default": 900,
+      "min": 60,
+      "advanced": true
+    },
+    {
+      "key": "BIND_ADDRESS",
+      "label": "Adresse d'écoute de l'API",
+      "type": "string",
+      "default": "172.17.0.1",
+      "advanced": true,
+      "help": "Adresse du pont Docker : l'interface web y accède, le réseau local non."
+    },
+    {
+      "key": "POSTGRES_PASSWORD",
+      "type": "secret",
+      "label": "Mot de passe PostgreSQL",
+      "generate": "random:32"
+    },
+    {
+      "key": "JWT_SECRET",
+      "type": "secret",
+      "label": "Signature des sessions",
+      "generate": "random:48"
+    },
+    {
+      "key": "MASTER_KEY",
+      "type": "secret",
+      "label": "Chiffrement des identifiants d'équipement",
+      "generate": "random:32"
+    },
+    {
+      "key": "PASSWORD_PEPPER",
+      "type": "secret",
+      "label": "Poivre des mots de passe",
+      "generate": "random:32"
+    },
+    {
+      "key": "HUB_TOKEN",
+      "label": "Jeton d'intégration",
+      "type": "secret",
+      "required": true,
+      "help": "Installé ici : généré par le Hub et semé dans MapMyLAN au démarrage (INTEGRATION_TOKEN_SEED). À distance : à créer dans Réglages → Intégrations et à coller ici.",
+      "generate": "hub-token"
+    }
   ],
-
   "api": {
     "baseUrl": "{{service.url}}",
-    "auth": { "type": "bearer", "token": "{{service.token}}", "remoteToken": "HUB_TOKEN" }
+    "auth": {
+      "type": "bearer",
+      "token": "{{service.token}}",
+      "localToken": "HUB_TOKEN",
+      "remoteToken": "HUB_TOKEN"
+    }
   },
-
   "capabilities": {
-    "provides": ["network.inventory", "network.scan", "network.block", "alerts.source", "host.metrics"],
+    "provides": [
+      "network.inventory",
+      "network.scan",
+      "network.block",
+      "alerts.source",
+      "host.metrics"
+    ],
     "requires": [],
     "accepts": []
   },
-
   "triggers": [
     {
       "id": "alert.new",
@@ -44,9 +161,58 @@
       "description": "MapMyLAN a levé une alerte (appareil inconnu, port suspect, score en hausse…).",
       "icon": "bell",
       "group": "Alertes",
-      "delivery": { "type": "poll", "request": { "method": "GET", "path": "/api/alerts", "query": { "limit": "50" } }, "interval": "30s", "items": "$", "dedupeKey": "$.id" },
-      "output": { "type": "object", "properties": { "id": { "type": "string" }, "severity": { "type": "string" }, "source": { "type": "string" }, "message": { "type": "string" }, "deviceId": { "type": "string" }, "deviceIp": { "type": "string" }, "deviceMac": { "type": "string" }, "createdAt": { "type": "string" } } },
-      "sample": { "id": "clx1a2b3c", "severity": "high", "source": "scanner", "message": "Nouvel appareil inconnu détecté", "deviceId": "clx9z8y7x", "deviceIp": "198.51.100.77", "deviceMac": "AA:BB:CC:00:11:22", "createdAt": "2026-09-17T10:12:00.000Z" }
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/alerts",
+          "query": {
+            "limit": "50"
+          }
+        },
+        "interval": "30s",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "string"
+          },
+          "deviceIp": {
+            "type": "string"
+          },
+          "deviceMac": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "clx1a2b3c",
+        "severity": "high",
+        "source": "scanner",
+        "message": "Nouvel appareil inconnu détecté",
+        "deviceId": "clx9z8y7x",
+        "deviceIp": "198.51.100.77",
+        "deviceMac": "AA:BB:CC:00:11:22",
+        "createdAt": "2026-09-17T10:12:00.000Z"
+      }
     },
     {
       "id": "device.new",
@@ -54,9 +220,55 @@
       "description": "Un appareil apparaît pour la première fois dans l'inventaire.",
       "icon": "server",
       "group": "Appareils",
-      "delivery": { "type": "poll", "request": { "method": "GET", "path": "/api/devices" }, "interval": "1m", "items": "$", "dedupeKey": "$.id" },
-      "output": { "type": "object", "properties": { "id": { "type": "string" }, "ip": { "type": "string" }, "mac": { "type": "string" }, "hostname": { "type": "string" }, "vendor": { "type": "string" }, "type": { "type": "string" }, "status": { "type": "string" }, "dangerScore": { "type": "integer" } } },
-      "sample": { "id": "clx9z8y7x", "ip": "198.51.100.77", "mac": "AA:BB:CC:00:11:22", "hostname": "android-3f2a", "vendor": "Samsung", "type": "phone", "status": "online", "dangerScore": 42 }
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/devices"
+        },
+        "interval": "1m",
+        "items": "$",
+        "dedupeKey": "$.id"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "mac": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "dangerScore": {
+            "type": "integer"
+          }
+        }
+      },
+      "sample": {
+        "id": "clx9z8y7x",
+        "ip": "198.51.100.77",
+        "mac": "AA:BB:CC:00:11:22",
+        "hostname": "android-3f2a",
+        "vendor": "Samsung",
+        "type": "phone",
+        "status": "online",
+        "dangerScore": 42
+      }
     },
     {
       "id": "scan.complete",
@@ -64,12 +276,56 @@
       "description": "Le dernier scan réseau vient de se terminer.",
       "icon": "search",
       "group": "Scans",
-      "delivery": { "type": "poll", "request": { "method": "GET", "path": "/api/devices/scans/latest" }, "interval": "30s", "dedupeKey": "$.endedAt" },
-      "output": { "type": "object", "properties": { "id": { "type": "string" }, "type": { "type": "string" }, "subnet": { "type": "string" }, "status": { "type": "string" }, "hostsFound": { "type": "integer" }, "startedAt": { "type": "string" }, "endedAt": { "type": "string" }, "error": { "type": "string" } } },
-      "sample": { "id": "clxscan01", "type": "full", "subnet": "198.51.100.0/24", "status": "complete", "hostsFound": 38, "startedAt": "2026-09-17T10:00:00.000Z", "endedAt": "2026-09-17T10:02:41.000Z", "error": null }
+      "delivery": {
+        "type": "poll",
+        "request": {
+          "method": "GET",
+          "path": "/api/devices/scans/latest"
+        },
+        "interval": "30s",
+        "dedupeKey": "$.endedAt"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "subnet": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "hostsFound": {
+            "type": "integer"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "endedAt": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "id": "clxscan01",
+        "type": "full",
+        "subnet": "198.51.100.0/24",
+        "status": "complete",
+        "hostsFound": 38,
+        "startedAt": "2026-09-17T10:00:00.000Z",
+        "endedAt": "2026-09-17T10:02:41.000Z",
+        "error": null
+      }
     }
   ],
-
   "actions": [
     {
       "id": "scan",
@@ -79,12 +335,40 @@
       "group": "Scans",
       "capability": "network.scan",
       "params": [
-        { "key": "subnet", "label": "Plage (CIDR)", "type": "select", "help": "Vide = toutes les plages.", "optionsFrom": { "method": "GET", "path": "/api/devices/scan/ranges", "map": { "value": "$.cidr", "label": "$.cidr" } } }
+        {
+          "key": "subnet",
+          "label": "Plage (CIDR)",
+          "type": "select",
+          "help": "Vide = toutes les plages.",
+          "optionsFrom": {
+            "method": "GET",
+            "path": "/api/devices/scan/ranges",
+            "map": {
+              "value": "$.cidr",
+              "label": "$.cidr"
+            }
+          }
+        }
       ],
-      "request": { "method": "POST", "path": "/api/devices/scan", "body": { "subnet": "{{params.subnet}}" } },
+      "request": {
+        "method": "POST",
+        "path": "/api/devices/scan",
+        "body": {
+          "subnet": "{{params.subnet}}"
+        }
+      },
       "risk": "reversible",
-      "output": { "type": "object", "properties": { "ok": { "type": "boolean" } } },
-      "sample": { "ok": true }
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "sample": {
+        "ok": true
+      }
     },
     {
       "id": "devices.list",
@@ -93,11 +377,27 @@
       "icon": "server",
       "group": "Appareils",
       "capability": "network.inventory",
-      "request": { "method": "GET", "path": "/api/devices" },
+      "request": {
+        "method": "GET",
+        "path": "/api/devices"
+      },
       "risk": "read",
       "idempotent": true,
-      "output": { "type": "array", "items": { "type": "object" } },
-      "sample": [{ "id": "clx9z8y7x", "ip": "198.51.100.77", "hostname": "android-3f2a", "status": "online", "dangerScore": 42 }]
+      "output": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "sample": [
+        {
+          "id": "clx9z8y7x",
+          "ip": "198.51.100.77",
+          "hostname": "android-3f2a",
+          "status": "online",
+          "dangerScore": 42
+        }
+      ]
     },
     {
       "id": "device.get",
@@ -105,12 +405,38 @@
       "description": "Fiche d'un appareil.",
       "icon": "server",
       "group": "Appareils",
-      "params": [ { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } } ],
-      "request": { "method": "GET", "path": "/api/devices/{{params.deviceId}}" },
+      "params": [
+        {
+          "key": "deviceId",
+          "label": "Appareil",
+          "type": "select",
+          "required": true,
+          "optionsFrom": {
+            "method": "GET",
+            "path": "/api/devices",
+            "map": {
+              "value": "$.id",
+              "label": "$.ip"
+            }
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/devices/{{params.deviceId}}"
+      },
       "risk": "read",
       "idempotent": true,
-      "output": { "type": "object" },
-      "sample": { "id": "clx9z8y7x", "ip": "198.51.100.77", "status": "online", "ports": [], "cves": [] }
+      "output": {
+        "type": "object"
+      },
+      "sample": {
+        "id": "clx9z8y7x",
+        "ip": "198.51.100.77",
+        "status": "online",
+        "ports": [],
+        "cves": []
+      }
     },
     {
       "id": "device.ping",
@@ -118,12 +444,35 @@
       "description": "Vérifie qu'un appareil répond.",
       "icon": "chart",
       "group": "Appareils",
-      "params": [ { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } } ],
-      "request": { "method": "GET", "path": "/api/devices/{{params.deviceId}}/ping" },
+      "params": [
+        {
+          "key": "deviceId",
+          "label": "Appareil",
+          "type": "select",
+          "required": true,
+          "optionsFrom": {
+            "method": "GET",
+            "path": "/api/devices",
+            "map": {
+              "value": "$.id",
+              "label": "$.ip"
+            }
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/devices/{{params.deviceId}}/ping"
+      },
       "risk": "read",
       "idempotent": true,
-      "output": { "type": "object" },
-      "sample": { "alive": true, "latencyMs": 3.1 }
+      "output": {
+        "type": "object"
+      },
+      "sample": {
+        "alive": true,
+        "latencyMs": 3.1
+      }
     },
     {
       "id": "device.deep-scan",
@@ -131,12 +480,34 @@
       "description": "Scan nmap détaillé d'un appareil (ports, services, OS).",
       "icon": "search",
       "group": "Appareils",
-      "params": [ { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } } ],
-      "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/deep-scan" },
+      "params": [
+        {
+          "key": "deviceId",
+          "label": "Appareil",
+          "type": "select",
+          "required": true,
+          "optionsFrom": {
+            "method": "GET",
+            "path": "/api/devices",
+            "map": {
+              "value": "$.id",
+              "label": "$.ip"
+            }
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/devices/{{params.deviceId}}/deep-scan"
+      },
       "risk": "reversible",
       "timeout": "5m",
-      "output": { "type": "object" },
-      "sample": { "ok": true }
+      "output": {
+        "type": "object"
+      },
+      "sample": {
+        "ok": true
+      }
     },
     {
       "id": "device.quarantine",
@@ -146,13 +517,49 @@
       "group": "Défense",
       "capability": "network.block",
       "params": [
-        { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } },
-        { "key": "reason", "label": "Motif", "type": "string" }
+        {
+          "key": "deviceId",
+          "label": "Appareil",
+          "type": "select",
+          "required": true,
+          "optionsFrom": {
+            "method": "GET",
+            "path": "/api/devices",
+            "map": {
+              "value": "$.id",
+              "label": "$.ip"
+            }
+          }
+        },
+        {
+          "key": "reason",
+          "label": "Motif",
+          "type": "string"
+        }
       ],
-      "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/quarantine", "body": { "reason": "{{params.reason}}" } },
+      "request": {
+        "method": "POST",
+        "path": "/api/devices/{{params.deviceId}}/quarantine",
+        "body": {
+          "reason": "{{params.reason}}"
+        }
+      },
       "risk": "destructive",
-      "output": { "type": "object", "properties": { "ok": { "type": "boolean" }, "output": { "type": "string" } } },
-      "sample": { "ok": true, "output": "iptables: rule added" }
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "output": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "ok": true,
+        "output": "iptables: rule added"
+      }
     },
     {
       "id": "device.ban",
@@ -161,13 +568,49 @@
       "icon": "stop",
       "group": "Défense",
       "params": [
-        { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } },
-        { "key": "reason", "label": "Motif", "type": "string" }
+        {
+          "key": "deviceId",
+          "label": "Appareil",
+          "type": "select",
+          "required": true,
+          "optionsFrom": {
+            "method": "GET",
+            "path": "/api/devices",
+            "map": {
+              "value": "$.id",
+              "label": "$.ip"
+            }
+          }
+        },
+        {
+          "key": "reason",
+          "label": "Motif",
+          "type": "string"
+        }
       ],
-      "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/ban", "body": { "reason": "{{params.reason}}" } },
+      "request": {
+        "method": "POST",
+        "path": "/api/devices/{{params.deviceId}}/ban",
+        "body": {
+          "reason": "{{params.reason}}"
+        }
+      },
       "risk": "destructive",
-      "output": { "type": "object", "properties": { "ok": { "type": "boolean" }, "output": { "type": "string" } } },
-      "sample": { "ok": true, "output": "iptables: rule added" }
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "output": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "ok": true,
+        "output": "iptables: rule added"
+      }
     },
     {
       "id": "device.unban",
@@ -175,11 +618,42 @@
       "description": "Retire le bannissement ou la quarantaine d'un appareil.",
       "icon": "check",
       "group": "Défense",
-      "params": [ { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } } ],
-      "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/unban" },
+      "params": [
+        {
+          "key": "deviceId",
+          "label": "Appareil",
+          "type": "select",
+          "required": true,
+          "optionsFrom": {
+            "method": "GET",
+            "path": "/api/devices",
+            "map": {
+              "value": "$.id",
+              "label": "$.ip"
+            }
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/devices/{{params.deviceId}}/unban"
+      },
       "risk": "reversible",
-      "output": { "type": "object", "properties": { "ok": { "type": "boolean" }, "output": { "type": "string" } } },
-      "sample": { "ok": true, "output": "iptables: rule removed" }
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "output": {
+            "type": "string"
+          }
+        }
+      },
+      "sample": {
+        "ok": true,
+        "output": "iptables: rule removed"
+      }
     },
     {
       "id": "alerts.list",
@@ -188,12 +662,39 @@
       "icon": "bell",
       "group": "Alertes",
       "capability": "alerts.source",
-      "params": [ { "key": "limit", "label": "Nombre", "type": "number", "default": 50, "min": 1, "max": 500 } ],
-      "request": { "method": "GET", "path": "/api/alerts", "query": { "limit": "{{params.limit}}" } },
+      "params": [
+        {
+          "key": "limit",
+          "label": "Nombre",
+          "type": "number",
+          "default": 50,
+          "min": 1,
+          "max": 500
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/alerts",
+        "query": {
+          "limit": "{{params.limit}}"
+        }
+      },
       "risk": "read",
       "idempotent": true,
-      "output": { "type": "array", "items": { "type": "object" } },
-      "sample": [{ "id": "clx1a2b3c", "severity": "high", "message": "Nouvel appareil inconnu détecté", "acknowledged": false }]
+      "output": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "sample": [
+        {
+          "id": "clx1a2b3c",
+          "severity": "high",
+          "message": "Nouvel appareil inconnu détecté",
+          "acknowledged": false
+        }
+      ]
     },
     {
       "id": "alert.ack",
@@ -201,12 +702,27 @@
       "description": "Marque une alerte comme traitée.",
       "icon": "check",
       "group": "Alertes",
-      "params": [ { "key": "id", "label": "Alerte", "type": "string", "required": true, "help": "Souvent {{ $json.id }} depuis « Nouvelle alerte »." } ],
-      "request": { "method": "POST", "path": "/api/alerts/{{params.id}}/ack" },
+      "params": [
+        {
+          "key": "id",
+          "label": "Alerte",
+          "type": "string",
+          "required": true,
+          "help": "Souvent {{ $json.id }} depuis « Nouvelle alerte »."
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/alerts/{{params.id}}/ack"
+      },
       "risk": "reversible",
       "idempotent": true,
-      "output": { "type": "object" },
-      "sample": { "ok": true }
+      "output": {
+        "type": "object"
+      },
+      "sample": {
+        "ok": true
+      }
     },
     {
       "id": "host.stats",
@@ -215,11 +731,42 @@
       "icon": "gauge",
       "group": "Machine",
       "capability": "host.metrics",
-      "request": { "method": "GET", "path": "/api/host/stats" },
+      "request": {
+        "method": "GET",
+        "path": "/api/host/stats"
+      },
       "risk": "read",
       "idempotent": true,
-      "output": { "type": "object", "properties": { "cpuPct": { "type": "number" }, "memPct": { "type": "number" }, "diskPct": { "type": "number" }, "tempC": { "type": "number" } } },
-      "sample": { "cpuPct": 12.4, "memPct": 48.1, "memUsedMB": 3850, "memTotalMB": 8000, "diskPct": 37, "tempC": 51, "loadAvg": 0.6, "netRxKBs": 120.5, "netTxKBs": 40.2, "uptimeSec": 864000, "containers": [] }
+      "output": {
+        "type": "object",
+        "properties": {
+          "cpuPct": {
+            "type": "number"
+          },
+          "memPct": {
+            "type": "number"
+          },
+          "diskPct": {
+            "type": "number"
+          },
+          "tempC": {
+            "type": "number"
+          }
+        }
+      },
+      "sample": {
+        "cpuPct": 12.4,
+        "memPct": 48.1,
+        "memUsedMB": 3850,
+        "memTotalMB": 8000,
+        "diskPct": 37,
+        "tempC": 51,
+        "loadAvg": 0.6,
+        "netRxKBs": 120.5,
+        "netTxKBs": 40.2,
+        "uptimeSec": 864000,
+        "containers": []
+      }
     },
     {
       "id": "topology.rebuild",
@@ -227,27 +774,154 @@
       "description": "Recalcule automatiquement les liens de la topologie.",
       "icon": "map",
       "group": "Topologie",
-      "request": { "method": "POST", "path": "/api/topology/auto-build" },
+      "request": {
+        "method": "POST",
+        "path": "/api/topology/auto-build"
+      },
       "risk": "reversible",
-      "output": { "type": "object", "properties": { "created": { "type": "integer" }, "deleted": { "type": "integer" } } },
-      "sample": { "created": 11, "deleted": 9 }
+      "output": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "type": "integer"
+          },
+          "deleted": {
+            "type": "integer"
+          }
+        }
+      },
+      "sample": {
+        "created": 11,
+        "deleted": 9
+      }
     }
   ],
-
   "probes": [
-    { "id": "reachable", "name": "Joignable", "kind": "state", "request": { "method": "GET", "path": "/api/health" }, "value": "$.status", "states": { "ok": ["ok"] }, "interval": "30s" },
-    { "id": "health.score", "name": "Score de santé du réseau", "kind": "gauge", "unit": "/100", "request": { "method": "GET", "path": "/api/devices/health/score" }, "value": "$.score", "thresholds": { "warn": 70, "crit": 50, "direction": "below" }, "interval": "5m" },
-    { "id": "devices.count", "name": "Appareils connus", "kind": "gauge", "request": { "method": "GET", "path": "/api/devices" }, "value": "$.length", "interval": "5m" },
-    { "id": "host.cpu", "name": "CPU", "kind": "gauge", "unit": "%", "request": { "method": "GET", "path": "/api/host/stats" }, "value": "$.cpuPct", "thresholds": { "warn": 80, "crit": 95 }, "interval": "1m" },
-    { "id": "host.mem", "name": "Mémoire", "kind": "gauge", "unit": "%", "request": { "method": "GET", "path": "/api/host/stats" }, "value": "$.memPct", "thresholds": { "warn": 85, "crit": 95 }, "interval": "1m" },
-    { "id": "host.disk", "name": "Disque", "kind": "gauge", "unit": "%", "request": { "method": "GET", "path": "/api/host/stats" }, "value": "$.diskPct", "thresholds": { "warn": 80, "crit": 90 }, "interval": "5m" },
-    { "id": "scan.status", "name": "Dernier scan", "kind": "state", "request": { "method": "GET", "path": "/api/devices/scans/latest" }, "value": "$.status", "states": { "ok": ["complete", "running"], "crit": ["failed"] }, "interval": "2m" }
+    {
+      "id": "reachable",
+      "name": "Joignable",
+      "kind": "state",
+      "request": {
+        "method": "GET",
+        "path": "/api/health"
+      },
+      "value": "$.status",
+      "states": {
+        "ok": [
+          "ok"
+        ]
+      },
+      "interval": "30s"
+    },
+    {
+      "id": "health.score",
+      "name": "Score de santé du réseau",
+      "kind": "gauge",
+      "unit": "/100",
+      "request": {
+        "method": "GET",
+        "path": "/api/devices/health/score"
+      },
+      "value": "$.score",
+      "thresholds": {
+        "warn": 70,
+        "crit": 50,
+        "direction": "below"
+      },
+      "interval": "5m"
+    },
+    {
+      "id": "devices.count",
+      "name": "Appareils connus",
+      "kind": "gauge",
+      "request": {
+        "method": "GET",
+        "path": "/api/devices"
+      },
+      "value": "$.length",
+      "interval": "5m"
+    },
+    {
+      "id": "host.cpu",
+      "name": "CPU",
+      "kind": "gauge",
+      "unit": "%",
+      "request": {
+        "method": "GET",
+        "path": "/api/host/stats"
+      },
+      "value": "$.cpuPct",
+      "thresholds": {
+        "warn": 80,
+        "crit": 95
+      },
+      "interval": "1m"
+    },
+    {
+      "id": "host.mem",
+      "name": "Mémoire",
+      "kind": "gauge",
+      "unit": "%",
+      "request": {
+        "method": "GET",
+        "path": "/api/host/stats"
+      },
+      "value": "$.memPct",
+      "thresholds": {
+        "warn": 85,
+        "crit": 95
+      },
+      "interval": "1m"
+    },
+    {
+      "id": "host.disk",
+      "name": "Disque",
+      "kind": "gauge",
+      "unit": "%",
+      "request": {
+        "method": "GET",
+        "path": "/api/host/stats"
+      },
+      "value": "$.diskPct",
+      "thresholds": {
+        "warn": 80,
+        "crit": 90
+      },
+      "interval": "5m"
+    },
+    {
+      "id": "scan.status",
+      "name": "Dernier scan",
+      "kind": "state",
+      "request": {
+        "method": "GET",
+        "path": "/api/devices/scans/latest"
+      },
+      "value": "$.status",
+      "states": {
+        "ok": [
+          "complete",
+          "running"
+        ],
+        "crit": [
+          "failed"
+        ]
+      },
+      "interval": "2m"
+    }
   ],
-
-  "permissions": { "dockerSocket": "none", "privileged": false, "hostNetwork": false, "egress": [] },
-
+  "permissions": {
+    "dockerSocket": "none",
+    "privileged": false,
+    "hostNetwork": true,
+    "capAdd": [
+      "NET_ADMIN",
+      "NET_RAW"
+    ],
+    "egress": []
+  },
   "ai": {
     "exposeActions": true,
-    "hints": "MapMyLAN tourne sur la machine du segment scanné, pas forcément celle du Hub. Quarantaine et bannissement coupent un appareil du réseau : toujours demander validation, ne jamais cibler la passerelle ni la machine du Hub. Un scan complet peut durer plusieurs minutes."
+    "hints": "MapMyLAN partage le réseau de sa machine : il ne voit que le segment de celle-ci. Quarantaine et bannissement coupent un appareil du réseau : toujours demander validation, ne jamais cibler la passerelle ni la machine du Hub. Un scan complet peut durer plusieurs minutes."
   }
 }

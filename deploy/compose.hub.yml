@@ -1,0 +1,94 @@
+# MapMyLAN installé par le Hub.
+# Les variables entre doubles accolades sont remplacées à l'installation : secrets générés,
+# volumes nommés et réseau partagé du Hub.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: {{service.host}}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mapmylan
+      POSTGRES_PASSWORD: {{config.POSTGRES_PASSWORD}}
+      POSTGRES_DB: mapmylan
+    ports:
+      - "{{hostport.db}}:5432"
+    volumes:
+      - {{volume.pgdata}}:/var/lib/postgresql/data
+    networks: [hub]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mapmylan"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  cache:
+    image: redis:7-alpine
+    container_name: {{service.host}}-cache
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no
+    ports:
+      - "{{hostport.cache}}:6379"
+    networks: [hub]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Réseau de la machine : le balayage ARP ne traverse pas un pont Docker.
+  # Déclaré dans permissions.hostNetwork du manifeste, validé à l'installation.
+  api:
+    image: ghcr.io/codexx64/mapmylan-backend:{{config.IMAGE_TAG}}
+    container_name: {{service.host}}-api
+    restart: unless-stopped
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      # Lecture seule : métriques de la machine (CPU, mémoire, charge).
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    environment:
+      DATABASE_URL: postgresql://mapmylan:{{config.POSTGRES_PASSWORD}}@{{hostport.db}}/mapmylan?schema=public
+      REDIS_URL: redis://{{hostport.cache}}
+      JWT_SECRET: {{config.JWT_SECRET}}
+      MASTER_KEY: {{config.MASTER_KEY}}
+      PASSWORD_PEPPER: {{config.PASSWORD_PEPPER}}
+      INTEGRATION_TOKEN_SEED: {{config.HUB_TOKEN}}
+      SCAN_INTERFACE: {{config.SCAN_INTERFACE}}
+      SCAN_SUBNET: {{config.SCAN_SUBNET}}
+      SCAN_INTERVAL: {{config.SCAN_INTERVAL}}
+      PORT: "4000"
+      BIND_ADDRESS: {{config.BIND_ADDRESS}}
+      NODE_ENV: production
+      CORS_ORIGIN: "*"
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+    depends_on:
+      db: { condition: service_healthy }
+      cache: { condition: service_healthy }
+
+  web:
+    image: ghcr.io/codexx64/mapmylan-frontend:{{config.IMAGE_TAG}}
+    container_name: {{service.host}}
+    restart: unless-stopped
+    networks: [hub]
+    ports:
+      - "{{hostport.web}}:80"
+    environment:
+      # nginx relaie /api vers l'API, qui écoute sur l'adresse du pont Docker.
+      API_UPSTREAM: "{{config.BIND_ADDRESS}}:4000"
+    security_opt: ["no-new-privileges:true"]
+    depends_on: [api]
+
+volumes:
+  {{volume.pgdata}}:
+    name: {{volume.pgdata}}
+
+networks:
+  hub:
+    name: {{hub.network}}
+    external: true
