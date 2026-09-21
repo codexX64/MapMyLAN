@@ -17,6 +17,10 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN || "*",
   hostProc: process.env.HOST_PROC || "/proc",
   hostSys: process.env.HOST_SYS || "/sys",
+  // Amorce du jeton d'intégration : une valeur posée par l'installeur, qui
+  // devient telle quelle le jeton du programme qui installe MapMyLAN. Vide,
+  // rien n'est amorcé et le comportement est celui d'avant.
+  integrationSeed: process.env.INTEGRATION_TOKEN_SEED || "",
   scan: {
     subnet: process.env.SCAN_SUBNET || "192.0.2.0/24",
     interval: parseInt(process.env.SCAN_INTERVAL || "300"),

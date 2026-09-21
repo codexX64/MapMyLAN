@@ -19,6 +19,7 @@ import netRoute from "./routes/net";
 import trafficRoute from "./routes/traffic";
 import usersRoute from "./routes/users";
 import integrationsRoute from "./routes/integrations";
+import { logEvent } from "./services/logger";
 import mfaRoute from "./routes/mfa";
 import mailRoute from "./routes/mail";
 import { dedupeDevices } from "./services/dedupe";
@@ -39,6 +40,24 @@ async function main() {
     await (await import("./services/mfa")).preparerTables();
   } catch (e: any) {
     console.error("[démarrage] tables du second facteur :", e?.message || e);
+  }
+
+  // Amorce du jeton d'intégration, si l'installeur en a posé une. Jamais
+  // bloquant : une base indisponible à cet instant ne doit pas empêcher le
+  // service de démarrer, elle reviendra au redémarrage suivant.
+  try {
+    const { amorcerJeton } = await import("./services/integrations");
+    const r = await amorcerJeton(config.integrationSeed);
+    if (r.fait === "cree" || r.fait === "mis-a-jour") {
+      await logEvent("info", "integrations",
+        `Jeton d'integration « hub » ${r.fait === "cree" ? "cree" : "mis a jour"} depuis l'environnement`);
+    } else if (r.fait === "ignore" && r.raison === "prefixe") {
+      console.warn(
+        "[démarrage] INTEGRATION_TOKEN_SEED ignorée : la valeur doit commencer " +
+        "par « hub_ » ou « mml_ » pour être reconnue à l'authentification.");
+    }
+  } catch (e: any) {
+    console.error("[démarrage] amorce du jeton d'intégration :", e?.message || e);
   }
 
   const app = express();

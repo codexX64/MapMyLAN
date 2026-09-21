@@ -16,6 +16,16 @@ import { prisma } from "../db";
 export const PREFIXE = "mml_";
 
 /**
+ * Les préfixes reconnus à l'entrée.
+ *
+ * `mml_` est celui des jetons créés depuis l'interface. `hub_` est celui de
+ * l'amorce : le Hub fabrique la valeur de son côté et nous la passe par
+ * l'environnement, nous ne la choisissons pas. Deux préfixes à l'entrée, un
+ * seul à la sortie — `fabriquerJeton` ne produit que des `mml_`.
+ */
+export const PREFIXES = [PREFIXE, "hub_"] as const;
+
+/**
  * Jamais `admin`.
  *
  * Un jeton vit dans le fichier de configuration d'un autre programme ; il n'a
@@ -44,7 +54,7 @@ export function fabriquerJeton(): { clair: string; prefix: string; hash: string 
 }
 
 export function estJetonIntegration(valeur: string | null | undefined): boolean {
-  return typeof valeur === "string" && valeur.startsWith(PREFIXE);
+  return typeof valeur === "string" && PREFIXES.some((p) => valeur.startsWith(p));
 }
 
 /**
@@ -154,6 +164,64 @@ export async function verifierJeton(clair: string, maintenant: Date = new Date()
     return { ok: false, raison: "expire" };
   }
   return { ok: true, jeton: { id: ligne.id, name: ligne.name, role: ligne.role } };
+}
+
+// ─── Amorce ────────────────────────────────────────────────────────────────
+//
+// Installé par un programme tiers, MapMyLAN doit être utilisable sans qu'un
+// humain vienne créer un jeton dans l'interface. L'installeur pose la valeur
+// dans `INTEGRATION_TOKEN_SEED`, et c'est cette valeur-là qu'il présentera en
+// `Authorization: Bearer` — nous ne la choisissons pas, nous l'enregistrons.
+//
+// La valeur elle-même n'entre pas en base : seule son empreinte, comme pour
+// tout autre jeton. Elle n'apparaît dans aucun journal ni dans aucune réponse.
+
+/** Nom réservé à l'entrée créée par l'amorce. */
+export const NOM_AMORCE = "hub";
+
+export type ResultatAmorce =
+  | { fait: "cree" | "mis-a-jour" | "inchange" }
+  | { fait: "ignore"; raison: "vide" | "prefixe" };
+
+/**
+ * Enregistre — ou met à jour — le jeton d'amorce.
+ *
+ * Idempotente : elle travaille sur l'entrée nommée `hub`, qu'elle crée si elle
+ * manque. Redémarrer ne multiplie pas les jetons, et changer la valeur de la
+ * variable remplace l'empreinte, ce qui invalide l'ancienne d'un seul coup.
+ * Une entrée révoquée à la main est réactivée si l'amorce est toujours posée :
+ * c'est l'environnement qui décide, pas l'état laissé en base.
+ */
+export async function amorcerJeton(valeur: string): Promise<ResultatAmorce> {
+  const seed = (valeur || "").trim();
+  if (!seed) return { fait: "ignore", raison: "vide" };
+
+  // Sans préfixe reconnu, `authRequired` ne prendrait jamais la branche
+  // d'intégration : la ligne serait créée pour rien et l'appelant recevrait
+  // des 401 sans comprendre. Mieux vaut ne rien créer et le dire.
+  if (!estJetonIntegration(seed)) return { fait: "ignore", raison: "prefixe" };
+
+  const hash = empreinte(seed);
+  const existante = await prisma.integrationToken.findFirst({
+    where: { name: NOM_AMORCE }, orderBy: { createdAt: "asc" },
+  });
+
+  if (!existante) {
+    await prisma.integrationToken.create({
+      data: { name: NOM_AMORCE, role: "operator", prefix: seed.slice(0, 8), hash },
+    });
+    return { fait: "cree" };
+  }
+
+  const aJour =
+    existante.hash === hash && existante.role === "operator" && !existante.revokedAt;
+  if (aJour) return { fait: "inchange" };
+
+  await prisma.integrationToken.update({
+    where: { id: existante.id },
+    data: { hash, role: "operator", prefix: seed.slice(0, 8), revokedAt: null },
+  });
+  return { fait: "mis-a-jour" };
 }
 
 /** Note l'usage, au plus une fois par minute. Un échec d'écriture est sans conséquence. */

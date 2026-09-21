@@ -30,7 +30,9 @@ vi.mock("../services/logger", () => ({
 }));
 
 import { authRequired, requireRole, gardeEcriture, AuthedRequest } from "./auth";
-import { fabriquerJeton, reinitialiserDebit, DEBIT_MAX } from "../services/integrations";
+import {
+  fabriquerJeton, reinitialiserDebit, empreinte, DEBIT_MAX,
+} from "../services/integrations";
 
 function req(methode: string, url: string, jeton: string): AuthedRequest {
   return {
@@ -264,6 +266,13 @@ describe("un jeton d'intégration ne passe pas par un cookie", () => {
     expect(journal.at(-1)?.message).toContain("cookie");
   });
 
+  it("un hub_ dans le cookie est refusé — 401", async () => {
+    const r = res();
+    await authRequired(parCookie("hub_" + "a".repeat(40)), r, vi.fn() as any);
+    expect(r.statusCode).toBe(401);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
   it("un cookie piégé ne passe pas davantage si l'en-tête porte autre chose", async () => {
     const jeton = poser("operator");
     const r = res();
@@ -274,6 +283,28 @@ describe("un jeton d'intégration ne passe pas par un cookie", () => {
   it("le même jeton passe par l'en-tête", async () => {
     const jeton = poser("operator");
     expect((await passer("GET", "/api/devices", jeton)).passe).toBe(true);
+  });
+
+  it("le préfixe hub_ est reconnu dans l'en-tête", async () => {
+    const clair = "hub_" + "b".repeat(43);
+    findUnique.mockResolvedValue({
+      id: "tok-hub", name: "hub", role: "operator", prefix: clair.slice(0, 8),
+      hash: empreinte(clair), createdAt: new Date(), lastUsedAt: null,
+      expiresAt: null, revokedAt: null,
+    });
+    const { q, passe } = await passer("GET", "/api/devices", clair);
+    expect(passe).toBe(true);
+    expect(q.user?.role).toBe("operator");
+  });
+
+  it("le jeton d'amorce est refusé sur les comptes — 403", async () => {
+    const clair = "hub_" + "c".repeat(43);
+    findUnique.mockResolvedValue({
+      id: "tok-hub", name: "hub", role: "operator", prefix: clair.slice(0, 8),
+      hash: empreinte(clair), createdAt: new Date(), lastUsedAt: null,
+      expiresAt: null, revokedAt: null,
+    });
+    expect((await passer("GET", "/api/users", clair)).r.statusCode).toBe(403);
   });
 });
 

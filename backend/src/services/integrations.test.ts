@@ -1,20 +1,27 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // `vi.mock` est hissé en tête de fichier : ce qu'il capture doit l'être aussi.
-const { findUnique, update } = vi.hoisted(() => ({
+const { findUnique, findFirst, create, update } = vi.hoisted(() => ({
   findUnique: vi.fn(),
+  findFirst: vi.fn(),
+  create: vi.fn((a: any) => Promise.resolve({ id: "neuf", ...a.data })),
   update: vi.fn(() => Promise.resolve({})),
 }));
-vi.mock("../db", () => ({ prisma: { integrationToken: { findUnique, update } } }));
+vi.mock("../db", () => ({
+  prisma: { integrationToken: { findUnique, findFirst, create, update } },
+}));
 
 import {
   PREFIXE, ROLES, empreinte, fabriquerJeton, estJetonIntegration, memeEmpreinte,
   porteeRefusee, debitDepasse, doitNoterUsage, reinitialiserDebit,
-  verifierJeton, DEBIT_MAX,
+  verifierJeton, amorcerJeton, NOM_AMORCE, PREFIXES, DEBIT_MAX,
 } from "./integrations";
 
 beforeEach(() => {
   findUnique.mockReset();
+  findFirst.mockReset();
+  create.mockReset();
+  create.mockImplementation((a: any) => Promise.resolve({ id: "neuf", ...a.data }));
   update.mockReset();
   reinitialiserDebit();
 });
@@ -174,5 +181,78 @@ describe("verifierJeton", () => {
     findUnique.mockResolvedValue(row);
     expect(await verifierJeton(clair, new Date("2026-06-01")))
       .toEqual({ ok: false, raison: "revoque" });
+  });
+});
+
+describe("amorce du jeton d'intégration", () => {
+  const SEED = "hub_" + "k".repeat(43);
+
+  it("crée l'entrée au premier démarrage", async () => {
+    findFirst.mockResolvedValue(null);
+    expect(await amorcerJeton(SEED)).toEqual({ fait: "cree" });
+    expect(create).toHaveBeenCalledTimes(1);
+    const data = create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ name: NOM_AMORCE, role: "operator", hash: empreinte(SEED) });
+    // Jamais le rôle qui ouvrirait tout.
+    expect(data.role).not.toBe("admin");
+  });
+
+  it("ne duplique rien au second démarrage", async () => {
+    findFirst.mockResolvedValue({
+      id: "t1", name: NOM_AMORCE, role: "operator",
+      prefix: SEED.slice(0, 8), hash: empreinte(SEED), revokedAt: null,
+    });
+    expect(await amorcerJeton(SEED)).toEqual({ fait: "inchange" });
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("remplace l'empreinte quand la valeur change", async () => {
+    findFirst.mockResolvedValue({
+      id: "t1", name: NOM_AMORCE, role: "operator",
+      prefix: "hub_zzzz", hash: empreinte("hub_" + "z".repeat(43)), revokedAt: null,
+    });
+    expect(await amorcerJeton(SEED)).toEqual({ fait: "mis-a-jour" });
+    expect(update.mock.calls[0][0].data).toMatchObject({ hash: empreinte(SEED), role: "operator" });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("réactive une entrée révoquée tant que l'amorce est posée", async () => {
+    findFirst.mockResolvedValue({
+      id: "t1", name: NOM_AMORCE, role: "operator",
+      prefix: SEED.slice(0, 8), hash: empreinte(SEED), revokedAt: new Date(),
+    });
+    expect(await amorcerJeton(SEED)).toEqual({ fait: "mis-a-jour" });
+    expect(update.mock.calls[0][0].data).toMatchObject({ revokedAt: null });
+  });
+
+  it("ne fait rien sans valeur", async () => {
+    expect(await amorcerJeton("")).toEqual({ fait: "ignore", raison: "vide" });
+    expect(await amorcerJeton("   ")).toEqual({ fait: "ignore", raison: "vide" });
+    expect(findFirst).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("refuse une valeur sans préfixe reconnu plutôt que de créer un jeton inutile", async () => {
+    expect(await amorcerJeton("jetondelinstalleur")).toEqual({ fait: "ignore", raison: "prefixe" });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("accepte les deux préfixes reconnus", async () => {
+    for (const p of PREFIXES) {
+      findFirst.mockResolvedValue(null);
+      create.mockClear();
+      expect(await amorcerJeton(p + "m".repeat(43))).toEqual({ fait: "cree" });
+    }
+  });
+
+  it("la valeur en clair n'entre jamais en base", async () => {
+    findFirst.mockResolvedValue(null);
+    await amorcerJeton(SEED);
+    const ecrit = JSON.stringify(create.mock.calls);
+    expect(ecrit).not.toContain(SEED);
+    expect(ecrit).not.toContain(SEED.slice(8));
+    // Seul le préfixe affichable, commun à tous, y figure.
+    expect(create.mock.calls[0][0].data.prefix).toBe(SEED.slice(0, 8));
   });
 });
