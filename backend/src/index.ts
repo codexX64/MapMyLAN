@@ -19,6 +19,7 @@ import netRoute from "./routes/net";
 import trafficRoute from "./routes/traffic";
 import usersRoute from "./routes/users";
 import integrationsRoute from "./routes/integrations";
+import logosRoute from "./routes/logos";
 import { logEvent } from "./services/logger";
 import mfaRoute from "./routes/mfa";
 import mailRoute from "./routes/mail";
@@ -140,6 +141,7 @@ async function main() {
   app.use("/api/traffic", trafficRoute);
   app.use("/api/users", usersRoute);
   app.use("/api/integrations", integrationsRoute);
+  app.use("/api/logos", logosRoute);
   app.use("/api/mfa", mfaRoute);
   app.use("/api/mail", mailRoute);
   app.use("/api", systemRoute);

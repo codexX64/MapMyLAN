@@ -53,18 +53,22 @@ const PERIODE_MS = 8000;
 
 // ─── Logos ─────────────────────────────────────────────────────────────────
 //
-// Un seul fournisseur ne suffit pas : chacun couvre des domaines que les
-// autres ignorent. On les essaie dans l'ordre, on s'arrête à la première image
-// qui charge, et on retient le résultat pour ne pas retenter le réseau. Si
-// tout échoue, une pastille dont la teinte dérive du nom prend le relais.
+// Le navigateur ne parle qu'à notre propre API. C'est le serveur qui va
+// chercher l'image chez les fournisseurs, la garde et la sert — voir
+// backend/src/services/logos.ts.
+//
+// Deux raisons. La politique de contenu servie par nginx n'autorise les images
+// que depuis `\'self\'` : appelés directement, les fournisseurs étaient bloqués
+// et aucun logo ne chargeait jamais en production. Et là où ils chargeaient,
+// en développement, le navigateur annonçait à quatre tiers chaque domaine que
+// le réseau surveillé contacte.
+//
+// La route répond 404 quand le réglage est éteint — il l'est par défaut — et
+// pour un domaine sans logo. Dans les deux cas la pastille prend le relais.
 
-const SOURCES = [
-  (d: string) => `https://icons.duckduckgo.com/ip3/${d}.ico`,
-  (d: string) => `https://www.google.com/s2/favicons?domain=${d}&sz=64`,
-  (d: string) => `https://unavatar.io/${d}?fallback=false`,
-  (d: string) => `https://logo.clearbit.com/${d}`,
-];
+const source = (d: string) => `/api/logos/${encodeURIComponent(d)}`;
 
+/** Mémoire de la session : un domaine déjà tenté ne l'est pas deux fois. */
 const resolus = new Map<string, string | null>();
 
 function teinte(nom: string): string {
@@ -80,16 +84,10 @@ function Logo({ domaine, taille = 22 }: { domaine?: string; taille?: number }) {
     if (!domaine) { setUrl(null); return; }
     if (resolus.has(domaine)) { setUrl(resolus.get(domaine)); return; }
     let vivant = true;
-    const tenter = (i: number) => {
-      if (!vivant) return;
-      if (i >= SOURCES.length) { resolus.set(domaine, null); setUrl(null); return; }
-      const im = new Image();
-      im.referrerPolicy = "no-referrer";
-      im.onload = () => { if (vivant) { resolus.set(domaine, im.src); setUrl(im.src); } };
-      im.onerror = () => tenter(i + 1);
-      im.src = SOURCES[i](domaine);
-    };
-    tenter(0);
+    const im = new Image();
+    im.onload = () => { if (vivant) { resolus.set(domaine, im.src); setUrl(im.src); } };
+    im.onerror = () => { if (vivant) { resolus.set(domaine, null); setUrl(null); } };
+    im.src = source(domaine);
     return () => { vivant = false; };
   }, [domaine]);
 
@@ -99,7 +97,7 @@ function Logo({ domaine, taille = 22 }: { domaine?: string; taille?: number }) {
   if (url) {
     return (
       <span className="lg" style={{ ...style, background: "var(--well)" }}>
-        <img src={url} alt="" referrerPolicy="no-referrer"
+        <img src={url} alt=""
           width={Math.round(taille * 0.68)} height={Math.round(taille * 0.68)}
           style={{ display: "block" }}/>
       </span>

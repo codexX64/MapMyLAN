@@ -58,7 +58,7 @@ Statut : **FIXED** = corrigé dans le code livré.
 | F-07 | LOW | ✅ FIXED | `frontend/src/lib/icons.tsx` | Sink XSS latent dans `title` de SVG. | `escapeXml(title)`. |
 | INFRA-XFF | LOW | ✅ FIXED | `frontend/nginx.conf` | `X-Forwarded-For` non transmis. | En-tête ajouté (`/api/` et `/ws/`). |
 | S-07 | LOW | ✅ FIXED | extension locale *(hors dépôt)* | Domaine interne cité dans un commentaire. | Commentaire reformulé sans nom réel. |
-| S-08 | LOW | ✅ FIXED | `src/WorldTrafficView.tsx` | Favicons chargés depuis Google → fuite de domaines + IP. | Remplacé par une pastille locale (initiale, teinte déterministe) — **aucun appel réseau**. |
+| S-08 | LOW | ✅ FIXED | `frontend/src/components/world/WorldTrafficView.tsx`, `services/logos.ts` | Favicons chargés par le navigateur chez quatre tiers → chaque domaine visité leur était annoncé, et la CSP les bloquait de toute façon en production. | Le navigateur n'appelle plus que `/api/logos/:domaine`. Le serveur récupère, contrôle le type et la taille, garde et sert. **Réglage `world.logos` éteint par défaut** : tant qu'il l'est, rien ne sort. Pastille locale sinon. 16 tests. |
 | S-09 | LOW | ✅ FIXED | `frontend/src/lib/detourage.ts` | Bombe de décompression image → DoS onglet. | Plafond de dimensions (10 000 px/côté, 40 Mpx) avant toute allocation, prouvé par 5 tests. |
 
 ---

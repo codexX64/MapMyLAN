@@ -1372,7 +1372,7 @@ button.who{border:0;cursor:pointer;font-family:var(--sans)}
         </div>
         <div class="opt on" style="cursor:default">
           <span class="ic"><svg class="i" width="17" height="17"><use href="#ic-server"/></svg></span>
-          <div><b>Autonome</b><p>Tout reste chez vous. Aucun service tiers, aucune donnée qui sort.</p></div>
+          <div><b>Autonome</b><p>Aucun compte, aucun nuage : rien de ce que voit MapMyLAN de votre réseau n'en sort.</p></div>
         </div>
       </div>
     </section>
@@ -1812,22 +1812,20 @@ const MAISON = vec(48.86, 2.35);
 const PROTOS = ["HTTPS","QUIC","HTTPS","TLS","HTTPS","DoH","WSS"];
 
 // ═══════════════════════════════════════════════════════════════════
-// Logos : cascade de sources.
+// Logos : une pastille, et rien qui sorte.
 //
-// Un seul fournisseur ne suffit pas — chacun couvre des domaines que
-// les autres ignorent. On les essaie dans l'ordre ; dès qu'une image
-// charge, on s'arrête et on mémorise le résultat. Si tout échoue, on
-// retombe sur une pastille dont la teinte est dérivée du nom, ce qui
-// la rend stable d'une session à l'autre.
+// Cette page affirme un peu plus haut que rien ne quitte votre
+// installation. Elle appelait pourtant quatre fournisseurs de favicons
+// pour dessiner ces vignettes, et leur annonçait donc chaque domaine
+// affiché. Une démonstration ne peut pas promettre une chose et en
+// faire une autre : elle ne parle plus à personne.
+//
+// Dans l'application, les logos existent — c'est le serveur qui va les
+// chercher, les garde et les sert lui-même, et le réglage est éteint
+// par défaut. Une page ouverte depuis un fichier n'a pas de serveur :
+// ici, c'est la pastille, dont la teinte dérive du nom et reste donc
+// la même d'une session à l'autre.
 // ═══════════════════════════════════════════════════════════════════
-const SOURCES = [
-  d => "https://icons.duckduckgo.com/ip3/" + d + ".ico",
-  d => "https://www.google.com/s2/favicons?domain=" + d + "&sz=64",
-  d => "https://unavatar.io/" + d + "?fallback=false",
-  d => "https://logo.clearbit.com/" + d,
-];
-const resolus = new Map();   // domaine → URL qui a fonctionné, ou null
-
 function teinte(nom){
   let h = 0;
   for (let i=0;i<nom.length;i++) h = (h*31 + nom.charCodeAt(i)) % 360;
@@ -1840,43 +1838,9 @@ function logo(svc, taille){
   el.className = "lg";
   el.style.width = taille + "px"; el.style.height = taille + "px";
   el.style.borderRadius = Math.round(taille*0.28) + "px";
-
-  const secours = () => {
-    el.style.background = teinte(svc.n);
-    el.textContent = svc.n[0].toUpperCase();
-    el.style.fontSize = Math.round(taille*0.44) + "px";
-  };
-
-  // déjà résolu : on réutilise sans retenter le réseau
-  if (resolus.has(svc.d)){
-    const url = resolus.get(svc.d);
-    if (!url){ secours(); return el; }
-    el.style.background = "var(--well)";
-    const im = new Image(); im.src = url; im.referrerPolicy = "no-referrer";
-    im.width = Math.round(taille*0.68); im.height = Math.round(taille*0.68);
-    el.appendChild(im);
-    return el;
-  }
-
-  el.style.background = "var(--well)";
-  let k = 0;
-  const essaie = () => {
-    if (k >= SOURCES.length){ resolus.set(svc.d, null); secours(); return; }
-    const url = SOURCES[k++](svc.d);
-    const im = new Image();
-    im.referrerPolicy = "no-referrer";
-    im.width = Math.round(taille*0.68); im.height = Math.round(taille*0.68);
-    im.onload = () => {
-      // Une image de 1×1 ou minuscule signale un favicon vide renvoyé
-      // par défaut : on considère que la source a échoué.
-      if (im.naturalWidth <= 1){ essaie(); return; }
-      resolus.set(svc.d, url);
-      el.textContent = ""; el.appendChild(im);
-    };
-    im.onerror = essaie;
-    im.src = url;
-  };
-  essaie();
+  el.style.background = teinte(svc.n);
+  el.textContent = svc.n[0].toUpperCase();
+  el.style.fontSize = Math.round(taille*0.44) + "px";
   return el;
 }
 

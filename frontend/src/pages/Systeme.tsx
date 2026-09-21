@@ -121,6 +121,27 @@ export function SettingsPage({ t }: { t?: any }) {
             d'hôte. Coupée, elles restent affichées par leur adresse : leurs adresses ne
             sortent alors jamais de ton réseau.
           </div>
+
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10, marginTop: 14,
+            paddingTop: 14, borderTop: "1px solid var(--hair-soft)",
+          }}>
+            <Toggle on={reglages["world.logos"] === true}
+              onChange={v => poser("world.logos", v)}/>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5 }}>Logos des destinations</div>
+              <div style={{ fontSize: 12, color: "var(--faint)" }}>
+                Éteint par défaut.
+              </div>
+            </div>
+          </div>
+          <div className="aide">
+            Allumé, <b style={{ fontWeight: 500 }}>le serveur</b> — jamais ton navigateur —
+            demande le logo de chaque destination à des fournisseurs publics, puis le garde
+            et le sert lui-même. Ces fournisseurs apprennent donc les domaines que ton réseau
+            contacte, sans savoir qui les contacte. Éteint, rien ne sort : chaque destination
+            porte une pastille dont la teinte dérive de son nom.
+          </div>
           <div style={{ display: "flex", gap: 9, marginTop: 14 }}>
             <Btn icon="refresh" onClick={async () => {
               const r = await api.trafficPurge().catch(() => null);

@@ -24,6 +24,7 @@ _Dernière révision : 2026-08-18 (audit de sécurité)._
 |---------|------|-------------|
 | `/auth` (`login`, `logout`, `change-password`) | publique / session | — |
 | `/integrations` | session | `admin` ; **fermée aux jetons d'intégration eux-mêmes** |
+| `/logos` | session | — (lecture) ; répond 404 tant que `world.logos` est éteint |
 | `/devices` | session | lecture : tout compte ; écriture : `admin`+`operator` |
 | `/vlans` | session | lecture : tout compte ; écriture : `admin`+`operator` |
 | `/ssh` | session | `admin` (création/suppression), `admin`+`operator` (exec) |
@@ -52,6 +53,7 @@ _Dernière révision : 2026-08-18 (audit de sécurité)._
 | Service | Usage | Clé / secret | Où |
 |---------|-------|--------------|-----|
 | Telegram Bot API | notifications + bot de commandes | token de bot | `NotificationConfig` (base), appelé serveur-side uniquement |
+| Fournisseurs de favicons | logos des destinations du trafic mondial | aucune | appelés **par le serveur**, et seulement si `world.logos` est allumé — éteint par défaut |
 | SMTP (nodemailer) | courriels d'alerte | identifiants SMTP | `NotificationConfig` |
 | Twilio | SMS d'alerte | SID + auth token | `NotificationConfig` |
 | Équipements réseau (SSH/UniFi) | scan, défense, provisioning | identifiants chiffrés | `SshDevice` (`*Enc`, AES-256-GCM) |
