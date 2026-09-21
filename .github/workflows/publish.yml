@@ -1,0 +1,96 @@
+name: publish
+
+# Images publiées, parce qu'un installeur ne construit pas.
+#
+# Un programme qui installe MapMyLAN ne télécharge qu'un fichier Compose : il
+# n'a ni le dépôt, ni de quoi bâtir. Les deux images doivent donc exister
+# ailleurs, prêtes à tirer, pour deux architectures — les machines qui tiennent
+# un scanner de réseau local sont autant des cartes ARM que des serveurs x86.
+#
+# Rien ici ne nomme personne : le jeton est celui que GitHub fournit à
+# l'exécution, les étiquettes OCI sont posées explicitement, et aucune commande
+# n'affiche d'identité dans le journal.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRE: ghcr.io
+
+jobs:
+  images:
+    name: ${{ matrix.composant }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - composant: backend
+            contexte: backend
+            image: mapmylan-backend
+          - composant: frontend
+            contexte: frontend
+            image: mapmylan-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      # arm64 est bâti en émulation sur un coureur x86 : c'est lent — comptez
+      # une dizaine de minutes de plus — mais cela évite d'entretenir un parc
+      # de coureurs ARM pour deux images.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Le jeton vient de l'exécution : aucun secret à créer, aucun à faire
+      # tourner. `github.actor` est l'auteur du push, pas une identité posée
+      # dans le dépôt.
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRE }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Étiquettes : `latest` suit main, et un tag `v1.2.3` pose aussi 1.2.3 et
+      # 1.2 — de quoi épingler une version mineure sans se figer sur un correctif.
+      - id: etiquettes
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRE }}/codexx64/${{ matrix.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short,enable={{is_default_branch}}
+          # Étiquettes OCI posées à la main plutôt que déduites : ce qui est
+          # publié ne doit décrire que le projet.
+          labels: |
+            org.opencontainers.image.title=MapMyLAN ${{ matrix.composant }}
+            org.opencontainers.image.description=Supervision reseau auto-hebergee — ${{ matrix.composant }}
+            org.opencontainers.image.vendor=CodexX64
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=https://codex64.fr
+          annotations: |
+            org.opencontainers.image.vendor=CodexX64
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.contexte }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.etiquettes.outputs.tags }}
+          labels: ${{ steps.etiquettes.outputs.labels }}
+          # Le cache du coureur évite de reconstruire les couches npm à chaque
+          # passage ; sans lui, chaque publication repart de zéro deux fois.
+          cache-from: type=gha,scope=${{ matrix.composant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.composant }}
+          provenance: false
+          sbom: false
