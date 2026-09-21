@@ -29,3 +29,11 @@ Le Hub génère une valeur préfixée `hub_`, la passe en `INTEGRATION_TOKEN_SEE
 ## Images
 
 `deploy/compose.hub.yml` tire `ghcr.io/codexx64/mapmylan-backend` et `ghcr.io/codexx64/mapmylan-frontend`, étiquette réglable par `IMAGE_TAG`. Le Hub ne construit rien : sans ces images publiées, l'installation s'arrête au téléchargement.
+
+## Comptes gérés depuis le Hub
+
+Le manifeste déclare un bloc `accounts` : le Hub sait lister les comptes, en créer, changer un rôle, remplacer un mot de passe, exiger le second facteur et supprimer. Il le fait avec un jeton de portée `accounts`, distinct du jeton de service, et demande un code TOTP à chaque entrée dans MapMyLAN, valable cinq minutes.
+
+Le compte fondateur — le premier créé — n'est supprimable ni depuis le Hub ni par un jeton d'intégration : c'est par lui qu'on reprend la main si le Hub se trompe ou perd ses droits.
+
+Installé par le Hub, le jeton est semé par `ADMIN_TOKEN_SEED`. En mode distant, il se crée dans Réglages → Intégrations.

@@ -1,4 +1,5 @@
 {
+  "$schema": "https://raw.githubusercontent.com/CodexX64/hub-registry/main/schema/hub-extension.v1.json",
   "manifestVersion": 1,
   "id": "mapmylan",
   "name": "MapMyLAN",
@@ -132,6 +133,14 @@
       "required": true,
       "help": "Installé ici : généré par le Hub et semé dans MapMyLAN au démarrage (INTEGRATION_TOKEN_SEED). À distance : à créer dans Réglages → Intégrations et à coller ici.",
       "generate": "hub-token"
+    },
+    {
+      "key": "ADMIN_TOKEN",
+      "label": "Jeton d'administration des comptes",
+      "type": "secret",
+      "generate": "hub-token",
+      "help": "Installé ici : généré par le Hub et semé (ADMIN_TOKEN_SEED). À distance : jeton de portée « comptes » créé dans Réglages → Intégrations. Sans lui, la page Utilisateurs reste en lecture.",
+      "advanced": true
     }
   ],
   "api": {
@@ -923,5 +932,62 @@
   "ai": {
     "exposeActions": true,
     "hints": "MapMyLAN partage le réseau de sa machine : il ne voit que le segment de celle-ci. Quarantaine et bannissement coupent un appareil du réseau : toujours demander validation, ne jamais cibler la passerelle ni la machine du Hub. Un scan complet peut durer plusieurs minutes."
+  },
+  "accounts": {
+    "tokenKey": "ADMIN_TOKEN",
+    "roles": [
+      "admin",
+      "operator",
+      "viewer"
+    ],
+    "adminRole": "admin",
+    "fields": {
+      "id": "$.id",
+      "name": "$.username",
+      "role": "$.role",
+      "mfa": "$.totpEnabled",
+      "created": "$.createdAt",
+      "lastSeen": "$.lastLogin",
+      "protected": "$.fondateur"
+    },
+    "list": {
+      "method": "GET",
+      "path": "/api/users",
+      "select": "$.comptes"
+    },
+    "create": {
+      "method": "POST",
+      "path": "/api/users",
+      "body": {
+        "username": "{{params.username}}",
+        "password": "{{params.password}}",
+        "role": "{{params.role}}"
+      }
+    },
+    "update": {
+      "method": "PATCH",
+      "path": "/api/users/{{params.id}}",
+      "body": {
+        "role": "{{params.role}}"
+      }
+    },
+    "password": {
+      "method": "POST",
+      "path": "/api/users/{{params.id}}/password",
+      "body": {
+        "password": "{{params.password}}"
+      }
+    },
+    "requireMfa": {
+      "method": "POST",
+      "path": "/api/users/{{params.id}}/mfa/exiger",
+      "body": {
+        "valeur": true
+      }
+    },
+    "remove": {
+      "method": "DELETE",
+      "path": "/api/users/{{params.id}}"
+    }
   }
 }

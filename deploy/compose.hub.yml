@@ -1,5 +1,5 @@
 # MapMyLAN installé par le Hub.
-# Les variables entre doubles accolades sont remplacées à l'installation : secrets générés,
+# Les {{...}} sont remplacés à l'installation : secrets générés, ports d'hôte,
 # volumes nommés et réseau partagé du Hub.
 services:
   db:
@@ -48,7 +48,6 @@ services:
     cap_add: [NET_ADMIN, NET_RAW]
     security_opt: ["no-new-privileges:true"]
     volumes:
-      # Lecture seule : métriques de la machine (CPU, mémoire, charge).
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
     environment:
@@ -58,6 +57,7 @@ services:
       MASTER_KEY: {{config.MASTER_KEY}}
       PASSWORD_PEPPER: {{config.PASSWORD_PEPPER}}
       INTEGRATION_TOKEN_SEED: {{config.HUB_TOKEN}}
+      ADMIN_TOKEN_SEED: {{config.ADMIN_TOKEN}}
       SCAN_INTERFACE: {{config.SCAN_INTERFACE}}
       SCAN_SUBNET: {{config.SCAN_SUBNET}}
       SCAN_INTERVAL: {{config.SCAN_INTERVAL}}
@@ -83,10 +83,6 @@ services:
       API_UPSTREAM: "{{config.BIND_ADDRESS}}:4000"
     security_opt: ["no-new-privileges:true"]
     depends_on: [api]
-
-volumes:
-  {{volume.pgdata}}:
-    name: {{volume.pgdata}}
 
 networks:
   hub:
