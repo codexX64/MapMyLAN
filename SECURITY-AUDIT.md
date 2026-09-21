@@ -1,6 +1,6 @@
 # MapMyLAN — Rapport d'audit de sécurité
 
-**Cible :** MapMyLAN Codex64 (backend Node/Express + Prisma, frontend Vite/React, modules `src/`, mécanisme d'extensions)
+**Cible :** MapMyLAN Codex64 (backend Node/Express + Prisma, frontend Vite/React, mécanisme d'extensions)
 **Portée :** l'intégralité du code de ce dépôt. Les modules déposés dans `extensions/` sont propres à chaque installation et sortent de cette portée : ils sont chargés au démarrage et doivent être audités par qui les écrit.
 **Référentiel :** *How to Secure an AI-Generated Website Like a Pro* — OWASP Top 10 2025 + OWASP Top 10 LLM
 **Dates :** première passe 2026-08-18 · seconde passe 2026-08-23 (section 7)
@@ -50,11 +50,11 @@ Statut : **FIXED** = corrigé dans le code livré.
 | S-01 | HIGH | ✅ FIXED | extension locale *(hors dépôt)* | Spool `/var/tmp` partagé en 0644 : faux événements rejoués avec le token, lecture de l'inventaire. | Spool privé (`mkdir 0700`, fichiers `0600`), refus non-propriétaire/symlink, **vérif. de hash** avant rejeu. |
 | M-01 | MEDIUM | ✅ FIXED | `index.ts` | `CORS_ORIGIN=*` avec `credentials:true`. | `credentials` désactivé si origine `*` + avertissement au démarrage. |
 | M-02 | MEDIUM | ✅ FIXED | extension locale *(hors dépôt)* | Token Bearer en clair vers URL non validée. | Garde d'URL : HTTPS exigé sauf hôte interne ; jeton non attaché sinon. |
-| M-03 | MEDIUM | ✅ FIXED | `src/ticket.ts` | Injection d'en-tête courriel via nom d'hôte. | `S()` retire caractères de contrôle et marques invisibles. |
-| M-04 | MEDIUM | ✅ FIXED | `src/ticket.ts` | SSRF + fuite de clé via URL de billetterie arbitraire. | `urlBilletterieSure()` : HTTPS exigé sauf RFC1918 ; **169.254/16 exclu** ; identifiants d'URL refusés. |
-| M-05 | MEDIUM | ✅ FIXED | `src/extensions.ts` | Chargeur `require()` exécutant tout fichier du dossier. | Refus des fichiers inscriptibles groupe/autres, symlinks, non-possédés. |
+| M-03 | MEDIUM | ✅ FIXED | `backend/src/services/ticket.ts` | Injection d'en-tête courriel via nom d'hôte. | `S()` retire caractères de contrôle et marques invisibles. |
+| M-04 | MEDIUM | ✅ FIXED | `backend/src/services/ticket.ts` | SSRF + fuite de clé via URL de billetterie arbitraire. | `urlBilletterieSure()` : HTTPS exigé sauf RFC1918 ; **169.254/16 exclu** ; identifiants d'URL refusés. |
+| M-05 | MEDIUM | ✅ FIXED | `backend/src/services/extensions.ts` | Chargeur `require()` exécutant tout fichier du dossier. | Refus des fichiers inscriptibles groupe/autres, symlinks, non-possédés. |
 | M-06 | MEDIUM | ✅ FIXED | `docker-compose.yml`, `services/host.ts` | Backend en réseau hôte + `docker.sock` + capacités larges. | **Socket Docker retiré** du backend → proxy lecture seule (`docker-socket-proxy`, conteneurs seuls) ; `cap_drop: ALL` + seules `NET_ADMIN`/`NET_RAW` rendues ; `no-new-privileges` sur tous les services. Réseau hôte conservé par conception (scanner LAN), désormais sans capacité superflue. |
-| S-06 | LOW | ✅ FIXED | `src/ticket.ts` | Override d'urgence pouvant forcer P1. | Override limité aux déclassements. |
+| S-06 | LOW | ✅ FIXED | `backend/src/services/ticket.ts` | Override d'urgence pouvant forcer P1. | Override limité aux déclassements. |
 | F-07 | LOW | ✅ FIXED | `frontend/src/lib/icons.tsx` | Sink XSS latent dans `title` de SVG. | `escapeXml(title)`. |
 | INFRA-XFF | LOW | ✅ FIXED | `frontend/nginx.conf` | `X-Forwarded-For` non transmis. | En-tête ajouté (`/api/` et `/ws/`). |
 | S-07 | LOW | ✅ FIXED | extension locale *(hors dépôt)* | Domaine interne cité dans un commentaire. | Commentaire reformulé sans nom réel. |

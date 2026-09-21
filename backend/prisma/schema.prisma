@@ -2,7 +2,10 @@
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  // « native » suffit tant qu'on construit sur la machine cible. La chaine de
+  // publication bâtit aussi l'image arm64 en émulation : on nomme donc les deux
+  // cibles, plutôt que de dépendre de ce que « native » résout ce jour-là.
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {

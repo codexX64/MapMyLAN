@@ -49,7 +49,10 @@ export function chargerExtensions(journal?: (n: string, m: string) => void): voi
     fs = require("fs"); path = require("path");
   } catch { return; }
 
-  const dossier = path.join(__dirname, "..", "extensions");
+  // Le dossier vit à côté de l'application, pas à côté de ce fichier : une fois
+  // compilé, celui-ci est sous dist/, et `..` y désignerait dist/ et non /app.
+  // `EXTENSIONS_DIR` permet de le déplacer sans toucher au code.
+  const dossier = process.env.EXTENSIONS_DIR || path.join(process.cwd(), "extensions");
   let fichiers: string[];
   try {
     fichiers = fs.readdirSync(dossier).filter(f => /\.(js|ts)$/.test(f) && !f.startsWith("_"));
@@ -59,8 +62,27 @@ export function chargerExtensions(journal?: (n: string, m: string) => void): voi
 
   for (const f of fichiers) {
     try {
+      const chemin = path.join(dossier, f);
+      // Charger un module, c'est exécuter son code avec tous les privilèges du
+      // backend (identifiants SSH des équipements, actions de blocage). Un
+      // fichier inscriptible par le groupe ou par tous, ou qui ne nous
+      // appartient pas, a pu être remplacé par un tiers : on refuse de
+      // l'exécuter plutôt que d'en faire une porte d'entrée silencieuse.
+      const st = fs.lstatSync(chemin);
+      if (st.isSymbolicLink()) {
+        journal?.("warn", `Extension ${f} ignorée : lien symbolique refusé`);
+        continue;
+      }
+      if ((st.mode & 0o022) !== 0) {
+        journal?.("warn", `Extension ${f} ignorée : fichier inscriptible par le groupe ou tous (chmod 600/644)`);
+        continue;
+      }
+      if (process.getuid && st.uid !== process.getuid()) {
+        journal?.("warn", `Extension ${f} ignorée : propriétaire inattendu`);
+        continue;
+      }
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const m = require(path.join(dossier, f));
+      const m = require(chemin);
       const ext: Extension = m?.default || m;
       if (ext && typeof ext === "object") {
         chargees.push(ext);

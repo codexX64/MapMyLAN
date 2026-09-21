@@ -149,7 +149,23 @@ export interface Ticket {
   source: { systeme: string; ref: string };
 }
 
-const S = (v: unknown, max = 512) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+// Assainit une chaîne destinée à un ticket ou à un courriel.
+//
+// `titre` et consorts se construisent à partir de noms d'hôte annoncés sur le
+// réseau. Ces valeurs finissent dans l'objet du courriel (voir preparerCourriel)
+// et dans des en-têtes : un `\r\n` glissé dans un nom d'hôte injecterait un
+// en-tête `Bcc:` supplémentaire. On retire donc les caractères de contrôle et
+// les marques invisibles avant toute troncature.
+const S = (v: unknown, max = 512) =>
+  typeof v === "string"
+    ? v
+        // Caractères de contrôle (dont CR/LF/TAB) : vecteur d'injection d'en-tête.
+        .replace(/[\u0000-\u001f\u007f]/g, " ")
+        // Espaces invisibles et marques bidirectionnelles (déguisement de nom).
+        .replace(/[\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "")
+        .trim()
+        .slice(0, max)
+    : "";
 
 /**
  * Clé de regroupement.
@@ -187,7 +203,14 @@ export function construireTicket(
   r: Reglages = {},
 ): Ticket {
   const p = PROFILS[ev];
-  const urgence = c.urgence || urgenceDe(p.impact, p.portee);
+  // L'override d'urgence ne sert qu'à corriger la matrice vers le bas. L'autoriser
+  // à monter permettrait à n'importe quel émetteur (ou à un contexte influencé
+  // par des données réseau) de se déclarer P1 et de court-circuiter les seuils
+  // d'alerte. On ne retient donc l'override que s'il est moins urgent que le
+  // calcul (rang numérique plus élevé = moins urgent).
+  const calc = urgenceDe(p.impact, p.portee);
+  const RANG: Record<Urgence, number> = { p1: 1, p2: 2, p3: 3, p4: 4 };
+  const urgence: Urgence = c.urgence && RANG[c.urgence] >= RANG[calc] ? c.urgence : calc;
 
   const metriques: Ticket["metriques"] = [];
   if (typeof c.risque === "number") {
@@ -260,12 +283,47 @@ export interface Resultat {
  * refusée, un quota dépassé et une panne du serveur appellent trois réactions
  * différentes.
  */
+// Vérifie qu'une adresse d'API de billetterie est sûre à contacter.
+//
+// L'URL et la clé sont posées dans les réglages : sans contrôle, elles font du
+// backend un relais SSRF (`http://169.254.169.254/…`, services internes) qui, en
+// prime, livre la clé en clair sur du HTTP simple. On exige HTTPS, sauf vers un
+// hôte manifestement privé/local, et on refuse les identifiants dans l'URL.
+function estHotePrive(h: string): boolean {
+  const host = h.replace(/^\[|\]$/g, "").toLowerCase();
+  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  if (!host.includes(".")) return true; // nom de service Docker (sans point)
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  // Plages privées et loopback uniquement. 169.254.0.0/16 (lien-local) est
+  // EXCLU à dessein : c'est là que vit le service de métadonnées d'hébergeur
+  // (169.254.169.254), cible classique de SSRF.
+  return a === 10 || a === 127 || (a === 192 && b === 168) ||
+         (a === 172 && b >= 16 && b <= 31);
+}
+
+function urlBilletterieSure(url: string): URL {
+  const u = new URL(url); // lève si invalide
+  if (u.username || u.password) throw new Error("Adresse d'API : identifiants dans l'URL non admis.");
+  if (u.protocol === "https:") return u;
+  if (u.protocol === "http:" && estHotePrive(u.hostname)) return u;
+  throw new Error("Adresse d'API : HTTPS requis (HTTP toléré seulement vers un hôte interne).");
+}
+
 export async function envoyerApi(t: Ticket, d: Destination): Promise<Resultat> {
   if (!d.url) return { ok: false, erreur: "Aucune adresse d'API configurée." };
   const entete = d.entete || "X-Ticket-Key";
 
+  let cible: URL;
   try {
-    const rep = await fetch(d.url, {
+    cible = urlBilletterieSure(d.url);
+  } catch (e: any) {
+    return { ok: false, erreur: e?.message || "Adresse d'API refusée." };
+  }
+
+  try {
+    const rep = await fetch(cible.toString(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

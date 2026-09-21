@@ -56,14 +56,6 @@ qu'attend le nouveau `i18n.ts`, et de vérifier que les clés se recouvrent : le
 écrans ont changé, une partie des anciennes clés n'existe plus. Ce n'est pas
 fait, et ce n'est pas une régression silencieuse : c'est écrit ici.
 
-## Correctif non appliqué
-
-`docs/patch-v29/` contient un correctif d'interface qui n'a pas été appliqué au
-code présent, et qui ne l'a toujours pas été. Il vise `AppShell.tsx` et
-`TopologyMap.tsx` dans un état antérieur à la disposition atelier ; les deux
-fichiers ont changé depuis. **Ne l'appliquez pas tel quel** : relisez-le d'abord
-et reportez ce qui vous intéresse à la main, ou supprimez le dossier.
-
 ## Avant de publier
 
 ```bash
@@ -86,6 +78,12 @@ dans `extensions/`, chargé au démarrage sans autre déclaration.
 Un connecteur qui appelait directement une base de connaissances depuis le
 scanner a été converti à ce mécanisme : il expose `surAppareil`, `surBalayage`
 et `surAlerte` au lieu d'être câblé dans le code partagé.
+
+Les trois points d'accroche sont câblés dans le code livré : `surAlerte` à
+l'émission d'une alerte (`services/logger.ts`), `surBalayage` à la fin d'un
+balayage et `surAppareil` à la première apparition d'un appareil
+(`services/scanner.ts`). Le dossier est monté en lecture seule dans le
+conteneur : y déposer un fichier suffit, sans reconstruire l'image.
 
 Ce découpage évite d'entretenir deux versions divergentes. Un correctif appliqué
 ici profite à toutes les installations.

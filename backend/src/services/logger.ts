@@ -24,6 +24,13 @@ export async function createAlert(severity: string, source: string, message: str
     },
   });
   eventBus.emit("alert:new", alert);
+  // Point d'accroche des extensions : une installation qui double ses alertes
+  // vers un système interne le fait ici, sans que ce fichier connaisse le
+  // système en question.
+  try {
+    const { extensions } = require("./extensions");
+    extensions.alerte(alert as unknown as Record<string, unknown>);
+  } catch { /* pas d'extensions : le cas ordinaire */ }
   await logEvent(severity === "info" ? "info" : (severity === "low" ? "warn" : "error"), source, message);
   return alert;
 }

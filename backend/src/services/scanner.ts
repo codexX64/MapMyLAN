@@ -593,6 +593,12 @@ async function persistHost(h: ScannedHost, vue?: TopologieVue): Promise<string |
     await prisma.deviceHistory.create({
       data: { deviceId: device.id, event: "first_seen", data: { ip: h.ip, vendor: h.vendor || "Unknown" } },
     });
+      try {
+        const { extensions } = require("./extensions");
+        extensions.appareil("device.first_seen", {
+          id: device.id, ip: h.ip, mac: h.mac, vendor: h.vendor || null,
+        });
+      } catch { /* pas d'extensions */ }
     eventBus.emit("alert:new", { newDevice: true, device });
     // Fire user notification commands (best-effort, non-blocking)
     const { fireCommand } = await import("./commands");
@@ -750,6 +756,13 @@ export async function fullScan(subnet?: string): Promise<{ hostsFound: number; r
     });
     await logEvent("success", "scanner", `Full scan complete: ${enriched.length} hosts`);
     eventBus.emit("scan:complete", { runId: run.id, hostsFound: enriched.length });
+    try {
+      const { extensions } = require("./extensions");
+      extensions.balayage({
+        runId: run.id, hotes: enriched.length, enLigne: enriched.length,
+        plage: target, duree: Date.now() - run.startedAt.getTime(),
+      });
+    } catch { /* pas d'extensions */ }
     eventBus.emit("devices:updated");
 
     return { hostsFound: enriched.length, runId: run.id };

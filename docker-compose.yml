@@ -93,6 +93,10 @@ services:
       # /proc et /sys en lecture seule pour la supervision de l'hôte.
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      # Extensions facultatives, montées en lecture seule. Le dossier est vide
+      # par defaut et rien ne se charge ; y deposer un fichier suffit, sans
+      # reconstruire l'image — c'est tout l'interet du mecanisme.
+      - ./extensions:/app/extensions:ro
       # Plus de montage du socket Docker : on passe par le proxy en lecture seule.
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -104,6 +108,7 @@ services:
       SCAN_SUBNET: ${SCAN_SUBNET}
       SCAN_INTERVAL: ${SCAN_INTERVAL}
       SCAN_INTERFACE: ${SCAN_INTERFACE}
+      INTEGRATION_TOKEN_SEED: ${INTEGRATION_TOKEN_SEED}
       PORT: ${PORT}
       NODE_ENV: ${NODE_ENV}
       CORS_ORIGIN: ${CORS_ORIGIN}

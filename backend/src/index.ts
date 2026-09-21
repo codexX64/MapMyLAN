@@ -43,6 +43,19 @@ async function main() {
     console.error("[démarrage] tables du second facteur :", e?.message || e);
   }
 
+  // Extensions déposées dans `extensions/`. L'absence du dossier est le cas
+  // ordinaire et ne dit rien ; un fichier refusé, lui, est signalé — sans quoi
+  // on chercherait longtemps pourquoi une extension reste muette.
+  try {
+    const { chargerExtensions, extensions } = await import("./services/extensions");
+    chargerExtensions((niveau, message) =>
+      void logEvent(niveau === "warn" ? "warn" : "info", "extensions", message));
+    const n = extensions.nombre();
+    if (n > 0) await logEvent("info", "extensions", `${n} extension(s) chargee(s)`);
+  } catch (e: any) {
+    console.error("[démarrage] extensions :", e?.message || e);
+  }
+
   // Amorce du jeton d'intégration, si l'installeur en a posé une. Jamais
   // bloquant : une base indisponible à cet instant ne doit pas empêcher le
   // service de démarrer, elle reviendra au redémarrage suivant.
