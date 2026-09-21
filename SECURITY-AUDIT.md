@@ -59,7 +59,7 @@ Statut : **FIXED** = corrigé dans le code livré.
 | INFRA-XFF | LOW | ✅ FIXED | `frontend/nginx.conf` | `X-Forwarded-For` non transmis. | En-tête ajouté (`/api/` et `/ws/`). |
 | S-07 | LOW | ✅ FIXED | extension locale *(hors dépôt)* | Domaine interne cité dans un commentaire. | Commentaire reformulé sans nom réel. |
 | S-08 | LOW | ✅ FIXED | `src/WorldTrafficView.tsx` | Favicons chargés depuis Google → fuite de domaines + IP. | Remplacé par une pastille locale (initiale, teinte déterministe) — **aucun appel réseau**. |
-| S-09 | LOW | ✅ FIXED | `src/detourage.ts` | Bombe de décompression image → DoS onglet. | Plafond de dimensions (10 000 px/côté, 40 Mpx) avant allocation. |
+| S-09 | LOW | ✅ FIXED | `frontend/src/lib/detourage.ts` | Bombe de décompression image → DoS onglet. | Plafond de dimensions (10 000 px/côté, 40 Mpx) avant toute allocation, prouvé par 5 tests. |
 
 ---
 

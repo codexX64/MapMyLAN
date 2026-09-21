@@ -74,6 +74,20 @@ export async function detourer(
   const H = img.naturalHeight || img.height;
   if (!W || !H) throw new Error("Image illisible.");
 
+  // Garde-fou anti « bombe de décompression » : un PNG de quelques kilo-octets
+  // peut déclarer 30000×30000 pixels et réserver plusieurs gigaoctets à
+  // l'allocation du canvas/ImageData, gelant l'onglet. La limite en octets de
+  // DevicePhoto ne voit pas ce cas — le fichier compressé est minuscule. On
+  // borne donc les dimensions elles-mêmes, avant toute allocation.
+  const COTE_MAX = 10000;              // 10 000 px par côté
+  const PIXELS_MAX = 40 * 1000 * 1000; // 40 mégapixels
+  if (W > COTE_MAX || H > COTE_MAX || W * H > PIXELS_MAX) {
+    throw new Error(
+      `Image trop grande (${W}×${H}). Maximum ${COTE_MAX} px par côté, ` +
+      `${PIXELS_MAX / 1_000_000} Mpx.`,
+    );
+  }
+
   const cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
   const ctx = cv.getContext("2d", { willReadFrequently: true })!;
