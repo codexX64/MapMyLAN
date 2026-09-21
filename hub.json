@@ -1,0 +1,253 @@
+{
+  "$schema": "https://raw.githubusercontent.com/CodexX64/hub-registry/main/schema/hub-extension.v1.json",
+  "manifestVersion": 1,
+  "id": "mapmylan",
+  "name": "MapMyLAN",
+  "version": "1.0.0",
+  "description": "Cartographie du réseau local : appareils, scans, scores de risque, alertes, quarantaine.",
+  "icon": "map",
+  "repository": "https://github.com/CodexX64/mapmylan",
+  "license": "MIT",
+  "minHubVersion": "0.1.0",
+
+  "install": {
+    "type": "external",
+    "remote": {
+      "supported": true,
+      "label": "Adresse de MapMyLAN",
+      "placeholder": "http://192.168.1.20:8120",
+      "defaultPort": 8120,
+      "setupHelp": "MapMyLAN s'installe sur une machine du segment à scanner (réseau hôte, arp-scan) avec sa propre procédure : docs/INSTALL.md. Dans MapMyLAN, Réglages → Intégrations : créer un jeton « Hub » (rôle opérateur) et le coller ici. N'autoriser l'interface que depuis l'IP du Hub."
+    },
+    "healthcheck": { "type": "http", "path": "/api/health", "expect": 200, "timeout": "5s" }
+  },
+
+  "config": [
+    { "key": "HUB_TOKEN", "label": "Jeton d'intégration", "type": "secret", "required": true, "help": "Créé dans MapMyLAN, Réglages → Intégrations. Rôle opérateur conseillé." }
+  ],
+
+  "api": {
+    "baseUrl": "{{service.url}}",
+    "auth": { "type": "bearer", "token": "{{service.token}}", "remoteToken": "HUB_TOKEN" }
+  },
+
+  "capabilities": {
+    "provides": ["network.inventory", "network.scan", "network.block", "alerts.source", "host.metrics"],
+    "requires": [],
+    "accepts": []
+  },
+
+  "triggers": [
+    {
+      "id": "alert.new",
+      "name": "Nouvelle alerte",
+      "description": "MapMyLAN a levé une alerte (appareil inconnu, port suspect, score en hausse…).",
+      "icon": "bell",
+      "group": "Alertes",
+      "delivery": { "type": "poll", "request": { "method": "GET", "path": "/api/alerts", "query": { "limit": "50" } }, "interval": "30s", "items": "$", "dedupeKey": "$.id" },
+      "output": { "type": "object", "properties": { "id": { "type": "string" }, "severity": { "type": "string" }, "source": { "type": "string" }, "message": { "type": "string" }, "deviceId": { "type": "string" }, "deviceIp": { "type": "string" }, "deviceMac": { "type": "string" }, "createdAt": { "type": "string" } } },
+      "sample": { "id": "clx1a2b3c", "severity": "high", "source": "scanner", "message": "Nouvel appareil inconnu détecté", "deviceId": "clx9z8y7x", "deviceIp": "192.168.1.77", "deviceMac": "AA:BB:CC:00:11:22", "createdAt": "2026-09-17T10:12:00.000Z" }
+    },
+    {
+      "id": "device.new",
+      "name": "Nouvel appareil",
+      "description": "Un appareil apparaît pour la première fois dans l'inventaire.",
+      "icon": "server",
+      "group": "Appareils",
+      "delivery": { "type": "poll", "request": { "method": "GET", "path": "/api/devices" }, "interval": "1m", "items": "$", "dedupeKey": "$.id" },
+      "output": { "type": "object", "properties": { "id": { "type": "string" }, "ip": { "type": "string" }, "mac": { "type": "string" }, "hostname": { "type": "string" }, "vendor": { "type": "string" }, "type": { "type": "string" }, "status": { "type": "string" }, "dangerScore": { "type": "integer" } } },
+      "sample": { "id": "clx9z8y7x", "ip": "192.168.1.77", "mac": "AA:BB:CC:00:11:22", "hostname": "android-3f2a", "vendor": "Samsung", "type": "phone", "status": "online", "dangerScore": 42 }
+    },
+    {
+      "id": "scan.complete",
+      "name": "Scan terminé",
+      "description": "Le dernier scan réseau vient de se terminer.",
+      "icon": "search",
+      "group": "Scans",
+      "delivery": { "type": "poll", "request": { "method": "GET", "path": "/api/devices/scans/latest" }, "interval": "30s", "dedupeKey": "$.endedAt" },
+      "output": { "type": "object", "properties": { "id": { "type": "string" }, "type": { "type": "string" }, "subnet": { "type": "string" }, "status": { "type": "string" }, "hostsFound": { "type": "integer" }, "endedAt": { "type": "string" }, "error": { "type": "string" } } },
+      "sample": { "id": "clxscan01", "type": "full", "subnet": "192.168.1.0/24", "status": "complete", "hostsFound": 38, "startedAt": "2026-09-17T10:00:00.000Z", "endedAt": "2026-09-17T10:02:41.000Z", "error": null }
+    }
+  ],
+
+  "actions": [
+    {
+      "id": "scan",
+      "name": "Lancer un scan",
+      "description": "Scanne une plage, ou toutes les plages configurées si le champ est vide. Le résultat arrive par le déclencheur « Scan terminé ».",
+      "icon": "search",
+      "group": "Scans",
+      "capability": "network.scan",
+      "params": [
+        { "key": "subnet", "label": "Plage (CIDR)", "type": "select", "help": "Vide = toutes les plages.", "optionsFrom": { "method": "GET", "path": "/api/devices/scan/ranges", "map": { "value": "$.cidr", "label": "$.cidr" } } }
+      ],
+      "request": { "method": "POST", "path": "/api/devices/scan", "body": { "subnet": "{{params.subnet}}" } },
+      "risk": "reversible",
+      "output": { "type": "object", "properties": { "ok": { "type": "boolean" } } },
+      "sample": { "ok": true }
+    },
+    {
+      "id": "devices.list",
+      "name": "Lister les appareils",
+      "description": "Inventaire complet : adresses, ports, CVE, scores.",
+      "icon": "server",
+      "group": "Appareils",
+      "capability": "network.inventory",
+      "request": { "method": "GET", "path": "/api/devices" },
+      "risk": "read",
+      "idempotent": true,
+      "output": { "type": "array", "items": { "type": "object" } },
+      "sample": [{ "id": "clx9z8y7x", "ip": "192.168.1.77", "hostname": "android-3f2a", "status": "online", "dangerScore": 42 }]
+    },
+    {
+      "id": "device.get",
+      "name": "Détail d'un appareil",
+      "description": "Fiche d'un appareil.",
+      "icon": "server",
+      "group": "Appareils",
+      "params": [ { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } } ],
+      "request": { "method": "GET", "path": "/api/devices/{{params.deviceId}}" },
+      "risk": "read",
+      "idempotent": true,
+      "output": { "type": "object" },
+      "sample": { "id": "clx9z8y7x", "ip": "192.168.1.77", "status": "online", "ports": [], "cves": [] }
+    },
+    {
+      "id": "device.ping",
+      "name": "Ping d'un appareil",
+      "description": "Vérifie qu'un appareil répond.",
+      "icon": "chart",
+      "group": "Appareils",
+      "params": [ { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } } ],
+      "request": { "method": "GET", "path": "/api/devices/{{params.deviceId}}/ping" },
+      "risk": "read",
+      "idempotent": true,
+      "output": { "type": "object" },
+      "sample": { "alive": true, "latencyMs": 3.1 }
+    },
+    {
+      "id": "device.deep-scan",
+      "name": "Scan approfondi",
+      "description": "Scan nmap détaillé d'un appareil (ports, services, OS).",
+      "icon": "search",
+      "group": "Appareils",
+      "params": [ { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } } ],
+      "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/deep-scan" },
+      "risk": "reversible",
+      "timeout": "5m",
+      "output": { "type": "object" },
+      "sample": { "ok": true }
+    },
+    {
+      "id": "device.quarantine",
+      "name": "Mettre en quarantaine",
+      "description": "Isole un appareil via le routeur configuré dans MapMyLAN.",
+      "icon": "shield",
+      "group": "Défense",
+      "capability": "network.block",
+      "params": [
+        { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } },
+        { "key": "reason", "label": "Motif", "type": "string" }
+      ],
+      "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/quarantine", "body": { "reason": "{{params.reason}}" } },
+      "risk": "destructive",
+      "output": { "type": "object" },
+      "sample": { "ok": true, "status": "quarantined" }
+    },
+    {
+      "id": "device.ban",
+      "name": "Bannir un appareil",
+      "description": "Bloque totalement un appareil via le routeur configuré dans MapMyLAN.",
+      "icon": "stop",
+      "group": "Défense",
+      "params": [
+        { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } },
+        { "key": "reason", "label": "Motif", "type": "string" }
+      ],
+      "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/ban", "body": { "reason": "{{params.reason}}" } },
+      "risk": "destructive",
+      "output": { "type": "object" },
+      "sample": { "ok": true, "status": "banned" }
+    },
+    {
+      "id": "device.unban",
+      "name": "Lever un blocage",
+      "description": "Retire le bannissement ou la quarantaine d'un appareil.",
+      "icon": "check",
+      "group": "Défense",
+      "params": [ { "key": "deviceId", "label": "Appareil", "type": "select", "required": true, "optionsFrom": { "method": "GET", "path": "/api/devices", "map": { "value": "$.id", "label": "$.ip" } } } ],
+      "request": { "method": "POST", "path": "/api/devices/{{params.deviceId}}/unban" },
+      "risk": "reversible",
+      "output": { "type": "object" },
+      "sample": { "ok": true, "status": "online" }
+    },
+    {
+      "id": "alerts.list",
+      "name": "Lister les alertes",
+      "description": "Dernières alertes, les plus récentes d'abord.",
+      "icon": "bell",
+      "group": "Alertes",
+      "capability": "alerts.source",
+      "params": [ { "key": "limit", "label": "Nombre", "type": "number", "default": 50, "min": 1, "max": 500 } ],
+      "request": { "method": "GET", "path": "/api/alerts", "query": { "limit": "{{params.limit}}" } },
+      "risk": "read",
+      "idempotent": true,
+      "output": { "type": "array", "items": { "type": "object" } },
+      "sample": [{ "id": "clx1a2b3c", "severity": "high", "message": "Nouvel appareil inconnu détecté", "acknowledged": false }]
+    },
+    {
+      "id": "alert.ack",
+      "name": "Acquitter une alerte",
+      "description": "Marque une alerte comme traitée.",
+      "icon": "check",
+      "group": "Alertes",
+      "params": [ { "key": "id", "label": "Alerte", "type": "string", "required": true, "help": "Souvent {{ $json.id }} depuis « Nouvelle alerte »." } ],
+      "request": { "method": "POST", "path": "/api/alerts/{{params.id}}/ack" },
+      "risk": "reversible",
+      "idempotent": true,
+      "output": { "type": "object" },
+      "sample": { "ok": true }
+    },
+    {
+      "id": "host.stats",
+      "name": "État de la machine",
+      "description": "CPU, mémoire, disque, température et conteneurs de la machine MapMyLAN.",
+      "icon": "gauge",
+      "group": "Machine",
+      "capability": "host.metrics",
+      "request": { "method": "GET", "path": "/api/host/stats" },
+      "risk": "read",
+      "idempotent": true,
+      "output": { "type": "object", "properties": { "cpuPct": { "type": "number" }, "memPct": { "type": "number" }, "diskPct": { "type": "number" }, "tempC": { "type": "number" } } },
+      "sample": { "cpuPct": 12.4, "memPct": 48.1, "memUsedMB": 3850, "memTotalMB": 8000, "diskPct": 37, "tempC": 51, "loadAvg": 0.6, "netRxKBs": 120.5, "netTxKBs": 40.2, "uptimeSec": 864000, "containers": [] }
+    },
+    {
+      "id": "topology.rebuild",
+      "name": "Reconstruire la carte",
+      "description": "Recalcule automatiquement les liens de la topologie.",
+      "icon": "map",
+      "group": "Topologie",
+      "request": { "method": "POST", "path": "/api/topology/auto-build" },
+      "risk": "reversible",
+      "output": { "type": "object" },
+      "sample": { "ok": true }
+    }
+  ],
+
+  "probes": [
+    { "id": "reachable", "name": "Joignable", "kind": "state", "request": { "method": "GET", "path": "/api/health" }, "value": "$.status", "states": { "ok": ["ok"], "crit": ["degraded"] }, "interval": "30s" },
+    { "id": "health.score", "name": "Score de santé du réseau", "kind": "gauge", "unit": "/100", "request": { "method": "GET", "path": "/api/devices/health/score" }, "value": "$.score", "thresholds": { "warn": 70, "crit": 50, "direction": "below" }, "interval": "5m" },
+    { "id": "devices.count", "name": "Appareils connus", "kind": "gauge", "request": { "method": "GET", "path": "/api/devices" }, "value": "$.length", "interval": "5m" },
+    { "id": "host.cpu", "name": "CPU", "kind": "gauge", "unit": "%", "request": { "method": "GET", "path": "/api/host/stats" }, "value": "$.cpuPct", "thresholds": { "warn": 80, "crit": 95 }, "interval": "1m" },
+    { "id": "host.mem", "name": "Mémoire", "kind": "gauge", "unit": "%", "request": { "method": "GET", "path": "/api/host/stats" }, "value": "$.memPct", "thresholds": { "warn": 85, "crit": 95 }, "interval": "1m" },
+    { "id": "host.disk", "name": "Disque", "kind": "gauge", "unit": "%", "request": { "method": "GET", "path": "/api/host/stats" }, "value": "$.diskPct", "thresholds": { "warn": 80, "crit": 90 }, "interval": "5m" },
+    { "id": "scan.status", "name": "Dernier scan", "kind": "state", "request": { "method": "GET", "path": "/api/devices/scans/latest" }, "value": "$.status", "states": { "ok": ["complete", "running"], "crit": ["failed"] }, "interval": "2m" }
+  ],
+
+  "permissions": { "dockerSocket": "none", "privileged": false, "hostNetwork": false, "egress": [] },
+
+  "ai": {
+    "exposeActions": true,
+    "hints": "MapMyLAN tourne sur la machine du segment scanné, pas forcément celle du Hub. Quarantaine et bannissement coupent un appareil du réseau : toujours demander validation, ne jamais cibler la passerelle ni la machine du Hub. Un scan complet peut durer plusieurs minutes."
+  }
+}
