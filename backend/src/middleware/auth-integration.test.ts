@@ -213,6 +213,39 @@ describe("le jeton en clair ne fuit nulle part", () => {
   });
 });
 
+describe("un jeton d'intégration ne passe pas par un cookie", () => {
+  /** Requête dont le cookie de session porte la valeur donnée. */
+  const parCookie = (valeur: string, entete?: string) => ({
+    method: "GET", url: "/api/devices", originalUrl: "/api/devices", ip: "192.0.2.10",
+    headers: {
+      cookie: `mapmylan_session=${encodeURIComponent(valeur)}`,
+      ...(entete ? { authorization: `Bearer ${entete}` } : {}),
+    },
+  } as unknown as AuthedRequest);
+
+  it("un mml_ dans le cookie est refusé — 401", async () => {
+    const jeton = poser("operator");
+    const r = res();
+    await authRequired(parCookie(jeton), r, vi.fn() as any);
+    expect(r.statusCode).toBe(401);
+    // La base n'est même pas consultée : le refus est en amont.
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(journal.at(-1)?.message).toContain("cookie");
+  });
+
+  it("un cookie piégé ne passe pas davantage si l'en-tête porte autre chose", async () => {
+    const jeton = poser("operator");
+    const r = res();
+    await authRequired(parCookie(jeton, "eyJhbGciOiJIUzI1NiJ9.a.b"), r, vi.fn() as any);
+    expect(r.statusCode).toBe(401);
+  });
+
+  it("le même jeton passe par l'en-tête", async () => {
+    const jeton = poser("operator");
+    expect((await passer("GET", "/api/devices", jeton)).passe).toBe(true);
+  });
+});
+
 describe("le chemin JWT n'a pas bougé", () => {
   it("un jeton qui n'est pas un JWT valide reste refusé par la signature", async () => {
     const q = req("GET", "/api/devices", "pas.un.jwt");

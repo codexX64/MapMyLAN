@@ -85,12 +85,25 @@ export function effacerCookiesSession(res: Response): void {
  * volé resterait utilisable jusqu'à son expiration, quoi qu'on fasse.
  */
 export async function authRequired(req: AuthedRequest, res: Response, next: NextFunction) {
+  // Un jeton d'intégration ne vit que dans l'en-tête `Authorization`. Trouvé
+  // dans le cookie de session, il est refusé sans discussion : un secret que le
+  // navigateur enverrait tout seul serait exposé aux requêtes forgées depuis un
+  // autre site, précisément ce que l'anti-CSRF existe pour empêcher. Le contrôle
+  // est ici, en amont, pour qu'aucune route ne puisse l'oublier.
+  const duCookie = lireCookies(req)[SESSION_COOKIE];
+  if (estJetonIntegration(duCookie)) {
+    await logEvent("warn", "integrations",
+      "Jeton d'intégration présenté dans un cookie — refusé",
+      { chemin: (req.originalUrl || req.url || "/").split("?")[0], methode: req.method });
+    return res.status(401).json({ error: "Invalid token" });
+  }
+
   const token = extraireJeton(req);
   if (!token) return res.status(401).json({ error: "Missing token" });
 
-  // Un jeton d'intégration se reconnaît à son préfixe et ne suit pas du tout le
-  // même chemin : il n'est pas signé, il est cherché en base par son empreinte.
-  // Le chemin JWT ci-dessous reste exactement ce qu'il était.
+  // Le cookie ayant été écarté juste avant, un jeton d'intégration ne peut venir
+  // que de l'en-tête. Il n'est pas signé : il est cherché en base par son
+  // empreinte. Le chemin JWT ci-dessous reste exactement ce qu'il était.
   if (estJetonIntegration(token)) return authIntegration(req, res, next, token);
 
   let payload: any;
