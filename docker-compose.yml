@@ -59,7 +59,13 @@ services:
       - "127.0.0.1:2375:2375"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    read_only: true
+    # Pas de `read_only` ici, contrairement aux autres services : l'image ecrit
+    # sa configuration HAProxy sous /tmp et /usr/local/etc/haproxy au demarrage.
+    # Avec un systeme de fichiers en lecture seule, elle echoue et le conteneur
+    # redemarre en boucle — les statistiques de conteneurs restent muettes sans
+    # que rien ne le dise. Le reste du durcissement tient : socket monte en
+    # lecture seule, aucune capacite, aucune elevation de privilege, et une
+    # liste d'autorisations qui n'ouvre que la lecture des conteneurs.
     tmpfs:
       - /run
     security_opt:
