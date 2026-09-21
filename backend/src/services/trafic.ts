@@ -181,8 +181,8 @@ export async function cibleDeReleve() {
 //
 // Le nom inverse (l'enregistrement PTR) est ce qui donne un DOMAINE à une
 // adresse, et un domaine est ce qui donne un logo. C'est donc la source la
-// plus rentable de la page, avant même le registre : « 17.253.37.195 » devient
-// « apple.com », « 18.213.159.67 » devient « amazonaws.com ».
+// plus rentable de la page, avant même le registre : une adresse d'Apple
+// devient « apple.com », une adresse d'AWS devient « amazonaws.com ».
 //
 // Ces lectures se faisaient sur la passerelle, par SSH, quarante adresses par
 // tour. Une passerelle n'apporte pourtant rien ici : un PTR d'adresse publique

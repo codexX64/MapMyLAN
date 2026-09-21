@@ -129,7 +129,7 @@ export function ExplorerTree() {
 
   const groupes = useMemo(() => {
     // Le rang est numérique, pas alphabétique. Trié comme du texte,
-    // « VLAN 10 » passe devant « VLAN 2 », et « 192.0.10.0/24 » devant
+    // « VLAN 10 » passe devant « VLAN 2 », et « 192.0.2.10/24 » devant
     // « 192.0.2.0/24 » : l'explorateur affichait 10, 2, 20, 30 au lieu de
     // 1, 10, 20, 30. On classe donc par numéro de VLAN, et à défaut par les
     // octets du sous-réseau — les groupes sans VLAN venant après ceux qui en

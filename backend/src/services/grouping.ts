@@ -6,8 +6,8 @@
 //   PREFIXE.(C×MULT).N → le MÊME appareil N, sur WIFI
 //
 // Par exemple avec PREFIXE = « 203.0 » et MULT = 10 :
-//   203.0.2.2  (conteneur nº 2, ethernet)  ↔  203.0.20.2 (le même, en wifi)
-//   203.0.1.5  (poste nº 5, ethernet)      ↔  203.0.10.5 (le même, en wifi)
+//   203.0.113.2   (conteneur nº 2, ethernet)  ↔  203.0.113.20 (le même, en wifi)
+//   198.51.100.5  (poste nº 5, ethernet)      ↔  198.51.100.50 (le même, en wifi)
 //
 // La clé de regroupement est (min(C, C/MULT), N) : deux appareils qui tombent
 // sur la même clé sont la même machine vue sur deux médias.
@@ -37,7 +37,7 @@ async function cfg(key: string, def: string): Promise<string> {
   return def;
 }
 
-// Lit « 203.0.20.2 » avec le préfixe « 203.0 » → { category: 20, octet: 2 }
+// Lit « 203.0.113.20 » avec le préfixe « 203.0 » → { category: 113, octet: 20 }
 function parse(ip: string, prefix: string): { category: number; octet: number } | null {
   if (!ip || !ip.startsWith(prefix + ".")) return null;
   const rest = ip.slice(prefix.length + 1).split(".");
