@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
-import { authRequired, requireRole } from "../middleware/auth";
+import { authRequired, gardeEcriture } from "../middleware/auth";
 import { autoBuildTopology } from "../services/topology";
 import { eventBus } from "../ws/realtime";
 
@@ -12,9 +12,11 @@ router.use(authRequired);
 // cas. La garde est posée sur le routeur entier plutôt que route par route —
 // une route ajoutée plus tard est protégée d'office, au lieu de l'être si on y
 // pense.
-const ecriture = requireRole("admin", "operator");
-router.use((req, res, next) =>
-  req.method === "GET" || req.method === "HEAD" ? next() : ecriture(req, res, next));
+// La disposition de la carte est un confort de lecture, pas une modification du
+// réseau : un `viewer` qui déplace les plaques doit retrouver son agencement au
+// retour. C'est la seule écriture de ce routeur qui reste ouverte à tous les
+// comptes authentifiés.
+router.use(gardeEcriture(["admin", "operator"], ["/positions"]));
 
 
 // ── Get full topology (links + zones + devices with positions) ──

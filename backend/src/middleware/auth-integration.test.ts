@@ -29,7 +29,7 @@ vi.mock("../services/logger", () => ({
   },
 }));
 
-import { authRequired, requireRole, AuthedRequest } from "./auth";
+import { authRequired, requireRole, gardeEcriture, AuthedRequest } from "./auth";
 import { fabriquerJeton, reinitialiserDebit, DEBIT_MAX } from "../services/integrations";
 
 function req(methode: string, url: string, jeton: string): AuthedRequest {
@@ -210,6 +210,37 @@ describe("le jeton en clair ne fuit nulle part", () => {
                                     update: update.mock.calls });
     expect(traces).not.toContain(jeton);
     expect(traces).not.toContain(jeton.slice(4));
+  });
+});
+
+describe("garde d'écriture d'un routeur", () => {
+  const appeler = (garde: any, methode: string, chemin: string, role: string) => {
+    const q = { method: methode, path: chemin, user: { id: "u", username: "u", role } } as any;
+    const r = res();
+    const suite = vi.fn();
+    garde(q, r, suite);
+    return { passe: suite.mock.calls.length === 1, code: r.statusCode };
+  };
+
+  it("laisse lire tout compte authentifié", () => {
+    const g = gardeEcriture(["admin", "operator"]);
+    expect(appeler(g, "GET", "/", "viewer").passe).toBe(true);
+    expect(appeler(g, "HEAD", "/", "viewer").passe).toBe(true);
+  });
+
+  it("refuse l'écriture à un viewer, l'accorde à operator et admin", () => {
+    const g = gardeEcriture(["admin", "operator"]);
+    expect(appeler(g, "POST", "/42/ban", "viewer")).toEqual({ passe: false, code: 403 });
+    expect(appeler(g, "POST", "/42/ban", "operator").passe).toBe(true);
+    expect(appeler(g, "DELETE", "/42", "admin").passe).toBe(true);
+  });
+
+  it("excepte les chemins déclarés ouverts — la disposition de la carte", () => {
+    const g = gardeEcriture(["admin", "operator"], ["/positions"]);
+    expect(appeler(g, "POST", "/positions", "viewer").passe).toBe(true);
+    // et rien d'autre du même routeur
+    expect(appeler(g, "POST", "/links", "viewer")).toEqual({ passe: false, code: 403 });
+    expect(appeler(g, "DELETE", "/zones/1", "viewer")).toEqual({ passe: false, code: 403 });
   });
 });
 

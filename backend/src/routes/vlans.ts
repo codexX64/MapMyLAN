@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
-import { authRequired, requireRole } from "../middleware/auth";
+import { authRequired, gardeEcriture } from "../middleware/auth";
 import { provisionVlanOnRouter, deprovisionVlanOnRouter } from "../services/vlanProvision";
 import { relever } from "../services/vlanReleve";
 
@@ -12,9 +12,7 @@ router.use(authRequired);
 // cas. La garde est posée sur le routeur entier plutôt que route par route —
 // une route ajoutée plus tard est protégée d'office, au lieu de l'être si on y
 // pense.
-const ecriture = requireRole("admin", "operator");
-router.use((req, res, next) =>
-  req.method === "GET" || req.method === "HEAD" ? next() : ecriture(req, res, next));
+router.use(gardeEcriture(["admin", "operator"]));
 
 
 router.get("/", async (_req, res) => {

@@ -195,6 +195,25 @@ async function authIntegration(
   next();
 }
 
+/**
+ * Garde d'écriture d'un routeur : lecture ouverte à tout compte authentifié,
+ * écriture réservée aux rôles donnés.
+ *
+ * Posée sur le routeur entier plutôt que route par route, pour qu'une route
+ * ajoutée plus tard soit protégée d'office au lieu de l'être si on y pense.
+ * `ouvertes` liste les chemins — relatifs au montage du routeur — dont
+ * l'écriture reste ouverte malgré tout.
+ */
+export function gardeEcriture(roles: string[], ouvertes: string[] = []) {
+  const exiger = requireRole(...roles);
+  const libres = new Set(ouvertes);
+  return (req: AuthedRequest, res: Response, next: NextFunction) => {
+    if (req.method === "GET" || req.method === "HEAD") return next();
+    if (libres.has(req.path)) return next();
+    return exiger(req, res, next);
+  };
+}
+
 export function requireRole(...roles: string[]) {
   return (req: AuthedRequest, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) return res.status(403).json({ error: "Forbidden" });

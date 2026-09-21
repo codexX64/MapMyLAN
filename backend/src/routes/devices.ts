@@ -5,7 +5,7 @@ import { dedupeDevices } from "../services/dedupe";
 import { fullScan, fullScanAll, plagesActives, pingHost, nmapDeepScan } from "../services/scanner";
 import { scoreDevice, scoreAllDevices, globalHealthScore } from "../services/scoring";
 import { banDevice, quarantineDevice, unbanDevice } from "../services/defense";
-import { authRequired, requireRole } from "../middleware/auth";
+import { authRequired, gardeEcriture } from "../middleware/auth";
 import { mainRouter } from "../adapters";
 import { plageUtilisable, verifierAdresse } from "../services/vlanReleve";
 import { logEvent } from "../services/logger";
@@ -17,9 +17,7 @@ router.use(authRequired);
 // cas. La garde est posée sur le routeur entier plutôt que route par route —
 // une route ajoutée plus tard est protégée d'office, au lieu de l'être si on y
 // pense.
-const ecriture = requireRole("admin", "operator");
-router.use((req, res, next) =>
-  req.method === "GET" || req.method === "HEAD" ? next() : ecriture(req, res, next));
+router.use(gardeEcriture(["admin", "operator"]));
 
 
 router.get("/", async (_req, res) => {
