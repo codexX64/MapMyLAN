@@ -88,3 +88,7 @@ networks:
   hub:
     name: {{hub.network}}
     external: true
+
+volumes:
+  {{volume.pgdata}}:
+    name: {{volume.pgdata}}
