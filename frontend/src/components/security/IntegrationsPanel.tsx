@@ -13,6 +13,12 @@
 // Le rôle « admin » n'est pas proposé, et le serveur le refuserait : un jeton
 // vit dans le fichier de configuration d'un autre programme, il n'a ni second
 // facteur ni mot de passe à opposer à qui le lit.
+//
+// La portée est la seconde dimension, indépendante du rôle. « Réseau » est
+// l'existant. « Comptes » ouvre la gestion des comptes et referme le reste en
+// lecture : deux pouvoirs séparés plutôt qu'un jeton qui peut tout. Elle est
+// annoncée en toutes lettres sous le formulaire, parce qu'on ne crée pas par
+// mégarde un jeton qui supprime des comptes.
 
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
@@ -24,6 +30,7 @@ interface Jeton {
   name: string;
   prefix: string;
   role: string;
+  scope?: string;
   createdAt: string;
   lastUsedAt: string | null;
   expiresAt: string | null;
@@ -32,6 +39,7 @@ interface Jeton {
 }
 
 const ROLES = ["viewer", "operator"] as const;
+const PORTEES = ["service", "accounts"] as const;
 
 function quand(v: string | null): string {
   if (!v) return "—";
@@ -43,6 +51,7 @@ export function IntegrationsPanel({ t }: { t: any }) {
   const [jetons, setJetons] = useState<Jeton[]>([]);
   const [nom, setNom] = useState("");
   const [role, setRole] = useState<string>("viewer");
+  const [portee, setPortee] = useState<string>("service");
   const [clair, setClair] = useState<string | null>(null);
   const [copie, setCopie] = useState(false);
   const [err, setErr] = useState("");
@@ -63,7 +72,7 @@ export function IntegrationsPanel({ t }: { t: any }) {
     if (!n) { setErr(tr("integrations.errName")); return; }
     setOccupe(true); setErr("");
     try {
-      const rep: any = await api.createIntegration({ name: n, role });
+      const rep: any = await api.createIntegration({ name: n, role, scope: portee });
       setClair(rep.token);
       setCopie(false);
       setNom("");
@@ -151,7 +160,8 @@ export function IntegrationsPanel({ t }: { t: any }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13.5, color: t.txt }}>{j.name}</div>
             <div style={{ fontSize: 11.5, color: t.faint, fontFamily: t.monoFont }}>
-              {j.prefix}… · {j.role} · {tr("integrations.lastUsed")} {quand(j.lastUsedAt)}
+              {j.prefix}… · {tr(`integrations.scope.${j.scope || "service"}`)} · {j.role}
+              {" · "}{tr("integrations.lastUsed")} {quand(j.lastUsedAt)}
             </div>
           </div>
           <span style={{ fontSize: 11.5, color: teinte(j.etat) }}>
@@ -174,6 +184,14 @@ export function IntegrationsPanel({ t }: { t: any }) {
             <input value={nom} onChange={(e) => setNom(e.target.value)}
               placeholder={tr("integrations.namePlaceholder")} style={champ}/>
           </div>
+          <div style={{ flex: "0 0 150px" }}>
+            <label style={etiquette}>{tr("integrations.scope")}</label>
+            <select value={portee} onChange={(e) => setPortee(e.target.value)} style={champ}>
+              {PORTEES.map((p) => (
+                <option key={p} value={p}>{tr(`integrations.scope.${p}`)}</option>
+              ))}
+            </select>
+          </div>
           <div style={{ flex: "0 0 160px" }}>
             <label style={etiquette}>{tr("integrations.role")}</label>
             <select value={role} onChange={(e) => setRole(e.target.value)} style={champ}>
@@ -188,9 +206,17 @@ export function IntegrationsPanel({ t }: { t: any }) {
             cursor: occupe ? "default" : "pointer",
           }}>{tr("integrations.create")}</button>
         </div>
-        <p style={{ margin: "10px 0 0", fontSize: 12, color: t.faint }}>
-          {tr("integrations.roleNote")}
+        <p style={{
+          margin: "10px 0 0", fontSize: 12,
+          color: portee === "accounts" ? t.err : t.faint,
+        }}>
+          {tr(`integrations.scopeNote.${portee}`)}
         </p>
+        {portee === "service" && (
+          <p style={{ margin: "5px 0 0", fontSize: 12, color: t.faint }}>
+            {tr("integrations.roleNote")}
+          </p>
+        )}
         {err && <p style={{ margin: "8px 0 0", fontSize: 12.5, color: t.err }}>{err}</p>}
       </div>
     </div>

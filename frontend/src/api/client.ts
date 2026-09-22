@@ -194,7 +194,7 @@ export const api = {
   logs: (level?: string, limit = 200) => request<any[]>(`/logs?${level ? `level=${level}&` : ""}limit=${limit}`),
   // Jetons d'intégration. Le clair n'est rendu qu'à la création, et une fois.
   integrations: () => request<any[]>("/integrations"),
-  createIntegration: (d: { name: string; role: string; expiresAt?: string }) =>
+  createIntegration: (d: { name: string; role: string; scope?: string; expiresAt?: string }) =>
     request<any>("/integrations", { method: "POST", body: JSON.stringify(d) }),
   revokeIntegration: (id: string) =>
     request<any>(`/integrations/${id}`, { method: "DELETE" }),
