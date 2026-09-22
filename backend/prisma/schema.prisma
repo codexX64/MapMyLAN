@@ -489,6 +489,10 @@ model IntegrationToken {
   /// « viewer » ou « operator ». Jamais « admin » : la route de création le
   /// refuse, et le middleware ne fabrique pas ce rôle.
   role        String
+  /// « service » (défaut, pilotage du réseau) ou « accounts » (gestion des
+  /// comptes, et rien d'autre en écriture). Deux pouvoirs distincts : un jeton
+  /// qui pilote le réseau ne crée pas de comptes, et l'inverse.
+  scope       String    @default("service")
   createdById String?
   createdAt   DateTime  @default(now())
   lastUsedAt  DateTime?

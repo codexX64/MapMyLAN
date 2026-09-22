@@ -14,7 +14,7 @@ import { z } from "zod";
 import { prisma } from "../db";
 import { authRequired, requireRole, AuthedRequest } from "../middleware/auth";
 import { logEvent } from "../services/logger";
-import { fabriquerJeton, ROLES } from "../services/integrations";
+import { fabriquerJeton, ROLES, PORTEES } from "../services/integrations";
 
 const router = Router();
 router.use(authRequired);
@@ -26,6 +26,9 @@ const publiable = (j: any, maintenant = Date.now()) => ({
   name: j.name,
   prefix: j.prefix,
   role: j.role,
+  // La portée décide de ce que le jeton ouvre ; la liste doit la montrer, sinon
+  // deux lignes d'apparence identique n'ont pas du tout les mêmes pouvoirs.
+  scope: j.scope || "service",
   createdAt: j.createdAt,
   lastUsedAt: j.lastUsedAt,
   expiresAt: j.expiresAt,
@@ -46,6 +49,9 @@ router.get("/", async (_req, res) => {
 const creation = z.object({
   name: z.string().trim().min(1).max(60),
   role: z.enum(ROLES),
+  // Portée : « service » par défaut, c'est-à-dire ce que faisaient tous les
+  // jetons jusqu'ici. Demander « accounts » se fait explicitement.
+  scope: z.enum(PORTEES).default("service"),
   // Facultatif. Un jeton sans échéance est un jeton qu'on oublie ; on ne
   // l'interdit pas, on laisse le choix.
   expiresAt: z.string().datetime().optional(),
@@ -54,19 +60,19 @@ const creation = z.object({
 router.post("/", async (req: AuthedRequest, res) => {
   const parse = creation.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: "Requête invalide" });
-  const { name, role, expiresAt } = parse.data;
+  const { name, role, scope, expiresAt } = parse.data;
 
   const { clair, prefix, hash } = fabriquerJeton();
   const ligne = await prisma.integrationToken.create({
     data: {
-      name, role, prefix, hash,
+      name, role, scope, prefix, hash,
       createdById: req.user?.id || null,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
     },
   });
 
   await logEvent("info", "integrations",
-    `Jeton d'intégration « ${name} » créé (${role})`, { prefix, id: ligne.id });
+    `Jeton d'intégration « ${name} » créé (${role}, portée ${scope})`, { prefix, id: ligne.id });
 
   // Le clair ne repassera jamais : il n'existe nulle part ailleurs qu'ici.
   res.status(201).json({ ...publiable(ligne), token: clair });

@@ -36,6 +36,17 @@ export const PREFIXES = [PREFIXE, "hub_"] as const;
 export const ROLES = ["viewer", "operator"] as const;
 export type RoleIntegration = (typeof ROLES)[number];
 
+/**
+ * Portées.
+ *
+ * `service` est l'existant : piloter le réseau, lire l'inventaire, laisser les
+ * comptes tranquilles. `accounts` est l'inverse exact — gérer les comptes, et
+ * ne rien écrire d'autre. Deux pouvoirs séparés plutôt qu'un jeton qui peut
+ * tout : celui qui fuite ne donne que la moitié.
+ */
+export const PORTEES = ["service", "accounts"] as const;
+export type PorteeIntegration = (typeof PORTEES)[number];
+
 /** Empreinte du jeton. C'est la seule forme qui entre en base. */
 export function empreinte(jeton: string): string {
   return crypto.createHash("sha256").update(jeton, "utf8").digest("hex");
@@ -82,6 +93,12 @@ export function memeEmpreinte(a: string, b: string): boolean {
 const FERMES = ["/api/auth", "/api/users", "/api/mfa", "/api/ssh", "/api/integrations"];
 const LECTURE_SEULE = ["/api/router"];
 
+// Portée « accounts » : les comptes s'ouvrent, le reste se referme en lecture.
+// `/api/users/:id/mfa/*` vit sous `/api/users` et suit donc les comptes ;
+// `/api/mfa`, qui touche au second facteur de l'appelant, reste fermé.
+const COMPTES_OUVERT = ["/api/users"];
+const COMPTES_FERMES = ["/api/auth", "/api/mfa", "/api/ssh", "/api/integrations"];
+
 function sous(chemin: string, base: string): boolean {
   return chemin === base || chemin.startsWith(base + "/");
 }
@@ -93,11 +110,23 @@ function sous(chemin: string, base: string): boolean {
  * dans un routeur ne voit qu'un chemin relatif, et la règle porte sur la route
  * complète.
  */
-export function porteeRefusee(methode: string, url: string): string | null {
+export function porteeRefusee(
+  methode: string, url: string, portee: PorteeIntegration = "service",
+): string | null {
   const chemin = (url.split("?")[0] || "/").replace(/\/+$/, "") || "/";
-  for (const f of FERMES) if (sous(chemin, f)) return f;
   const m = (methode || "GET").toUpperCase();
-  if (m !== "GET" && m !== "HEAD") {
+  const lecture = m === "GET" || m === "HEAD";
+
+  if (portee === "accounts") {
+    for (const f of COMPTES_FERMES) if (sous(chemin, f)) return f;
+    for (const o of COMPTES_OUVERT) if (sous(chemin, o)) return null;
+    // Tout le reste — appareils, topologie, VLAN, routeur — se lit mais ne
+    // s'écrit pas : gérer des comptes n'est pas piloter le réseau.
+    return lecture ? null : chemin;
+  }
+
+  for (const f of FERMES) if (sous(chemin, f)) return f;
+  if (!lecture) {
     for (const l of LECTURE_SEULE) if (sous(chemin, l)) return l;
   }
   return null;
@@ -150,7 +179,7 @@ export function doitNoterUsage(id: string, maintenant: number = Date.now()): boo
 // ─── Vérification ──────────────────────────────────────────────────────────
 
 export type Verdict =
-  | { ok: true; jeton: { id: string; name: string; role: string } }
+  | { ok: true; jeton: { id: string; name: string; role: string; scope: PorteeIntegration } }
   | { ok: false; raison: "inconnu" | "revoque" | "expire" };
 
 export async function verifierJeton(clair: string, maintenant: Date = new Date()): Promise<Verdict> {
@@ -163,7 +192,8 @@ export async function verifierJeton(clair: string, maintenant: Date = new Date()
   if (ligne.expiresAt && ligne.expiresAt.getTime() <= maintenant.getTime()) {
     return { ok: false, raison: "expire" };
   }
-  return { ok: true, jeton: { id: ligne.id, name: ligne.name, role: ligne.role } };
+  const scope: PorteeIntegration = ligne.scope === "accounts" ? "accounts" : "service";
+  return { ok: true, jeton: { id: ligne.id, name: ligne.name, role: ligne.role, scope } };
 }
 
 // ─── Amorce ────────────────────────────────────────────────────────────────
@@ -176,8 +206,9 @@ export async function verifierJeton(clair: string, maintenant: Date = new Date()
 // La valeur elle-même n'entre pas en base : seule son empreinte, comme pour
 // tout autre jeton. Elle n'apparaît dans aucun journal ni dans aucune réponse.
 
-/** Nom réservé à l'entrée créée par l'amorce. */
+/** Noms réservés aux entrées créées par l'amorce. */
 export const NOM_AMORCE = "hub";
+export const NOM_AMORCE_COMPTES = "hub-comptes";
 
 export type ResultatAmorce =
   | { fait: "cree" | "mis-a-jour" | "inchange" }
@@ -192,7 +223,10 @@ export type ResultatAmorce =
  * Une entrée révoquée à la main est réactivée si l'amorce est toujours posée :
  * c'est l'environnement qui décide, pas l'état laissé en base.
  */
-export async function amorcerJeton(valeur: string): Promise<ResultatAmorce> {
+export async function amorcerJeton(
+  valeur: string,
+  { nom = NOM_AMORCE, portee = "service" as PorteeIntegration, role = "operator" } = {},
+): Promise<ResultatAmorce> {
   const seed = (valeur || "").trim();
   if (!seed) return { fait: "ignore", raison: "vide" };
 
@@ -203,23 +237,24 @@ export async function amorcerJeton(valeur: string): Promise<ResultatAmorce> {
 
   const hash = empreinte(seed);
   const existante = await prisma.integrationToken.findFirst({
-    where: { name: NOM_AMORCE }, orderBy: { createdAt: "asc" },
+    where: { name: nom }, orderBy: { createdAt: "asc" },
   });
 
   if (!existante) {
     await prisma.integrationToken.create({
-      data: { name: NOM_AMORCE, role: "operator", prefix: seed.slice(0, 8), hash },
+      data: { name: nom, role, scope: portee, prefix: seed.slice(0, 8), hash },
     });
     return { fait: "cree" };
   }
 
   const aJour =
-    existante.hash === hash && existante.role === "operator" && !existante.revokedAt;
+    existante.hash === hash && existante.role === role
+    && (existante.scope || "service") === portee && !existante.revokedAt;
   if (aJour) return { fait: "inchange" };
 
   await prisma.integrationToken.update({
     where: { id: existante.id },
-    data: { hash, role: "operator", prefix: seed.slice(0, 8), revokedAt: null },
+    data: { hash, role, scope: portee, prefix: seed.slice(0, 8), revokedAt: null },
   });
   return { fait: "mis-a-jour" };
 }

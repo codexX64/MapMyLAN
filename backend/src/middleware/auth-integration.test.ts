@@ -194,6 +194,62 @@ describe("portée", () => {
   });
 });
 
+// La portée « accounts » est l'exact miroir de la précédente : ce qui était
+// fermé s'ouvre, ce qui était ouvert se referme en lecture. Les deux suites
+// posent les mêmes URL pour que l'écart soit lisible d'un fichier à l'autre.
+describe("portée « accounts »", () => {
+  const comptes = requireRole("admin");
+
+  it("se présente en administrateur, donc passe la garde des comptes", async () => {
+    const jeton = poser("operator", { scope: "accounts" });
+    const { q, passe } = await passer("GET", "/api/users", jeton);
+    expect(passe).toBe(true);
+    expect(q.user).toEqual({
+      id: "integration:tok-1", username: "integration:hub", role: "admin",
+    });
+  });
+
+  it("crée, modifie et supprime un compte", async () => {
+    for (const [methode, url] of [
+      ["POST", "/api/users"],
+      ["PATCH", "/api/users/42"],
+      ["POST", "/api/users/42/password"],
+      ["POST", "/api/users/42/mfa/exiger"],
+      ["DELETE", "/api/users/42"],
+    ] as const) {
+      const jeton = poser("operator", { scope: "accounts" });
+      expect((await passer(methode, url, jeton, comptes)).passe).toBe(true);
+      reinitialiserDebit();
+    }
+  });
+
+  it("n'ouvre ni la connexion, ni les seconds facteurs, ni le SSH, ni la fabrique de jetons", async () => {
+    for (const url of [
+      "/api/auth/login", "/api/mfa/totp", "/api/ssh/devices", "/api/integrations",
+    ]) {
+      const jeton = poser("operator", { scope: "accounts" });
+      expect((await passer("POST", url, jeton)).r.statusCode).toBe(403);
+      reinitialiserDebit();
+    }
+  });
+
+  it("lit le réseau mais n'y écrit pas : gérer des comptes n'est pas piloter", async () => {
+    let jeton = poser("operator", { scope: "accounts" });
+    expect((await passer("GET", "/api/devices", jeton)).passe).toBe(true);
+    reinitialiserDebit();
+    jeton = poser("operator", { scope: "accounts" });
+    expect((await passer("POST", "/api/devices/42/ban", jeton, ecriture)).r.statusCode).toBe(403);
+  });
+
+  it("une portée inconnue en base retombe sur « service »", async () => {
+    const jeton = poser("operator", { scope: "n'importe quoi" });
+    const { q, r, passe } = await passer("GET", "/api/users", jeton);
+    expect(passe).toBe(false);
+    expect(r.statusCode).toBe(403);
+    expect(q.user).toBeUndefined();
+  });
+});
+
 describe("débit", () => {
   it("429 au-delà de la limite", async () => {
     const jeton = poser("operator");

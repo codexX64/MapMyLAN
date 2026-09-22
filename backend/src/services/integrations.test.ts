@@ -14,7 +14,7 @@ vi.mock("../db", () => ({
 import {
   PREFIXE, ROLES, empreinte, fabriquerJeton, estJetonIntegration, memeEmpreinte,
   porteeRefusee, debitDepasse, doitNoterUsage, reinitialiserDebit,
-  verifierJeton, amorcerJeton, NOM_AMORCE, PREFIXES, DEBIT_MAX,
+  verifierJeton, amorcerJeton, NOM_AMORCE, NOM_AMORCE_COMPTES, PREFIXES, DEBIT_MAX,
 } from "./integrations";
 
 beforeEach(() => {
@@ -102,6 +102,44 @@ describe("porteeRefusee", () => {
   });
 });
 
+describe("porteeRefusee — portée « accounts »", () => {
+  const comptes = (m: string, u: string) => porteeRefusee(m, u, "accounts");
+
+  it("ouvre les comptes, en lecture comme en écriture", () => {
+    for (const [m, u] of [
+      ["GET", "/api/users"], ["POST", "/api/users"], ["PATCH", "/api/users/42"],
+      ["POST", "/api/users/42/password"], ["POST", "/api/users/42/mfa/exiger"],
+      ["DELETE", "/api/users/42"],
+    ] as const) {
+      expect(comptes(m, u)).toBeNull();
+    }
+  });
+
+  it("garde fermé tout ce qui sert à devenir quelqu'un d'autre", () => {
+    for (const u of ["/api/auth/login", "/api/mfa/totp", "/api/ssh/devices",
+                     "/api/integrations"]) {
+      expect(comptes("GET", u)).not.toBeNull();
+      expect(comptes("POST", u)).not.toBeNull();
+    }
+  });
+
+  it("laisse lire le réseau mais pas l'écrire", () => {
+    expect(comptes("GET", "/api/devices")).toBeNull();
+    expect(comptes("GET", "/api/router/status")).toBeNull();
+    expect(comptes("POST", "/api/devices/42/quarantine")).not.toBeNull();
+    expect(comptes("POST", "/api/router/reboot")).not.toBeNull();
+  });
+
+  it("ne se laisse pas contourner par un préfixe voisin", () => {
+    expect(comptes("POST", "/api/usersettings")).not.toBeNull();
+  });
+
+  it("les deux portées sont bien l'inverse l'une de l'autre sur les comptes", () => {
+    expect(porteeRefusee("POST", "/api/users")).toBe("/api/users");
+    expect(porteeRefusee("POST", "/api/users", "accounts")).toBeNull();
+  });
+});
+
 describe("débit", () => {
   it("laisse passer jusqu'à la limite, puis refuse", () => {
     const t0 = 1_000_000;
@@ -144,7 +182,9 @@ describe("verifierJeton", () => {
     const { clair, row } = ligne();
     findUnique.mockResolvedValue(row);
     const v = await verifierJeton(clair);
-    expect(v).toEqual({ ok: true, jeton: { id: "t1", name: "hub", role: "operator" } });
+    expect(v).toEqual({
+      ok: true, jeton: { id: "t1", name: "hub", role: "operator", scope: "service" },
+    });
     // La base n'est jamais interrogée avec le jeton, seulement avec son empreinte.
     expect(findUnique).toHaveBeenCalledWith({ where: { hash: empreinte(clair) } });
     expect(JSON.stringify(findUnique.mock.calls)).not.toContain(clair);
@@ -254,5 +294,63 @@ describe("amorce du jeton d'intégration", () => {
     expect(ecrit).not.toContain(SEED.slice(8));
     // Seul le préfixe affichable, commun à tous, y figure.
     expect(create.mock.calls[0][0].data.prefix).toBe(SEED.slice(0, 8));
+  });
+
+  it("pose la portée « service » par défaut", async () => {
+    findFirst.mockResolvedValue(null);
+    await amorcerJeton(SEED);
+    expect(create.mock.calls[0][0].data).toMatchObject({ scope: "service" });
+  });
+});
+
+describe("amorce du jeton de comptes", () => {
+  const SEED = "hub_" + "c".repeat(43);
+
+  it("crée une entrée distincte, de portée « accounts »", async () => {
+    findFirst.mockResolvedValue(null);
+    expect(await amorcerJeton(SEED, { nom: NOM_AMORCE_COMPTES, portee: "accounts" }))
+      .toEqual({ fait: "cree" });
+    expect(findFirst.mock.calls[0][0]).toMatchObject({ where: { name: NOM_AMORCE_COMPTES } });
+    expect(create.mock.calls[0][0].data).toMatchObject({
+      name: NOM_AMORCE_COMPTES, scope: "accounts", hash: empreinte(SEED),
+    });
+    // La portée suffit : le rôle stocké reste celui d'un jeton ordinaire.
+    expect(create.mock.calls[0][0].data.role).not.toBe("admin");
+  });
+
+  it("ne duplique rien au second démarrage", async () => {
+    findFirst.mockResolvedValue({
+      id: "t2", name: NOM_AMORCE_COMPTES, role: "operator", scope: "accounts",
+      prefix: SEED.slice(0, 8), hash: empreinte(SEED), revokedAt: null,
+    });
+    expect(await amorcerJeton(SEED, { nom: NOM_AMORCE_COMPTES, portee: "accounts" }))
+      .toEqual({ fait: "inchange" });
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("corrige la portée d'une entrée qui aurait gardé l'ancienne", async () => {
+    findFirst.mockResolvedValue({
+      id: "t2", name: NOM_AMORCE_COMPTES, role: "operator", scope: "service",
+      prefix: SEED.slice(0, 8), hash: empreinte(SEED), revokedAt: null,
+    });
+    expect(await amorcerJeton(SEED, { nom: NOM_AMORCE_COMPTES, portee: "accounts" }))
+      .toEqual({ fait: "mis-a-jour" });
+    expect(update.mock.calls[0][0].data).toMatchObject({ scope: "accounts" });
+  });
+
+  it("la valeur en clair n'entre jamais en base", async () => {
+    findFirst.mockResolvedValue(null);
+    await amorcerJeton(SEED, { nom: NOM_AMORCE_COMPTES, portee: "accounts" });
+    expect(JSON.stringify(create.mock.calls)).not.toContain(SEED.slice(8));
+  });
+
+  it("les deux amorces sont indépendantes : l'une posée, l'autre vide", async () => {
+    findFirst.mockResolvedValue(null);
+    expect(await amorcerJeton("", { nom: NOM_AMORCE_COMPTES, portee: "accounts" }))
+      .toEqual({ fait: "ignore", raison: "vide" });
+    expect(await amorcerJeton("hub_" + "s".repeat(43))).toEqual({ fait: "cree" });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0].data).toMatchObject({ name: NOM_AMORCE });
   });
 });

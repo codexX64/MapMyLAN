@@ -175,12 +175,19 @@ async function authIntegration(
     return res.status(429).json({ error: "Trop de requêtes" });
   }
 
-  const ferme = porteeRefusee(req.method, url);
+  const ferme = porteeRefusee(req.method, url, verdict.jeton.scope);
   if (ferme) {
     await logEvent("warn", "integrations",
       `Jeton « ${verdict.jeton.name} » écarté de ${ferme}`, { chemin, methode: req.method });
     return res.status(403).json({ error: "Forbidden" });
   }
+
+  // Un jeton de portée « accounts » se présente en administrateur, sinon le
+  // routeur des comptes le refuserait sur le rôle. Ce n'est pas un
+  // contournement de la règle « jamais admin » : elle vise le jeton qui pilote
+  // le réseau, et la portée vient de la refermer partout ailleurs — la ligne
+  // au-dessus n'a laissé passer que `/api/users` et des lectures.
+  const role = verdict.jeton.scope === "accounts" ? "admin" : verdict.jeton.role;
 
   // L'identité porte le préfixe « integration: » : ce qui la lit ensuite —
   // journal, contrôle de rôle, pistes d'audit — ne peut pas la confondre avec
@@ -189,7 +196,7 @@ async function authIntegration(
   req.user = {
     id: `integration:${verdict.jeton.id}`,
     username: `integration:${verdict.jeton.name}`,
-    role: verdict.jeton.role,
+    role,
   };
   noterUsage(verdict.jeton.id);
   next();
