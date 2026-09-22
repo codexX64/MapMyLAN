@@ -60,15 +60,26 @@ async function main() {
   // bloquant : une base indisponible à cet instant ne doit pas empêcher le
   // service de démarrer, elle reviendra au redémarrage suivant.
   try {
-    const { amorcerJeton } = await import("./services/integrations");
-    const r = await amorcerJeton(config.integrationSeed);
-    if (r.fait === "cree" || r.fait === "mis-a-jour") {
-      await logEvent("info", "integrations",
-        `Jeton d'integration « hub » ${r.fait === "cree" ? "cree" : "mis a jour"} depuis l'environnement`);
-    } else if (r.fait === "ignore" && r.raison === "prefixe") {
-      console.warn(
-        "[démarrage] INTEGRATION_TOKEN_SEED ignorée : la valeur doit commencer " +
-        "par « hub_ » ou « mml_ » pour être reconnue à l'authentification.");
+    const { amorcerJeton, NOM_AMORCE, NOM_AMORCE_COMPTES } =
+      await import("./services/integrations");
+
+    const amorces = [
+      { valeur: config.integrationSeed, nom: NOM_AMORCE, portee: "service" as const,
+        role: "operator", variable: "INTEGRATION_TOKEN_SEED" },
+      { valeur: config.adminSeed, nom: NOM_AMORCE_COMPTES, portee: "accounts" as const,
+        role: "operator", variable: "ADMIN_TOKEN_SEED" },
+    ];
+
+    for (const a of amorces) {
+      const r = await amorcerJeton(a.valeur, { nom: a.nom, portee: a.portee, role: a.role });
+      if (r.fait === "cree" || r.fait === "mis-a-jour") {
+        await logEvent("info", "integrations",
+          `Jeton d'integration « ${a.nom} » ${r.fait === "cree" ? "cree" : "mis a jour"} depuis l'environnement`);
+      } else if (r.fait === "ignore" && r.raison === "prefixe") {
+        console.warn(
+          `[démarrage] ${a.variable} ignorée : la valeur doit commencer ` +
+          "par « hub_ » ou « mml_ » pour être reconnue à l'authentification.");
+      }
     }
   } catch (e: any) {
     console.error("[démarrage] amorce du jeton d'intégration :", e?.message || e);

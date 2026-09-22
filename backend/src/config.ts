@@ -21,6 +21,10 @@ export const config = {
   // devient telle quelle le jeton du programme qui installe MapMyLAN. Vide,
   // rien n'est amorcé et le comportement est celui d'avant.
   integrationSeed: process.env.INTEGRATION_TOKEN_SEED || "",
+  // Amorce du jeton de gestion des comptes. Séparée de la précédente : deux
+  // valeurs distinctes pour deux pouvoirs distincts, et l'une peut être posée
+  // sans l'autre.
+  adminSeed: process.env.ADMIN_TOKEN_SEED || "",
   scan: {
     subnet: process.env.SCAN_SUBNET || "192.0.2.0/24",
     interval: parseInt(process.env.SCAN_INTERVAL || "300"),
