@@ -67,6 +67,15 @@ services:
       CORS_ORIGIN: "*"
       HOST_PROC: /host/proc
       HOST_SYS: /host/sys
+      # L'assistant. Le Hub pose ces adresses quand Ollama et VOX existent, et
+      # redéploie MapMyLAN quand l'un d'eux arrive : vides, l'assistant répond
+      # sans modèle aux questions directes et le mode vocal dit ce qui manque.
+      # Adresses « vues de la machine » (hostUrl) : ce conteneur est en réseau
+      # hôte et ne résout pas les noms des conteneurs du Hub.
+      IA_URL: "{{provider.llm.chat.hostUrl}}"
+      IA_MODELE: "{{provider.llm.chat.config.DEFAULT_MODEL}}"
+      VOX_URL: "{{provider.voice.stt.hostUrl}}"
+      VOX_JETON: "{{provider.voice.stt.config.HUB_TOKEN}}"
     depends_on:
       db: { condition: service_healthy }
       cache: { condition: service_healthy }

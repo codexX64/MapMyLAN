@@ -115,6 +115,11 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN}
       HOST_PROC: /host/proc
       HOST_SYS: /host/sys
+      # Assistant (facultatif) : Ollama pour répondre, VOX pour le mode vocal.
+      IA_URL: ${IA_URL:-}
+      IA_MODELE: ${IA_MODELE:-}
+      VOX_URL: ${VOX_URL:-}
+      VOX_JETON: ${VOX_JETON:-}
       # Stats conteneurs via le proxy en lecture seule (jamais le socket brut).
       DOCKER_HOST: tcp://127.0.0.1:2375
       # Adresse d'ecoute de l'API. Le backend tourne en reseau hote : sans
