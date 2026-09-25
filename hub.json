@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "mapmylan",
   "name": "MapMyLAN",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Cartographie du réseau local : appareils, scans, scores de risque, alertes, quarantaine — et un assistant qui répond, au clavier ou à voix haute avec VOX.",
   "icon": "map",
   "repository": "https://github.com/codexX64/MapMyLAN",
@@ -93,6 +93,24 @@
       "default": 900,
       "min": 60,
       "advanced": true
+    },
+    {
+      "key": "IA_MODELE",
+      "label": "Modèle de l'assistant",
+      "type": "select",
+      "optionsFrom": {
+        "from": {
+          "capability": "llm.chat"
+        },
+        "method": "GET",
+        "path": "/api/tags",
+        "select": "$.models",
+        "map": {
+          "value": "$.name",
+          "label": "$.name"
+        }
+      },
+      "help": "Le modèle d'Ollama qui répond dans l'assistant de MapMyLAN. « — » : le modèle par défaut d'Ollama. Un modèle plus petit (9b) répond plus vite ; SYNAPSE garde le sien."
     },
     {
       "key": "BIND_ADDRESS",

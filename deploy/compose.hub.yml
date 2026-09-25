@@ -73,7 +73,9 @@ services:
       # Adresses « vues de la machine » (hostUrl) : ce conteneur est en réseau
       # hôte et ne résout pas les noms des conteneurs du Hub.
       IA_URL: "{{provider.llm.chat.hostUrl}}"
-      IA_MODELE: "{{provider.llm.chat.config.DEFAULT_MODEL}}"
+      # Le modèle choisi dans les réglages de MapMyLAN ; à défaut, celui d'Ollama.
+      IA_MODELE: "{{config.IA_MODELE}}"
+      IA_MODELE_DEFAUT: "{{provider.llm.chat.config.DEFAULT_MODEL}}"
       VOX_URL: "{{provider.voice.stt.hostUrl}}"
       VOX_JETON: "{{provider.voice.stt.config.HUB_TOKEN}}"
       # SYNAPSE, le cerveau du homelab : l'assistant y pose sa fiche et son

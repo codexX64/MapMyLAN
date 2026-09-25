@@ -30,7 +30,8 @@ export const config = {
   // questions sur l'état du réseau, et le mode vocal dit ce qui lui manque.
   assistant: {
     iaUrl: (process.env.IA_URL || "").replace(/\/$/, ""),
-    iaModele: process.env.IA_MODELE || "",
+    // Le modèle choisi pour l'assistant, sinon le modèle par défaut d'Ollama.
+    iaModele: process.env.IA_MODELE || process.env.IA_MODELE_DEFAUT || "",
     voxUrl: (process.env.VOX_URL || "").replace(/\/$/, ""),
     voxJeton: process.env.VOX_JETON || "",
     // SYNAPSE, le cerveau du homelab, et le jeton de cerveau que le Hub a dérivé pour ce service.
