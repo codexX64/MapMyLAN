@@ -85,6 +85,22 @@ describe("assistant MapMyLAN", () => {
     expect(relances(photo())).toEqual(["Quelles alertes sont ouvertes ?", "Qui sont les nouveaux appareils ?", "Quels appareils sont les plus exposés ?"]);
   });
 
+  it("les relances suivent la conversation et ne reproposent jamais une question posée", () => {
+    const p = photo();
+    const fil = (...q: string[]) => q.map(request => ({ request }));
+    // Après « comment va le réseau » : deux pour creuser la santé, une sur un autre sujet.
+    expect(relances(p, fil("Comment va le réseau ?"))).toEqual(["Pourquoi la santé est à 74 ?", "Qu'est-ce qui pèse le plus sur la santé ?", "Quelles alertes sont ouvertes ?"]);
+    // Une question déjà posée, même autrement ponctuée, ne revient pas.
+    expect(relances(p, fil("pourquoi la sante est a 74", "Comment va le réseau ?"))).not.toContain("Pourquoi la santé est à 74 ?");
+    // Un appareil cité : ses ports, ses vulnérabilités.
+    expect(relances(p, fil("et 192.0.2.40 ?")).slice(0, 2)).toEqual(["Quels ports sont ouverts sur camera-entree ?", "Quelles vulnérabilités a camera-entree ?"]);
+    // Les alertes : la suivante nomme l'appareil en cause ; la troisième change de sujet.
+    const r = relances(p, fil("Quelles alertes sont ouvertes ?"));
+    expect(r).toEqual(["Laquelle corriger en premier ?", "Pourquoi camera-entree déclenche des alertes ?", "Qui sont les nouveaux appareils ?"]);
+    // Une question hors sujet : l'état réel, moins ce qui a déjà été demandé.
+    expect(relances(p, fil("Quelles alertes sont ouvertes ?", "merci"))).toEqual(["Qui sont les nouveaux appareils ?", "Quels appareils sont les plus exposés ?", "Qu'est-ce qui est hors ligne ?"]);
+  });
+
   it("un modèle qui boucle est coupé à la troisième répétition", () => {
     const t = dedoublonne("Bonjour.\n- a\n- a\n- b\n- a\n- c");
     expect(t).toBe("Bonjour.\n- a\n- b");

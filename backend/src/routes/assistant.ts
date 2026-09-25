@@ -34,7 +34,7 @@ router.get("/", async (req: AuthedRequest, res) => {
       ia: { prete: iaPrete(), modele: config.assistant.iaModele || null },
       voix,
       cerveau: { synapse: synapsePrete(), nom: nomCerveau() },
-      relances: relances(photo),
+      relances: relances(photo, fil),
     });
   } catch (e) { echec(res, e); }
 });

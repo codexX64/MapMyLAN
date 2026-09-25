@@ -278,13 +278,107 @@ export async function demander(utilisateur: string, texte: string, { voix = fals
   }
 }
 
-/** Trois relances tirées de l'état réel, pas écrites en dur. */
-export function relances(p: Photo): string[] {
+/* ───────────── les relances ─────────────
+   Trois questions à cliquer, qui suivent la conversation : deux prolongent la
+   dernière question (ses appareils, ses alertes, ses ports), la troisième
+   ouvre un autre sujet tiré de l'état réel. Une question déjà posée n'est
+   jamais reproposée. Aucun modèle : elles s'affichent avec la réponse. */
+
+const cleQuestion = (q: string) => q.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9.]+/g, " ").trim();
+const court = (nom: string) => (nom.length > 28 ? nom.slice(0, 27) + "…" : nom);
+
+type Sujet = "alertes" | "horsLigne" | "nouveaux" | "exposition" | "sante" | "activite" | "vlan" | "appareil";
+
+/** De quoi parle une question : le premier sujet reconnu, ou aucun. */
+export function sujetDe(q: string): Sujet | null {
+  const t = cleQuestion(q);
+  if (/\b(alerte|notif|incident)/.test(t)) return "alertes";
+  if (/hors ligne|eteint|repond (plus|pas)|offline|injoignable/.test(t)) return "horsLigne";
+  if (/nouveau|nouvel|arrive|inconnu/.test(t)) return "nouveaux";
+  if (/expos|risque|danger|port|vuln|cve|telnet|faille|ferme/.test(t)) return "exposition";
+  if (/sante|score|etat|comment va|global|simulation|coheren/.test(t)) return "sante";
+  if (/activite|semaine|jour|historique|tendance/.test(t)) return "activite";
+  if (/vlan|segment|isol/.test(t)) return "vlan";
+  return null;
+}
+
+function suites(sujet: Sujet, p: Photo, cites: Appareil[]): string[] {
+  const pire = p.risque[0] || [...p.appareils].sort((a, b) => b.danger - a.danger)[0];
+  const alerte = p.nonLues[0] || p.alertes[0];
+  switch (sujet) {
+    case "appareil": {
+      const a = cites[0];
+      return [
+        a.ports ? `Quels ports sont ouverts sur ${court(a.nom)} ?` : `Que sait-on de ${court(a.nom)} ?`,
+        a.cves ? `Quelles vulnérabilités a ${court(a.nom)} ?` : `${court(a.nom)} est-il à risque ?`,
+        a.etat === "offline" ? `Depuis quand ${court(a.nom)} est hors ligne ?` : `Qui est sur le même VLAN que ${court(a.nom)} ?`,
+      ];
+    }
+    case "alertes": return [
+      "Laquelle corriger en premier ?",
+      alerte?.appareil ? `Pourquoi ${court(alerte.appareil)} déclenche des alertes ?` : "D'où viennent ces alertes ?",
+      "Ces alertes collent-elles aux ports ouverts ?",
+    ];
+    case "horsLigne": return [
+      p.horsLigne[0] ? `Depuis quand ${court(p.horsLigne[0].nom)} est hors ligne ?` : "Qu'est-ce qui est encore en ligne ?",
+      "Est-ce normal qu'autant d'appareils soient hors ligne ?",
+      "Qu'est-ce qui est encore en ligne ?",
+    ];
+    case "nouveaux": return [
+      p.nouveaux[0] ? `${court(p.nouveaux[0].nom)} est-il légitime ?` : "Quel est le dernier appareil arrivé ?",
+      "Sur quels VLAN sont les nouveaux ?",
+      "Un nouvel appareil a-t-il des ports ouverts ?",
+    ];
+    case "exposition": return [
+      pire ? `Que faire pour ${court(pire.nom)} ?` : "Quels ports faut-il fermer ?",
+      "Quels ports faut-il fermer en premier ?",
+      "Quelles CVE sont les plus graves ?",
+    ];
+    case "sante": return [
+      `Pourquoi la santé est à ${p.sante} ?`,
+      "Qu'est-ce qui pèse le plus sur la santé ?",
+      "Que corriger en premier ?",
+    ];
+    case "activite": return [
+      "Quel jour a été le plus chargé ?",
+      "Ces alertes de la semaine se répètent-elles ?",
+      "Qui sont les nouveaux appareils ?",
+    ];
+    case "vlan": return [
+      "Quels VLAN ne sont pas isolés ?",
+      pire?.vlan != null ? `Qui partage le VLAN ${pire.vlan} avec ${court(pire.nom)} ?` : "Quel VLAN a le plus d'appareils ?",
+      "Quel VLAN a le plus d'appareils ?",
+    ];
+  }
+}
+
+/** Ce que l'état du réseau appelle, sans tenir compte de la conversation. */
+function parEtat(p: Photo): string[] {
   const out: string[] = [];
   if (p.nonLues.length) out.push("Quelles alertes sont ouvertes ?");
   if (p.nouveaux.length) out.push("Qui sont les nouveaux appareils ?");
   if (p.risque.some(a => a.danger >= 30)) out.push("Quels appareils sont les plus exposés ?");
   if (p.horsLigne.length) out.push("Qu'est-ce qui est hors ligne ?");
-  out.push("Comment va le réseau ?", "Montre l'activité de la semaine");
-  return [...new Set(out)].slice(0, 3);
+  out.push("Comment va le réseau ?", "Montre l'activité de la semaine", "Quels VLAN ne sont pas isolés ?");
+  return out;
+}
+
+/** Trois relances : la suite de la dernière question, puis l'état réel ; jamais une question déjà posée. */
+export function relances(p: Photo, fil: { request: string }[] = []): string[] {
+  const posees = new Set(fil.map(t => cleQuestion(t.request)));
+  const out: string[] = [], vues = new Set<string>();
+  const ajouter = (q: string) => {
+    const k = cleQuestion(q);
+    if (!posees.has(k) && !vues.has(k)) { vues.add(k); out.push(q); }
+  };
+  const derniere = fil.at(-1)?.request;
+  if (derniere) {
+    const cites = appareilsCites(derniere, p);
+    const sujet: Sujet | null = cites.length ? "appareil" : sujetDe(derniere);
+    if (sujet) suites(sujet, p, cites).forEach(ajouter);
+    // Deux pour creuser, la troisième ouvre un autre sujet.
+    out.splice(2);
+    for (const q of parEtat(p)) if (!sujet || sujetDe(q) !== sujet) ajouter(q);
+  } else parEtat(p).forEach(ajouter);
+  return out.slice(0, 3);
 }
