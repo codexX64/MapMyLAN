@@ -49,7 +49,14 @@ async function dessiner(): Promise<void> {
   S.relances = etat.relances || [];
   if (etat.encours && !S.occupe) S.occupe = true;
   const fil: any[] = etat.fil || [];
-  const sous = etat.ia?.prete ? `${esc(etat.ia.modele)} · lecture seule` : "sans modèle · réponses directes";
+  const sous = [etat.ia?.prete ? esc(etat.ia.modele) : "sans modèle", etat.cerveau?.synapse ? "relié à SYNAPSE" : "lecture seule"].join(" · ");
+  // Une action d'un autre cerveau : le bouton qui y mène, avec la demande déjà écrite.
+  const relais = (r: any) => {
+    if (!r) return "";
+    const lien = typeof r.lien === "string" && /^https?:\/\/[^\s"'<>]+$/.test(r.lien) ? r.lien : "";
+    return `<div class="aia-relais"><span class="itile">${I("arrow", 14)}</span><div class="grow"><b>${esc(r.titre)}</b><small>${esc(r.action)} · ${esc(r.ou)}</small></div>
+      ${lien ? `<a class="btn solid sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer">Continuer là-bas</a>` : ""}</div>`;
+  };
 
   panel.innerHTML = `
     <header><span class="itile ink">${I("sparkle")}</span><div class="grow"><b>Assistant</b><small>${sous}</small></div>
@@ -58,10 +65,10 @@ async function dessiner(): Promise<void> {
       <button class="ghost" id="aiaClose" aria-label="Fermer">${I("x", 14)}</button></header>
     <div class="msgs" id="aiaMsgs">
       ${fil.length ? fil.map(p => `${p.voix ? "" : `<div class="m u">${esc(p.request)}</div>`}
-        <div class="m a${p.widgets?.length || p.voix ? " large" : ""}${p.voix ? " vocal" : ""}">${p.voix
+        <div class="m a${p.widgets?.length || p.voix || p.relais ? " large" : ""}${p.voix ? " vocal" : ""}">${p.voix
           ? tourVocal(p, (p.widgets || []).map(widgetHtml).join(""))
-          : rendu(p.reply) + (p.widgets || []).map(widgetHtml).join("")}
-          <div class="pied">${p.voix ? `<button class="lienfin" data-rejouer="${esc(p.id)}" title="Réentendre la réponse">${I("play", 11)} Réécouter</button>` : ""}${p.duree != null ? `<small class="duree" title="Temps de réponse">${p.duree < 1000 ? "< 1 s" : `${Math.round(p.duree / 1000)} s`}${p.modele ? ` · ${esc(p.modele)}` : ""}</small>` : ""}</div>
+          : rendu(p.reply) + relais(p.relais) + (p.widgets || []).map(widgetHtml).join("")}
+          <div class="pied">${p.voix ? `<button class="lienfin" data-rejouer="${esc(p.id)}" title="Réentendre la réponse">${I("play", 11)} Réécouter</button>` : ""}${p.duree != null ? `<small class="duree" title="Temps de réponse">${p.duree < 1000 ? "< 1 s" : `${Math.round(p.duree / 1000)} s`}${p.modele ? ` · ${esc(p.modele)}` : ""}${p.sources?.length ? ` · via ${esc(p.sources.join(", "))}` : ""}</small>` : ""}</div>
         </div>`).join("")
         : `<div class="m a aia-accueil"><b>Pose-moi une question sur ton réseau.</b>Les nouveaux appareils, les alertes, ce qui est exposé, ce qui ne répond plus, un appareil par son adresse. Je lis le réseau, je ne change rien.</div>`}
       ${S.demande ? `<div class="m u">${esc(S.demande)}</div>` : ""}

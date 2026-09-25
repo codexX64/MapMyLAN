@@ -7,7 +7,8 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("../../db", () => ({ prisma: {} }));
 
-import { reponseRapide, contexte, relances } from "./index";
+import { reponseRapide, contexte, relances, passerLaMain } from "./index";
+import { resumeEtat, FICHE } from "./synapse";
 import { devine, widgetsPour } from "./widgets";
 import { dedoublonne } from "./ia";
 import { aDire } from "./voix";
@@ -89,4 +90,27 @@ describe("assistant MapMyLAN", () => {
   it("ce qui se dit : sans gras, sans puces, en phrases", () => {
     expect(aDire("Voici :\n- **routeur** en ligne\n- imprimante hors ligne ✅")).toBe("Voici : routeur en ligne. imprimante hors ligne.");
   });
+
+  it("une action d'un autre cerveau : on passe la main, lien vers le Hub avec la demande écrite", () => {
+    const o = { action: true, cerveaux: [
+      { nom: "hub", titre: "Hub — chef d’orchestre du homelab", score: 4.5, lui: false, ui: "http://192.0.2.10:8100/",
+        action: { nom: "créer, modifier, activer ou lancer un workflow", ou: "Hub → Assistant" } },
+      { nom: "mapmylan", titre: "MapMyLAN", score: 1, lui: true, action: null } ] };
+    const r = passerLaMain("crée des workflows pour Sentinel", o)!;
+    expect(r).toMatchObject({ nom: "hub", ou: "Hub → Assistant" });
+    expect(r.lien).toBe("http://192.0.2.10:8100/#assistant?q=cr%C3%A9e%20des%20workflows%20pour%20Sentinel");
+    expect(passerLaMain("bloque la caméra", { action: true, cerveaux: [{ ...o.cerveaux[1], score: 6, action: { nom: "bloquer", ou: "Sécurité" } }] })).toBeNull();
+    expect(passerLaMain("qui est en ligne ?", { action: false, cerveaux: o.cerveaux })).toBeNull();
+    const avecSentinel = { action: true, cerveaux: [{ nom: "sentinel", titre: "Sentinel", score: 6, lui: false, action: null, ui: "" }, ...o.cerveaux] };
+    expect(passerLaMain("crée des workflows pour Sentinel", avecSentinel)!.nom).toBe("hub");
+    expect(passerLaMain("crée un workflow", { action: true, cerveaux: [{ ...o.cerveaux[0], ui: "javascript:alert(1)" }] })!.lien).toBeNull();
+  });
+
+  it("l'état laissé aux autres cerveaux est court et chiffré ; la fiche dit ce que MapMyLAN sait", () => {
+    const e = resumeEtat(photo());
+    expect(e).toMatch(/^4 appareils connus, 3 en ligne, 1 hors ligne, 0 bloqués ou en quarantaine\. 1 nouveaux depuis 24 h \(camera-entree 192\.0\.2\.40\)\. 1 alertes non lues, dont 1 critiques\. Santé du réseau 74\/100\./);
+    expect(e.length).toBeLessThan(700);
+    expect(FICHE.sait).toContain("quarantaine");
+  });
 });
+

@@ -33,6 +33,11 @@ export const config = {
     iaModele: process.env.IA_MODELE || "",
     voxUrl: (process.env.VOX_URL || "").replace(/\/$/, ""),
     voxJeton: process.env.VOX_JETON || "",
+    // SYNAPSE, le cerveau du homelab, et le jeton de cerveau que le Hub a dérivé pour ce service.
+    synapseUrl: (process.env.SYNAPSE_URL || "").replace(/\/$/, ""),
+    synapseJeton: process.env.SYNAPSE_JETON || "",
+    // L'adresse de MapMyLAN pour un humain : les autres IA la donnent pour « continuer ici ».
+    ui: (process.env.SERVICE_UI || "").replace(/\/$/, ""),
   },
   scan: {
     subnet: process.env.SCAN_SUBNET || "192.0.2.0/24",

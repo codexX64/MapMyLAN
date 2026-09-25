@@ -182,6 +182,8 @@ async function main() {
   dedupeDevices().catch(() => {});
   startScheduler();
   startTelegramBot().catch(() => {});
+  // Le mini-cerveau de l'assistant : sa fiche et son état dans SYNAPSE.
+  (await import("./services/assistant")).demarrerCerveau();
   annoncerPoste();
 
   // Adresse d'ecoute.

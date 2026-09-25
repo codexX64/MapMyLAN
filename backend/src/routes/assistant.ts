@@ -7,6 +7,7 @@ import { authRequired, type AuthedRequest } from "../middleware/auth";
 import { demander, lireFil, oublierFil, arreter, occupe, relances, ErreurAssistant } from "../services/assistant";
 import { prendrePhoto } from "../services/assistant/photo";
 import { iaPrete } from "../services/assistant/ia";
+import { synapsePrete, nomCerveau } from "../services/assistant/synapse";
 import { etatVoix, transcrire, dire, ErreurVoix } from "../services/assistant/voix";
 import { config } from "../config";
 import { logEvent } from "../services/logger";
@@ -32,6 +33,7 @@ router.get("/", async (req: AuthedRequest, res) => {
       encours: occupe(qui(req)),
       ia: { prete: iaPrete(), modele: config.assistant.iaModele || null },
       voix,
+      cerveau: { synapse: synapsePrete(), nom: nomCerveau() },
       relances: relances(photo),
     });
   } catch (e) { echec(res, e); }
