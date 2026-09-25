@@ -125,6 +125,7 @@ const DICT: Record<Lang, Record<string, string>> = {
     // Barre du haut
     "top.search": "Rechercher un appareil, une IP, un fabricant",
     "top.notifications": "Notifications",
+    "top.assistant": "Assistant — pose une question sur ton réseau",
     "top.appearance": "Changer d'apparence",
     "top.language": "Changer de langue",
     "top.logout": "Se déconnecter",
@@ -696,6 +697,7 @@ const DICT: Record<Lang, Record<string, string>> = {
 
     "top.search": "Search a host, IP or vendor",
     "top.notifications": "Notifications",
+    "top.assistant": "Assistant — ask about your network",
     "top.appearance": "Switch appearance",
     "top.language": "Switch language",
     "top.logout": "Sign out",

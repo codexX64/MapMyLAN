@@ -20,6 +20,7 @@ import { Icon } from "../../lib/icons";
 import { useT, useLang } from "../../lib/i18n";
 import { api } from "../../api/client";
 import { DeviceDrawer } from "../device/DeviceDrawer";
+import { AssistantMonte, BoutonAssistant } from "../assistant/BoutonAssistant";
 import { ExplorerTree, Dock, WorkshopTop, WorkshopRail } from "./WorkshopShell";
 import {
   Dashboard, MapPage, WorldPage, DevicesPage, VlansPage, SecurityPage,
@@ -161,6 +162,7 @@ export function AppShell() {
       </button>
 
       <DeviceDrawer theme={t}/>
+      <AssistantMonte/>
     </>
   );
 }
@@ -250,6 +252,7 @@ function TopBar() {
           onClick={() => setLangValue(lang === "fr" ? "en" : "fr")}>
           {lang.toUpperCase()}
         </button>
+        <BoutonAssistant/>
         <button className="ghost" title={s("top.notifications")} onClick={() => setPage("notifications")}>
           <Icon name="bell" size={16}/>
         </button>

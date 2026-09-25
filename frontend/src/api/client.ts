@@ -16,9 +16,13 @@ function jetonAntiCsrf(): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+/**
+ * Les en-têtes d'authentification d'un appel à l'API. Exportés pour les appels
+ * qui ne passent pas par `request` — l'audio du mode vocal, qui n'est pas du JSON.
+ */
+export function entetesApi(methode: string, extra: Record<string, string> = {}): Record<string, string> {
   const token = getToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json", ...(options.headers as any) };
+  const headers: Record<string, string> = { ...extra };
   // L'en-tête reste envoyé : il fait vivre les clients qui n'ont pas de cookie,
   // et le serveur lit le cookie en priorité quand il y en a un.
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -26,8 +30,14 @@ async function request<T = any>(path: string, options: RequestInit = {}): Promis
   // que cet en-tête soit égal au cookie. Un site tiers ne peut lire ni l'un ni
   // l'autre, il ne peut donc pas forger la requête.
   const csrf = jetonAntiCsrf();
+  const m = methode.toUpperCase();
+  if (csrf && m !== "GET" && m !== "HEAD") headers["X-CSRF-Token"] = csrf;
+  return headers;
+}
+
+async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const methode = String(options.method || "GET").toUpperCase();
-  if (csrf && methode !== "GET" && methode !== "HEAD") headers["X-CSRF-Token"] = csrf;
+  const headers = entetesApi(methode, { "Content-Type": "application/json", ...(options.headers as any) });
   // `same-origin` : le cookie de session part avec la requête vers notre propre
   // origine, et nulle part ailleurs.
   const res = await fetch(`${BASE}${path}`, { credentials: "same-origin", ...options, headers });
@@ -76,6 +86,13 @@ export const api = {
   quarantineDevice: (id: string, reason?: string) => request<{ ok: boolean; output: string }>(`/devices/${id}/quarantine`, { method: "POST", body: JSON.stringify({ reason }) }),
   unbanDevice: (id: string) => request<{ ok: boolean; output: string }>(`/devices/${id}/unban`, { method: "POST" }),
   healthScore: () => request<{ score: number }>("/devices/health/score"),
+
+  // Assistant
+  assistant: () => request<any>("/assistant"),
+  assistantDemander: (text: string, voix = false) => request<any>("/assistant/ask", { method: "POST", body: JSON.stringify({ text, voix }) }),
+  assistantArreter: () => request<any>("/assistant/stop", { method: "POST" }),
+  assistantOublier: () => request<any>("/assistant/nouvelle", { method: "POST" }),
+  assistantVoix: () => request<{ disponible: boolean; raison: string | null }>("/assistant/voix"),
 
   // Interfaces (NICs)
   addInterface: (deviceId: string, data: any) => request(`/devices/${deviceId}/interfaces`, { method: "POST", body: JSON.stringify(data) }),

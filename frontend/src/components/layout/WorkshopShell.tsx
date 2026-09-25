@@ -12,6 +12,7 @@ import { useStore } from "../../stores/app";
 import { Icon, deviceIcon } from "../../lib/icons";
 import { useT, useLang } from "../../lib/i18n";
 import { resolveTheme } from "../../lib/themes";
+import { BoutonAssistant } from "../assistant/BoutonAssistant";
 
 // ─── Barre supérieure ──────────────────────────────────────────────────────
 
@@ -65,6 +66,7 @@ export function WorkshopTop() {
       </div>
 
       <div style={{ display: "flex", gap: 3, color: "var(--muted)" }}>
+        <BoutonAssistant taille={28} picto={15}/>
         <button className="ghost" style={{ width: 28, height: 28 }}
           title={s("top.notifications")} onClick={() => setPage("notifications")}>
           <Icon name="bell" size={15}/>
