@@ -76,6 +76,13 @@ services:
       IA_MODELE: "{{provider.llm.chat.config.DEFAULT_MODEL}}"
       VOX_URL: "{{provider.voice.stt.hostUrl}}"
       VOX_JETON: "{{provider.voice.stt.config.HUB_TOKEN}}"
+      # SYNAPSE, le cerveau du homelab : l'assistant y pose sa fiche et son
+      # état, y lit ce que le homelab sait, y remonte ses échanges. Le jeton
+      # est un jeton de cerveau dérivé par le Hub, valable pour ce seul service.
+      SYNAPSE_URL: "{{provider.memory.brief.hostUrl}}"
+      SYNAPSE_JETON: "{{provider.memory.brief.jetonCerveau}}"
+      # L'adresse de MapMyLAN pour un humain : les autres IA la donnent pour « continuer ici ».
+      SERVICE_UI: "{{service.ui}}"
     depends_on:
       db: { condition: service_healthy }
       cache: { condition: service_healthy }

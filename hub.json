@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "mapmylan",
   "name": "MapMyLAN",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Cartographie du réseau local : appareils, scans, scores de risque, alertes, quarantaine — et un assistant qui répond, au clavier ou à voix haute avec VOX.",
   "icon": "map",
   "repository": "https://github.com/codexX64/MapMyLAN",
@@ -164,7 +164,9 @@
     "accepts": [
       "llm.chat",
       "voice.stt",
-      "voice.tts"
+      "voice.tts",
+      "memory.brief",
+      "memory.learn"
     ]
   },
   "triggers": [
