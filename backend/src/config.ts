@@ -25,6 +25,15 @@ export const config = {
   // valeurs distinctes pour deux pouvoirs distincts, et l'une peut être posée
   // sans l'autre.
   adminSeed: process.env.ADMIN_TOKEN_SEED || "",
+  // L'assistant : le modèle de langage (Ollama) et la voix (VOX). Posés par le
+  // Hub quand ces services existent ; vides, l'assistant répond quand même aux
+  // questions sur l'état du réseau, et le mode vocal dit ce qui lui manque.
+  assistant: {
+    iaUrl: (process.env.IA_URL || "").replace(/\/$/, ""),
+    iaModele: process.env.IA_MODELE || "",
+    voxUrl: (process.env.VOX_URL || "").replace(/\/$/, ""),
+    voxJeton: process.env.VOX_JETON || "",
+  },
   scan: {
     subnet: process.env.SCAN_SUBNET || "192.0.2.0/24",
     interval: parseInt(process.env.SCAN_INTERVAL || "300"),

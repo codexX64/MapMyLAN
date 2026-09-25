@@ -23,6 +23,7 @@ import logosRoute from "./routes/logos";
 import { logEvent } from "./services/logger";
 import mfaRoute from "./routes/mfa";
 import mailRoute from "./routes/mail";
+import assistantRoute from "./routes/assistant";
 import { dedupeDevices } from "./services/dedupe";
 import { attachSocketIO } from "./ws/realtime";
 import { startScheduler } from "./workers/scheduler";
@@ -168,6 +169,7 @@ async function main() {
   app.use("/api/logos", logosRoute);
   app.use("/api/mfa", mfaRoute);
   app.use("/api/mail", mailRoute);
+  app.use("/api/assistant", assistantRoute);
   app.use("/api", systemRoute);
 
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
