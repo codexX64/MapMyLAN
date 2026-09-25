@@ -25,6 +25,9 @@ export interface Appareil {
   premiereVue: Date;
   derniereVue: Date;
   routeur: boolean;
+  /** Les ports ouverts (numéro, protocole, service) et les CVE les plus graves : de quoi juger l'exposition, pas seulement la compter. */
+  portsDetail: { port: number; proto: string; service: string | null }[];
+  cvesDetail: { id: string; cvss: number; gravite: string }[];
 }
 
 export interface Alerte {
@@ -50,6 +53,8 @@ export interface Photo {
   dernierBalayage: { type: string; plage: string; etat: string; trouves: number; le: Date } | null;
   machine: { cpu: number; memoire: number; disque: number; temperature: number | null } | null;
   sante: number;
+  /** Combien d'appareils entrent dans le calcul de la santé (tous sauf les hors ligne). */
+  santeSur: number;
   cves: number;
   parJour: { jour: string; nouveaux: number; alertes: number }[];
 }
@@ -69,6 +74,8 @@ export async function prendrePhoto(): Promise<Photo> {
         id: true, ip: true, mac: true, hostname: true, customName: true, vendor: true, type: true, customType: true,
         vlan: true, status: true, dangerScore: true, firstSeen: true, lastSeen: true, isMainRouter: true,
         _count: { select: { cves: true, ports: true } },
+        ports: { select: { port: true, protocol: true, service: true, state: true }, orderBy: { port: "asc" }, take: 25 },
+        cves: { select: { cveId: true, cvss: true, severity: true }, orderBy: { cvss: "desc" }, take: 5 },
       },
       orderBy: { lastSeen: "desc" },
       take: 5000,
@@ -84,6 +91,8 @@ export async function prendrePhoto(): Promise<Photo> {
     id: d.id, nom: nomAppareil(d), ip: d.ip, mac: d.mac, type: d.customType || d.type, fabricant: d.vendor,
     vlan: d.vlan, etat: d.status, danger: d.dangerScore, cves: d._count.cves, ports: d._count.ports,
     premiereVue: d.firstSeen, derniereVue: d.lastSeen, routeur: d.isMainRouter,
+    portsDetail: (d.ports || []).filter(p => !p.state || p.state === "open").map(p => ({ port: p.port, proto: p.protocol, service: p.service })),
+    cvesDetail: (d.cves || []).map(c => ({ id: c.cveId, cvss: c.cvss, gravite: c.severity })),
   }));
   const parId = new Map(appareils.map(a => [a.id, a]));
   const alertes: Alerte[] = alertesBrutes.map(a => ({
@@ -117,6 +126,7 @@ export async function prendrePhoto(): Promise<Photo> {
     dernierBalayage: balayage ? { type: balayage.type, plage: balayage.subnet, etat: balayage.status, trouves: balayage.hostsFound, le: balayage.endedAt || balayage.startedAt } : null,
     machine: metrique ? { cpu: Math.round(metrique.cpuPct), memoire: Math.round(metrique.memPct), disque: Math.round(metrique.diskPct), temperature: metrique.tempC } : null,
     sante,
+    santeSur: appareils.filter(a => a.etat !== "offline").length,
     cves: appareils.reduce((n, a) => n + a.cves, 0),
     parJour,
   };

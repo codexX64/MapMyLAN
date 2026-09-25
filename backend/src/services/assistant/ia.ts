@@ -25,7 +25,7 @@ export async function discuter(messages: Message[], signal?: AbortSignal): Promi
       stream: false,
       think: false,
       keep_alive: "30m",
-      options: { num_ctx: CTX, temperature: 0.3, repeat_penalty: 1.1, num_predict: 700 },
+      options: { num_ctx: CTX, temperature: 0.3, repeat_penalty: 1.1, num_predict: 1800 },
     }),
   }).catch((e: any) => {
     if (signal?.aborted) throw new Error("Réponse interrompue.");
@@ -33,7 +33,10 @@ export async function discuter(messages: Message[], signal?: AbortSignal): Promi
   });
   const j: any = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Ollama : ${j.error || `HTTP ${res.status}`}`);
-  return { texte: dedoublonne(String(j.message?.content || "").trim()), modele: config.assistant.iaModele };
+  let texte = dedoublonne(String(j.message?.content || "").trim());
+  // Coupée par la limite de longueur : le dire plutôt que laisser une phrase en l'air.
+  if (j.done_reason === "length") texte += "\n\n*(Réponse coupée : demande la suite, ou une version plus courte.)*";
+  return { texte, modele: config.assistant.iaModele };
 }
 
 /**

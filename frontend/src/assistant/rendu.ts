@@ -16,8 +16,19 @@ export function rendu(texte: string): string {
   const enLigne = (x: string) => esc(x).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
   let html = "", liste: "ul" | "ol" | null = null;
   const ferme = () => { if (liste) { html += `</${liste}>`; liste = null; } };
+  // Un tableau (« | a | b | ») : la première ligne est l'en-tête, la ligne de tirets est sautée.
+  let tableau: string[][] = [];
+  const cellules = (l: string) => l.replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+  const videTableau = () => {
+    if (!tableau.length) return;
+    const [tete, ...corps] = tableau;
+    html += `<div class="md-tab"><table><thead><tr>${tete.map(c => `<th>${enLigne(c)}</th>`).join("")}</tr></thead><tbody>${corps.map(r => `<tr>${tete.map((_, i) => `<td>${enLigne(r[i] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    tableau = [];
+  };
   for (const brut of t.split("\n")) {
     const l = brut.trim();
+    if (/^\|.*\|$/.test(l)) { ferme(); if (!/^\|[\s:|-]+\|$/.test(l)) tableau.push(cellules(l)); continue; }
+    videTableau();
     if (!l) { ferme(); continue; }
     let m: RegExpExecArray | null;
     if ((m = /^[-•*]\s+(.*)$/.exec(l))) { if (liste !== "ul") { ferme(); html += '<ul class="md">'; liste = "ul"; } html += `<li>${enLigne(m[1])}</li>`; continue; }
@@ -28,6 +39,7 @@ export function rendu(texte: string): string {
     html += `<p class="md-p">${enLigne(l)}</p>`;
   }
   ferme();
+  videTableau();
   return html;
 }
 

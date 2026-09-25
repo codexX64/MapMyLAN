@@ -89,6 +89,10 @@
 .aia .m .md-p:last-child{margin-bottom:0}
 .aia .m .md-t{margin:10px 0 4px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .aia .m .md-t:first-child{margin-top:0}
+.aia .m .md-tab{margin:6px 0 8px;overflow-x:auto;border:1px solid var(--hair-soft);border-radius:10px}
+.aia .m .md-tab table{border-collapse:collapse;width:100%;font-size:12px}
+.aia .m .md-tab th{text-align:left;font-weight:600;color:var(--muted);background:var(--well);padding:6px 9px;white-space:nowrap}
+.aia .m .md-tab td{padding:6px 9px;border-top:1px solid var(--hair-soft);vertical-align:top}
 .aia .m ul.md,.aia .m ol.md{margin:4px 0 8px;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px}
 .aia .m ul.md li,.aia .m ol.md li{position:relative;padding:6px 10px 6px 26px;background:var(--surface);border-radius:9px;box-shadow:0 0 0 1px var(--hair-soft);color:var(--ink)}
 .aia .m ul.md li::before{content:'';position:absolute;left:11px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
