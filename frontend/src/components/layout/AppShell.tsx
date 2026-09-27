@@ -229,6 +229,33 @@ function Rail({ active, onNav }: { active: string; onNav: (p: string) => void })
   );
 }
 
+// ─── Mode simulation : qu'on ne confonde jamais un faux réseau avec le vrai ─
+
+function PastilleSimulation() {
+  const [e, setE] = useState<any>(null);
+  useEffect(() => {
+    let vivant = true;
+    const lire = () => api.simulation().then(r => { if (vivant) setE(r); }).catch(() => {});
+    lire();
+    const t = setInterval(lire, 30_000);
+    return () => { vivant = false; clearInterval(t); };
+  }, []);
+  if (!e?.simulation?.actif) return null;
+  const syn = e.synapse || {};
+  const titre = `Mode simulation (${e.simulation.vitesse}) : les appareils et alertes étiquetés « simulation » sont factices.`
+    + ` ${e.simulation.evenements} événements depuis le démarrage.`
+    + (syn.relie ? ` SYNAPSE : ${syn.envoyes} envoyés${syn.enAttente ? `, ${syn.enAttente} en attente` : ""}${syn.erreur ? `, erreur : ${syn.erreur}` : ""}.` : " SYNAPSE non relié.");
+  return (
+    <span title={titre} style={{
+      display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99,
+      background: "var(--warn-wash, rgba(217,164,65,.14))", color: "var(--warn, #B7791F)", fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap",
+    }}>
+      <span style={{ width: 7, height: 7, borderRadius: 9, background: "currentColor" }}/>
+      Simulation{syn.erreur ? " · SYNAPSE ✗" : ""}
+    </span>
+  );
+}
+
 // ─── Barre du haut, disposition lecture ────────────────────────────────────
 
 function TopBar() {
@@ -247,6 +274,7 @@ function TopBar() {
     <div className="top">
       <Recherche/>
       <div className="topright">
+        <PastilleSimulation/>
         <button className="ghost" title={s("top.language")}
           style={{ width: "auto", padding: "0 11px", fontFamily: "var(--mono)", fontSize: 11 }}
           onClick={() => setLangValue(lang === "fr" ? "en" : "fr")}>

@@ -16,6 +16,7 @@ import { widgetsPour, devine, construire, type Widget, type TypeWidget } from ".
 import { discuter, iaPrete, type Message } from "./ia";
 import { aDire } from "./voix";
 import { briefer, orienter, remonter, publier, nomCerveau, synapsePrete } from "./synapse";
+import { vitesse } from "../simulation";
 
 export interface Tour {
   id: string;
@@ -156,6 +157,7 @@ export function contexte(p: Photo, question: string): string {
   const court = (a: Appareil) => `${a.nom} (${a.ip}${a.fabricant ? `, ${a.fabricant}` : ""}, ${a.type}${a.vlan != null ? `, VLAN ${a.vlan}` : ""}, ${a.etat}, danger ${a.danger}/100${ports(a)}${cves(a)})`;
   const lignes = [
     `État du réseau, ${heure(p.prise)} :`,
+    ...(vitesse() !== "off" ? ["- MODE SIMULATION (machine de test) : une partie des appareils et des alertes est factice, fabriquée par MapMyLAN pour les essais. Analyse-les comme de vrais appareils ; dis-le seulement si on te le demande."] : []),
     `- ${pluriel(p.appareils.length, "appareil")} connus : ${p.enLigne} en ligne, ${p.horsLigne.length} hors ligne, ${p.bloques.length} bloqués ou en quarantaine. ${pluriel(p.cves, "CVE", "CVE")} au total.`,
     `- Santé affichée : ${p.sante}/100. Calcul actuel de MapMyLAN : 100 − la moyenne des scores de danger des ${p.santeSur} appareils qui ne sont pas hors ligne. Elle ne tient compte ni des alertes, ni des appareils hors ligne : dis-le si on te demande si elle est juste.`,
     `- Échelle du danger : 0 à 100 par appareil (0-29 faible, 30-59 moyen, 60-100 élevé).`,

@@ -76,6 +76,8 @@ services:
       # Le modèle choisi dans les réglages de MapMyLAN ; à défaut, celui d'Ollama.
       IA_MODELE: "{{config.IA_MODELE}}"
       IA_MODELE_DEFAUT: "{{provider.llm.chat.config.DEFAULT_MODEL}}"
+      # Mode simulation (VM de test) : off, normal ou rapide.
+      SIMULATION: "{{config.SIMULATION}}"
       VOX_URL: "{{provider.voice.stt.hostUrl}}"
       VOX_JETON: "{{provider.voice.stt.config.HUB_TOKEN}}"
       # SYNAPSE, le cerveau du homelab : l'assistant y pose sa fiche et son

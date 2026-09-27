@@ -27,6 +27,7 @@ import assistantRoute from "./routes/assistant";
 import { dedupeDevices } from "./services/dedupe";
 import { attachSocketIO } from "./ws/realtime";
 import { startScheduler } from "./workers/scheduler";
+import { authRequired } from "./middleware/auth";
 import { startTelegramBot } from "./services/notifier";
 import { annoncerPoste } from "./services/poste";
 import { csrfProtection } from "./middleware/csrf";
@@ -153,6 +154,13 @@ async function main() {
     catch { res.status(503).json({ status: "degraded" }); }
   });
 
+  // Le mode simulation et l'envoi à SYNAPSE : de quoi vérifier que le réseau vit et qu'il se raconte.
+  app.get("/api/simulation", authRequired, async (_req, res) => {
+    const { etatSimulation } = await import("./services/simulation");
+    const { etatMemoire } = await import("./services/memoire");
+    res.json({ simulation: etatSimulation(), synapse: etatMemoire() });
+  });
+
   app.use("/api/auth", authLimiter, authRoute);
   app.use("/api/devices", devicesRoute);
   app.use("/api/vlans", vlansRoute);
@@ -184,6 +192,21 @@ async function main() {
   startTelegramBot().catch(() => {});
   // Le mini-cerveau de l'assistant : sa fiche et son état dans SYNAPSE.
   (await import("./services/assistant")).demarrerCerveau();
+  // Le mode simulation (VM de test seulement, éteint par défaut), puis ce qui part vers SYNAPSE.
+  (await import("./services/simulation")).demarrerSimulation();
+  {
+    const { demarrerMemoire } = await import("./services/memoire");
+    const { prendrePhoto } = await import("./services/assistant/photo");
+    const { resumeEtat } = await import("./services/assistant/synapse");
+    demarrerMemoire(async () => {
+      const p = await prendrePhoto();
+      return {
+        titre: `Bilan du réseau : ${p.appareils.length} appareils, ${p.enLigne} en ligne, ${p.nonLues.length} alertes non lues, santé ${p.sante}/100`,
+        corps: resumeEtat(p),
+        empreinte: [p.appareils.length, p.enLigne, p.horsLigne.length, p.nonLues.length, p.sante, p.cves, p.bloques.length].join("|"),
+      };
+    });
+  }
   annoncerPoste();
 
   // Adresse d'ecoute.
