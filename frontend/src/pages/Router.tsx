@@ -85,9 +85,10 @@ export function RouterPage({ t }: { t: any }) {
               {testing ? tr("gear.testing") : tr("gear.test")}
             </Btn>
           )}
-          <Btn t={t} icon={gear ? "settings" : "plus"} solid onClick={() => setEditing(true)}>
-            {gear ? tr("action.edit") : tr("gear.connect")}
-          </Btn>
+          {/* Sans équipement, le seul bouton est celui de la carte vide, au centre. */}
+          {gear && (
+            <Btn t={t} icon="settings" solid onClick={() => setEditing(true)}>{tr("action.edit")}</Btn>
+          )}
         </div>
       </div>
 
@@ -106,7 +107,9 @@ export function RouterPage({ t }: { t: any }) {
           <p style={{ color: t.muted, fontSize: 13.5, maxWidth: "46ch", margin: "0 auto 20px" }}>
             {tr("gear.emptyBody")}
           </p>
-          <Btn t={t} icon="plus" solid onClick={() => setEditing(true)}>{tr("gear.connect")}</Btn>
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <Btn t={t} icon="plus" solid onClick={() => setEditing(true)}>{tr("gear.connect")}</Btn>
+          </div>
         </div>
       ) : (
         <>
