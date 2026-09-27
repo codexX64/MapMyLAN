@@ -12,6 +12,7 @@
 // ligne, sur l'appareil. Aucune installation ne se retrouve sans issue.
 
 import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { api } from "../api/client";
 import { useStore } from "../stores/app";
 import { THEMES, compatTheme, resolveTheme } from "../lib/themes";
@@ -33,10 +34,29 @@ export function InscrireA2fPage() {
   const [secret, setSecret] = useState<{ secret: string; uri: string } | null>(null);
   const [code, setCode] = useState("");
 
+  // Le QR se dessine ici, dans le navigateur : l'adresse otpauth:// porte le
+  // secret en clair, elle ne part vers aucun service.
+  const [qr, setQr] = useState("");
+  const [copie, setCopie] = useState(false);
+
   useEffect(() => {
     if (moyen !== "application" || secret) return;
-    api.totpSetup().then(setSecret).catch((e: any) => setErr(e?.message || "Secret indisponible."));
+    api.totpSetup().then(async (s: { secret: string; uri: string }) => {
+      setSecret(s);
+      setQr(await QRCode.toDataURL(s.uri, { margin: 1, width: 360, errorCorrectionLevel: "M" }).catch(() => ""));
+    }).catch((e: any) => setErr(e?.message || "Secret indisponible."));
   }, [moyen]);
+
+  const copierCle = async () => {
+    if (!secret) return;
+    let ok = false;
+    try { await navigator.clipboard.writeText(secret.secret); ok = true; } catch {
+      // Hors HTTPS, pas de presse-papiers moderne : zone de texte sélectionnée.
+      const z = document.createElement("textarea"); z.value = secret.secret; document.body.appendChild(z); z.select();
+      try { ok = document.execCommand("copy"); } catch { /* */ } z.remove();
+    }
+    setCopie(ok); if (ok) setTimeout(() => setCopie(false), 2000);
+  };
 
   const poserCle = async () => {
     setBusy(true); setErr("");
@@ -69,6 +89,11 @@ export function InscrireA2fPage() {
     width: "100%", padding: "11px 14px", borderRadius: 10, border: "none",
     background: t.grad, color: t.onPrimary, fontFamily: t.font, fontSize: 14,
     fontWeight: 500, cursor: busy ? "default" : "pointer", marginTop: 12, opacity: busy ? 0.6 : 1,
+  };
+  const secondaire: any = {
+    flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
+    padding: "9px 10px", borderRadius: 9, border: `1px solid ${t.border}`, background: t.surface || t.well,
+    color: t.txt, fontFamily: t.font, fontSize: 12.5, fontWeight: 500, cursor: "pointer", textDecoration: "none",
   };
   const onglet = (id: string): any => ({
     flex: 1, padding: "8px 10px", borderRadius: 9, fontSize: 12.5, cursor: "pointer",
@@ -135,15 +160,30 @@ export function InscrireA2fPage() {
 
         {moyen === "application" && (
           <>
-            <p style={{ color: t.muted, fontSize: 12.5, lineHeight: 1.55, margin: "0 0 12px" }}>
-              Ajoute cette clé dans ton application d'authentification, puis recopie le
-              code affiché pour confirmer. Tant que le code n'est pas revenu, rien n'est
-              activé.
+            <p style={{ color: t.muted, fontSize: 12.5, lineHeight: 1.55, margin: "0 0 14px" }}>
+              Scanne ce code avec ton application d'authentification — ou, sur cet appareil,
+              ouvre-la directement. Recopie ensuite le code à six chiffres : tant qu'il n'est
+              pas revenu, rien n'est activé.
             </p>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+              <div style={{ width: 196, height: 196, borderRadius: 14, background: "#fff", padding: 8,
+                border: `1px solid ${t.border}`, display: "grid", placeItems: "center" }}>
+                {qr ? <img src={qr} alt="QR code du second facteur" width={180} height={180} style={{ display: "block", imageRendering: "pixelated" }}/>
+                  : <span style={{ color: "#858B93", fontSize: 12 }}>…</span>}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <a href={secret?.uri || undefined} style={{ ...secondaire, pointerEvents: secret ? "auto" : "none", opacity: secret ? 1 : 0.5 }}>
+                <Icon name="phone" size={14}/>Ouvrir dans l'application
+              </a>
+              <button type="button" onClick={copierCle} disabled={!secret} style={secondaire}>
+                <Icon name={copie ? "check" : "key"} size={14}/>{copie ? "Clé copiée" : "Copier la clé"}
+              </button>
+            </div>
             <div style={{
               background: t.well, border: `1px solid ${t.border}`, borderRadius: 9,
-              padding: "10px 12px", fontFamily: t.monoFont, fontSize: 12.5,
-              wordBreak: "break-all", color: t.txt, marginBottom: 12,
+              padding: "8px 12px", fontFamily: t.monoFont, fontSize: 11.5, textAlign: "center",
+              wordBreak: "break-all", color: t.muted, marginBottom: 12, letterSpacing: "0.04em",
             }}>{secret?.secret || "…"}</div>
             <input value={code} inputMode="numeric" maxLength={6} autoFocus
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
