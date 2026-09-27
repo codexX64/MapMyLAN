@@ -56,6 +56,14 @@ describe("assistant MapMyLAN", () => {
     expect(tuiles.find((t: any) => t.label === "Alertes non lues")).toMatchObject({ valeur: 1, etat: "err" });
   });
 
+  it("« qui es-tu » : un mini-cerveau du réseau, pas le cerveau du homelab ; sans modèle", () => {
+    const r = reponseRapide("qui es tu", photo())!;
+    expect(r.reply).toMatch(/assistant de \*\*MapMyLAN\*\*/);
+    expect(r.reply).toMatch(/mini-cerveau.*\*\*SYNAPSE\*\*/s);
+    expect(r.reply).not.toMatch(/photo/i);
+    expect(contexte(photo(), "analyse")).toMatch(/^État du réseau/);
+  });
+
   it("une question qui demande de réfléchir part au modèle", () => {
     expect(reponseRapide("pourquoi la caméra est-elle dangereuse ?", photo())).toBeNull();
   });
