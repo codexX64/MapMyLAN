@@ -31,4 +31,7 @@ COPY package.json ./
 COPY mail-providers.js ./
 EXPOSE 4000
 # db push instead of migrate (no migrations checked in)
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npx prisma db seed && node dist/index.js"]
+# « exec » : node remplace le shell et devient le PID 1. Sans lui, sh gardait
+# le SIGTERM pour lui, node ne s'arrêtait jamais proprement et Docker le tuait
+# au bout de 10 s (code 137) à chaque mise à jour.
+CMD ["sh", "-c", "npx prisma db push --skip-generate && npx prisma db seed && exec node dist/index.js"]
