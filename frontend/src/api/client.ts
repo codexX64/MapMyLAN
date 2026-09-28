@@ -89,7 +89,6 @@ export const api = {
 
   // Assistant
   assistant: () => request<any>("/assistant"),
-  simulation: () => request<any>("/simulation"),
   assistantDemander: (text: string, voix = false) => request<any>("/assistant/ask", { method: "POST", body: JSON.stringify({ text, voix }) }),
   assistantArreter: () => request<any>("/assistant/stop", { method: "POST" }),
   assistantOublier: () => request<any>("/assistant/nouvelle", { method: "POST" }),

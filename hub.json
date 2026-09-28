@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "mapmylan",
   "name": "MapMyLAN",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Cartographie du réseau local : appareils, scans, scores de risque, alertes, quarantaine — et un assistant qui répond, au clavier ou à voix haute avec VOX.",
   "icon": "map",
   "repository": "https://github.com/codexX64/MapMyLAN",
@@ -111,28 +111,6 @@
         }
       },
       "help": "Le modèle d'Ollama qui répond dans l'assistant de MapMyLAN. « — » : le modèle par défaut d'Ollama. Un modèle plus petit (9b) répond plus vite ; SYNAPSE garde le sien."
-    },
-    {
-      "key": "SIMULATION",
-      "label": "Mode simulation (tests)",
-      "type": "select",
-      "default": "off",
-      "options": [
-        {
-          "value": "off",
-          "label": "Désactivé — le vrai réseau seulement"
-        },
-        {
-          "value": "normal",
-          "label": "Normal — un événement toutes les 1 à 5 min"
-        },
-        {
-          "value": "rapide",
-          "label": "Rapide — un événement toutes les 10 à 40 s"
-        }
-      ],
-      "help": "Pour une machine de test : MapMyLAN fait vivre de faux appareils, ports, vulnérabilités et alertes, étiquetés « simulation », et les raconte à SYNAPSE. Jamais sur le vrai réseau. Repasser sur « off » retire tous les appareils et alertes simulés.",
-      "advanced": true
     },
     {
       "key": "BIND_ADDRESS",

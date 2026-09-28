@@ -4,13 +4,15 @@
 //   - chaque balayage dont le résultat change ;
 //   - toutes les heures, un bilan du réseau, s'il a bougé.
 //
-// Les envois passent par une file : SYNAPSE absent ou lent, rien ne se perd
-// tant que la file tient (500 événements), et MapMyLAN ne ralentit jamais.
-// Les données simulées portent l'étiquette « simulation ».
+// Les alertes sont lues dans la base toutes les 20 s, pas sur le bus
+// d'événements : une alerte écrite par un autre processus (un import, un
+// outil d'administration) part aussi. Les envois passent par une file :
+// SYNAPSE absent ou lent, rien ne se perd tant que la file tient (500
+// événements), et MapMyLAN ne ralentit jamais.
 
 import { config } from "../config";
+import { prisma } from "../db";
 import { eventBus } from "../ws/realtime";
-import { vitesse } from "./simulation";
 
 export interface Evenement {
   kind: string; title: string; body?: string; ref?: string; tags: string[];
@@ -58,15 +60,20 @@ async function vider(): Promise<void> {
 
 const GRAVITE: Record<string, string> = { critical: "critique", high: "élevée", medium: "moyenne", low: "faible", info: "info" };
 
+/** Les étiquettes qu'une alerte demande de transmettre (metadata.etiquettes) : courtes, sûres, quatre au plus. */
+export function etiquettesDe(meta: any): string[] {
+  const l = Array.isArray(meta?.etiquettes) ? meta.etiquettes : [];
+  return l.map((x: unknown) => String(x).toLowerCase()).filter((x: string) => /^[a-z0-9][a-z0-9-]{0,23}$/.test(x)).slice(0, 4);
+}
+
 /** Une alerte MapMyLAN devient un fait pour SYNAPSE. */
 export function depuisAlerte(a: { id?: string; severity: string; source: string; message: string; deviceIp?: string | null; metadata?: any; createdAt?: Date | string }): Evenement {
-  const simule = a.source === "simulation" || a.metadata?.simulation === true;
   return {
     kind: /^(critical|high)$/.test(a.severity) ? "incident.network" : "network.alert",
     title: String(a.message).slice(0, 280),
     body: `Alerte MapMyLAN, gravité ${GRAVITE[a.severity] || a.severity}${a.deviceIp ? `, appareil ${a.deviceIp}` : ""}. Origine : ${a.source}.`,
     ref: a.id ? `alerte:${a.id}` : undefined,
-    tags: ["alerte", a.severity, ...(simule ? ["simulation"] : [])],
+    tags: ["alerte", a.severity, ...etiquettesDe(a.metadata)],
     meta: { severity: a.severity, source: a.source, deviceIp: a.deviceIp || null, evenement: a.metadata?.evenement || null },
     occurred_at: a.createdAt ? new Date(a.createdAt).toISOString() : undefined,
   };
@@ -75,17 +82,41 @@ export function depuisAlerte(a: { id?: string; severity: string; source: string;
 let dernierBalayage: number | null = null;
 let dernierBilan = "";
 
+/* Le curseur des alertes : la date de la dernière lue, et les identifiants
+   lus à cette date exacte (deux alertes peuvent tomber sur la même milliseconde). */
+let curseur = new Date();
+let auBord = new Set<string>();
+
+/** Les alertes écrites depuis le dernier passage, dans l'ordre. Au démarrage, l'historique n'est pas rejoué. */
+export async function lireAlertes(): Promise<number> {
+  const l = await prisma.alert.findMany({ where: { createdAt: { gte: curseur } }, orderBy: { createdAt: "asc" }, take: 200 });
+  let n = 0;
+  for (const a of l) {
+    if (auBord.has(a.id)) continue;
+    raconter(depuisAlerte(a as any));
+    n++;
+    const t = new Date(a.createdAt);
+    if (t.getTime() !== curseur.getTime()) { curseur = t; auBord = new Set(); }
+    auBord.add(a.id);
+  }
+  return n;
+}
+
 /** Branche MapMyLAN sur SYNAPSE : alertes, balayages, bilan horaire. */
 export function demarrerMemoire(bilan: () => Promise<{ titre: string; corps: string; empreinte: string }>): void {
   if (!pret()) return;
-  eventBus.on("alert:new", (a: any) => raconter(depuisAlerte(a)));
+  let occupe = false;
+  setInterval(async () => {
+    if (occupe) return; occupe = true;
+    try { await lireAlertes(); } catch { /* base indisponible : au prochain tour */ } finally { occupe = false; }
+  }, 20_000).unref();
   eventBus.on("scan:complete", (s: any) => {
     // Un balayage qui trouve la même chose que le précédent n'apprend rien à personne.
     if (s?.hostsFound == null || s.hostsFound === dernierBalayage) return;
     const avant = dernierBalayage; dernierBalayage = s.hostsFound;
     raconter({
       kind: "network.scan", title: `Balayage du réseau : ${s.hostsFound} appareils trouvés${avant != null ? ` (${avant} au précédent)` : ""}`,
-      tags: ["balayage", ...(s.simulation || vitesse() !== "off" ? ["simulation"] : [])], meta: { hostsFound: s.hostsFound, avant, changed: true },
+      tags: ["balayage"], meta: { hostsFound: s.hostsFound, avant, changed: true },
     });
   });
   const tourBilan = async () => {
@@ -93,10 +124,10 @@ export function demarrerMemoire(bilan: () => Promise<{ titre: string; corps: str
       const b = await bilan();
       if (b.empreinte !== dernierBilan) {
         dernierBilan = b.empreinte;
-        raconter({ kind: "network.snapshot", title: b.titre, body: b.corps, tags: ["bilan", ...(vitesse() !== "off" ? ["simulation"] : [])], meta: { changed: true } });
+        raconter({ kind: "network.snapshot", title: b.titre, body: b.corps, tags: ["bilan"], meta: { changed: true } });
       }
     } catch { /* base indisponible : au prochain tour */ }
   };
   setTimeout(tourBilan, 60_000).unref();
-  setInterval(tourBilan, vitesse() === "rapide" ? 10 * 60_000 : 3600_000).unref();
+  setInterval(tourBilan, 3600_000).unref();
 }

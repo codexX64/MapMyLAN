@@ -154,11 +154,10 @@ async function main() {
     catch { res.status(503).json({ status: "degraded" }); }
   });
 
-  // Le mode simulation et l'envoi à SYNAPSE : de quoi vérifier que le réseau vit et qu'il se raconte.
-  app.get("/api/simulation", authRequired, async (_req, res) => {
-    const { etatSimulation } = await import("./services/simulation");
+  // Ce qui part vers SYNAPSE : envoyés, en attente, erreurs. Des comptes, jamais un contenu.
+  app.get("/api/memoire", authRequired, async (_req, res) => {
     const { etatMemoire } = await import("./services/memoire");
-    res.json({ simulation: etatSimulation(), synapse: etatMemoire() });
+    res.json({ synapse: etatMemoire() });
   });
 
   app.use("/api/auth", authLimiter, authRoute);
@@ -192,8 +191,7 @@ async function main() {
   startTelegramBot().catch(() => {});
   // Le mini-cerveau de l'assistant : sa fiche et son état dans SYNAPSE.
   (await import("./services/assistant")).demarrerCerveau();
-  // Le mode simulation (VM de test seulement, éteint par défaut), puis ce qui part vers SYNAPSE.
-  (await import("./services/simulation")).demarrerSimulation();
+  // Ce qui part vers SYNAPSE.
   {
     const { demarrerMemoire } = await import("./services/memoire");
     const { prendrePhoto } = await import("./services/assistant/photo");
