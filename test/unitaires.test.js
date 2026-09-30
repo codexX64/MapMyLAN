@@ -367,4 +367,8 @@ test('réglages : clés connues seulement, valeurs contrôlées', () => {
   assert.throws(() => r.ecrire('sortie.autorisees', ['8.8.8.8']), /privées/);
   assert.deepEqual(r.ecrire('scan.ranges', [{ cidr: '198.51.100.0/24', label: 'bureau' }]), [{ cidr: '198.51.100.0/24', label: 'bureau' }]);
   assert.deepEqual(r.lire('scan.ranges'), [{ cidr: '198.51.100.0/24', label: 'bureau' }]);
+  // Le point d'observation du globe, dans la forme que la page lit.
+  assert.equal(r.ecrire('world.origin', '12.5,-45.25,Observatoire'), '12.5,-45.25,Observatoire');
+  assert.equal(r.ecrire('world.origin', '-33.9 , 151.2'), '-33.9 , 151.2');
+  for (const faux of ['91,0', '0,181', 'nord,est', '0,0,\nligne', '0,0,' + 'x'.repeat(61), '']) assert.throws(() => r.ecrire('world.origin', faux), { status: 400 }, faux);
 });

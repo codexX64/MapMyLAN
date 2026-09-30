@@ -309,6 +309,7 @@ la page Machine hôte de la 1.4.1 les affichait, mais son serveur ne les rendait
 | `world.logos` | booléen (logos des destinations ; éteint par défaut) |
 | `world.retentionDays` | entier 0–3650 |
 | `world.retentionMaxMb` | entier 0–100000 |
+| `world.origin` | `"latitude,longitude"` ou `"latitude,longitude,Nom"` (Nom ≤ 60 caractères) : point d'observation du globe ; sans lui, 0,0 |
 | `sortie.autorisees` | `string[]` ≤ 64 : noms d'hôte, adresses ou plages privées que MapMyLAN peut joindre en sortie (billetterie interne, relais SMTP interne…) |
 
 ### Notifications — `/api/notifications`

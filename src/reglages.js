@@ -7,6 +7,8 @@ import { estCidr, prefixeDe } from './cibles.js';
 import { lireEntree } from './sortie.js';
 
 const PLAGE = { type: 'objet', champs: { cidr: { type: 'chaine', requis: true, max: 18 }, label: { type: 'chaine', max: 60 }, enabled: { type: 'booleen' } } };
+// « latitude,longitude » ou « latitude,longitude,Nom » : la forme que lit le globe.
+const ORIGINE = /^(-?\d{1,3}(?:\.\d{1,8})?) *, *(-?\d{1,3}(?:\.\d{1,8})?) *(?:, *([^\x00-\x1f\x7f]{1,60}))?$/;
 
 // Chaque schéma décrit `value` ; `controle` vérifie ce que le type seul ne dit pas.
 export const CLES = {
@@ -25,6 +27,11 @@ export const CLES = {
   'world.logos': { schema: { type: 'booleen', requis: true } },
   'world.retentionDays': { schema: { type: 'entier', requis: true, min: 0, max: 3650 } },
   'world.retentionMaxMb': { schema: { type: 'entier', requis: true, min: 0, max: 100000 } },
+  // Le point d'observation du globe ; sans lui, l'équateur au méridien d'origine.
+  'world.origin': {
+    schema: { type: 'chaine', requis: true, max: 100, motif: ORIGINE },
+    controle: v => { const [, lat, lon] = ORIGINE.exec(v); return (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) || 'latitude entre -90 et 90, longitude entre -180 et 180'; },
+  },
   // Réglage de sécurité : les destinations internes que MapMyLAN peut joindre.
   'sortie.autorisees': {
     schema: { type: 'liste', requis: true, max: 64, de: { type: 'chaine', max: 253 } },

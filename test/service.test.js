@@ -198,6 +198,7 @@ test('corps invalides : champ inconnu, type, taille, liste, format', async () =>
     [membre.patch('/api/devices/x', { tags: Array.from({ length: 21 }, (_, i) => `t${i}`) }), 400, /au plus 20/],
     [admin.put('/api/settings/jwt.secret', { value: 'x' }), 400, /Réglage inconnu/],
     [admin.put('/api/settings/scan.ranges', { value: [{ cidr: '198.51.0.0/8' }] }), 400, /CIDR/],
+    [admin.put('/api/settings/world.origin', { value: '95,10' }), 400, /latitude/],
     [admin.post('/api/commands', { name: 'x', trigger: 'device.new', actions: [{ kind: 'exec_ssh', deviceId: 'inconnu-0000', cmd: 'reboot' }] }), 400, /Équipement SSH inconnu/],
     [admin.post('/api/commands', { name: 'x', trigger: 'device.new', actions: [{ kind: 'shell', cmd: 'id' }] }), 400, /valeur non admise/],
     [admin.put('/api/notifications/sms', { enabled: true }), 400, /SMS/],
@@ -404,6 +405,11 @@ test('Telegram : secret jamais rendu, texte échappé, SMS retiré', async () =>
   assert.equal((await admin.del('/api/notifications/telegram')).status, 200);
 });
 
+test('globe : le point d’observation se règle par un administrateur et se lit en lecture', async () => {
+  assert.equal((await membre.put('/api/settings/world.origin', { value: '12.5,-45.25' })).status, 403);
+  assert.equal((await admin.put('/api/settings/world.origin', { value: '12.5,-45.25,Observatoire' })).status, 200);
+  assert.equal((await lecteur.get('/api/settings')).json['world.origin'], '12.5,-45.25,Observatoire');
+});
 
 test('flux temps réel : session exigée, événements, six onglets au plus, fermé à la déconnexion', async () => {
   const anonyme = await ouvrirFlux(new Client(o.port));
