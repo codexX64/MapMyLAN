@@ -64,17 +64,30 @@ d'appareils et l'inventaire du matériel.
 
 2. CE QUI PART AILLEURS
 
-  - L'équipement réseau déclaré reçoit les commandes de lecture et de défense.
-  - La messagerie, le relais mail et la billetterie configurés par
-    l'exploitant reçoivent le texte des alertes.
-  - Les registres d'adresses (RDAP) reçoivent les adresses de destination
+  - L'équipement réseau déclaré par l'exploitant (routeur ou pare-feu, en SSH
+    ou par son API locale) reçoit les commandes de lecture et de défense.
+  - Telegram (api.telegram.org), si le canal est configuré, reçoit le texte
+    des alertes et les réponses du bot ; ses propres conditions s'appliquent,
+    et il traite les données hors de l'Union européenne.
+  - Le fournisseur de courriel des boîtes et du relais SMTP que l'exploitant
+    configure (Gmail, Outlook, Apple, Yahoo, Fastmail, OVH ou le serveur
+    qu'il saisit) reçoit les alertes envoyées par courriel, et les
+    identifiants de la boîte quand elle est vérifiée ; le relais « Poste » de
+    l'exploitant, s'il est relié, reçoit aussi les alertes.
+  - La billetterie dont l'exploitant donne l'adresse reçoit les alertes au
+    format ticket.
+  - rdap.org, et le registre régional vers lequel il renvoie (RIPE NCC, ARIN,
+    APNIC, LACNIC ou AFRINIC), reçoivent les adresses de destination publiques,
     sans nom d'hôte, si l'interrogation des registres est allumée.
-  - Des fournisseurs publics de logos reçoivent les domaines contactés par le
-    réseau, si les logos sont allumés (éteints par défaut). C'est le serveur
-    qui les interroge, jamais le navigateur.
-  - Le modèle de langage choisi par l'exploitant reçoit les questions posées
-    à l'assistant et l'état du réseau utile pour y répondre ; le service VOX
-    de l'exploitant reçoit le son capté en mode vocal et le texte à dire.
+  - DuckDuckGo (icons.duckduckgo.com), Google (www.google.com), unavatar.io et
+    Clearbit (logo.clearbit.com) reçoivent, dans cet ordre et seulement tant
+    qu'aucun n'a répondu, les domaines contactés par le réseau, si les logos
+    sont allumés (éteints par défaut). C'est le serveur qui les interroge,
+    jamais le navigateur ; certains traitent les données hors de l'Union
+    européenne.
+  - L'Ollama de l'exploitant reçoit les questions posées à l'assistant et
+    l'état du réseau utile pour y répondre ; le service VOX de l'exploitant
+    reçoit le son capté en mode vocal et le texte à dire.
   - SYNAPSE, s'il est relié, reçoit les événements que MapMyLAN lui confie ;
     jamais les secrets des équipements ni des canaux.
   Aucune mesure d'audience, aucun traceur, aucune publicité.
