@@ -1,0 +1,108 @@
+MAPMYLAN — CE QUE LE SERVICE GARDE, ET POURQUOI
+
+MapMyLAN est installé et exploité par la personne qui l'héberge : c'est elle
+qui répond de ces données. Ce texte dit ce que le logiciel conserve, ce qu'il
+envoie ailleurs, et comment chacun exerce ses droits.
+
+1. CE QUI EST CONSERVÉ
+
+Compte
+  - identifiant, nom affiché, rôle, dates de création et de dernière connexion ;
+  - empreinte Argon2id du mot de passe (le mot de passe lui-même n'est jamais
+    gardé), secret TOTP chiffré, clés publiques des clés d'accès avec leur nom,
+    empreintes des codes de secours ;
+  - adresse d'alerte, si la personne en a vérifié une.
+  Finalité : se connecter et protéger le compte. Durée : tant que le compte existe.
+
+Sessions
+  - appareil (navigateur et système, sans empreinte), adresse IP, dates.
+  Finalité : lister et fermer ses appareils. Durée : douze heures au plus,
+  une heure sans activité.
+
+Événements de sécurité
+  - connexions, échecs, changements de facteurs, refus, avec l'adresse IP.
+  Finalité : détecter un abus et répondre à un incident. Durée : cinquante
+  derniers événements par compte ; journal du service : 365 jours.
+
+Inventaire du réseau
+  - pour chaque appareil relevé : adresses IP et MAC, nom d'hôte, fabricant,
+    modèle, système, ports ouverts, vulnérabilités connues, notes de risque,
+    et ce qui a été saisi à la main (nom, zone, rôle, étiquettes, notes) ;
+  - l'historique de chaque appareil, les alertes, le journal, la carte
+    (liaisons et zones) et les segments (VLAN).
+  Finalité : surveiller et défendre le réseau. Durée : tant que l'exploitant
+  ne supprime pas la fiche ; un appareil encore présent sur le réseau
+  réapparaît au balayage suivant.
+
+Trafic relevé
+  - connexions vues sur la passerelle : adresses source et destination, port,
+    volume, dates, nom inverse et titulaire du préfixe de la destination.
+  Finalité : montrer où le réseau se connecte et signaler l'anormal. Durée :
+  réglée par l'exploitant (Réglages → Historique du trafic mondial), 30 jours
+  par défaut.
+
+Équipements pilotés
+  - adresse, compte et secrets de connexion (mot de passe ou clé privée,
+    chiffrés), empreinte de la clé d'hôte ou du certificat acceptée.
+  Finalité : lire l'état du réseau et appliquer les actions de défense.
+  Durée : jusqu'à ce que l'exploitant retire l'équipement. Un secret ne
+  revient jamais vers le navigateur.
+
+Canaux d'alerte
+  - identifiants de messagerie, de boîte mail et de billetterie, chiffrés.
+  Finalité : envoyer les alertes. Durée : jusqu'à ce que le canal soit retiré.
+
+Conversations avec l'assistant
+  - questions, réponses, widgets, durée. Une question posée à voix haute est
+    gardée sous sa forme transcrite.
+  Finalité : l'historique de la personne. Durée : jusqu'à ce qu'elle ouvre
+  une nouvelle conversation, ou que son compte soit supprimé.
+
+Dans le navigateur seulement, jamais envoyés au serveur : l'apparence, la
+langue, la disposition, l'agencement et le plan de la carte, les photos
+d'appareils et l'inventaire du matériel.
+
+2. CE QUI PART AILLEURS
+
+  - L'équipement réseau déclaré reçoit les commandes de lecture et de défense.
+  - La messagerie, le relais mail et la billetterie configurés par
+    l'exploitant reçoivent le texte des alertes.
+  - Les registres d'adresses (RDAP) reçoivent les adresses de destination
+    sans nom d'hôte, si l'interrogation des registres est allumée.
+  - Des fournisseurs publics de logos reçoivent les domaines contactés par le
+    réseau, si les logos sont allumés (éteints par défaut). C'est le serveur
+    qui les interroge, jamais le navigateur.
+  - Le modèle de langage choisi par l'exploitant reçoit les questions posées
+    à l'assistant et l'état du réseau utile pour y répondre ; le service VOX
+    de l'exploitant reçoit le son capté en mode vocal et le texte à dire.
+  - SYNAPSE, s'il est relié, reçoit les événements que MapMyLAN lui confie ;
+    jamais les secrets des équipements ni des canaux.
+  Aucune mesure d'audience, aucun traceur, aucune publicité.
+
+3. COOKIES
+
+  Un cookie de session, indispensable à la connexion, et un cookie de
+  cérémonie de cinq minutes pendant une connexion par clé d'accès. Aucun autre.
+
+4. DROITS
+
+  - Accès et portabilité : page « Mon compte », « Exporter mes données »
+    (fichier JSON, avec les conversations de l'assistant et les jetons créés).
+  - Rectification : facteurs et adresse d'alerte depuis « Mon compte » ;
+    nom affiché et rôle, auprès de l'exploitant.
+  - Effacement : la conversation depuis l'assistant, « Nouvelle
+    conversation » ; le compte et tout ce qui s'y rattache, depuis « Mon
+    compte », « Supprimer mon compte » (une confirmation récente est
+    demandée), ou par un administrateur.
+  - Toute demande : auprès de l'exploitant de cette instance.
+
+5. SÉCURITÉ ET INCIDENTS
+
+  Les mesures techniques et la conduite à tenir en cas d'incident, y compris
+  la notification d'une violation de données dans les 72 heures, sont décrites
+  dans SECURITY.md, dans le dépôt du projet.
+
+MapMyLAN n'est pas destiné aux mineurs et ne traite aucune catégorie
+particulière de données. Les adresses et les noms d'appareils qu'il relève
+peuvent désigner des personnes : l'exploitant les traite pour la sécurité de
+son propre réseau.
