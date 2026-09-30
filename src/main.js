@@ -156,14 +156,16 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
     try {
       const url = new URL(req.url, 'http://mapmylan');
       const ctx = portail.contexte(req, res);
+      const nonce = nonceCsp();
+      // Posés avant tout refus : une réponse 429 porte les mêmes en-têtes que
+      // les autres. blob: pour les images : l'interface détoure localement un
+      // logo choisi par l'utilisateur.
+      entetesSecurite(res, { secure: ctx.securise, csp: politiqueContenu({ nonce, secure: ctx.securise, img: ['blob:'] }), permissions: PERMISSIONS });
       if (!debit.prendre(ctx.ip)) {
         journal.rare(`debit:${ctx.ip}`, { action: 'limite.atteinte', objet: 'requetes', ip: ctx.ip, resultat: 'refus' });
         throw new ErreurHttp(429, 'Trop de requêtes.');
       }
       ctx.url = url;
-      const nonce = nonceCsp();
-      // blob: pour les images : l'interface détoure localement un logo choisi par l'utilisateur.
-      entetesSecurite(res, { secure: ctx.securise, csp: politiqueContenu({ nonce, secure: ctx.securise, img: ['blob:'] }), permissions: PERMISSIONS });
       if (await portail.traiter(req, res, url, ctx)) return;
       if (await api.traiter(ctx)) return;
       if (!['GET', 'HEAD'].includes(req.method)) return repondreJson(res, 405, { error: 'Méthode non admise.' }, { Allow: 'GET, HEAD' });

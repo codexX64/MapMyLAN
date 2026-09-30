@@ -537,6 +537,17 @@ test('segments cachés : 404, jamais l’interface à leur place', async () => {
   assert.equal((await c.get('/appareils')).status, 200);
 });
 
+test('débit global : le 601e appel d’une adresse dans la minute répond 429, avec les en-têtes de sécurité', async () => {
+  const c = new Client(o.port);
+  const depuis = { entetes: { 'x-forwarded-for': '198.51.100.250' } };
+  for (let i = 0; i < 600; i++) assert.equal((await c.get('/api/health', depuis)).status, 200);
+  const refus = await c.get('/api/health', depuis);
+  assert.equal(refus.status, 429);
+  assert.match(refus.entetes['content-security-policy'] || '', /frame-ancestors 'none'/);
+  assert.equal(refus.entetes['x-content-type-options'], 'nosniff');
+  assert.equal(refus.entetes['cache-control'], 'no-store');
+});
+
 test('permissions : le micro pour la page elle-même, le reste comme la politique du socle', async () => {
   const socle = {};
   entetesSecurite({ setHeader: (k, v) => { socle[k] = v; } }, {});
