@@ -75,7 +75,7 @@ export function politiqueContenu({ nonce, connect = [], img = [], media = [], fr
   ].join('; ');
 }
 
-export function entetesSecurite(res, { secure, csp, permissions = 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=()' } = {}) {
+export function entetesSecurite(res, { secure, csp, permissions = 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=()' } = {}) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Frame-Options', 'DENY');

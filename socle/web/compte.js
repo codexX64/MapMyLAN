@@ -304,7 +304,6 @@ export function porte({ api, service, marque = null, sousTitre = '' }) {
     const racine = h('div', { class: 'porte' }, h('div', { class: 'halos', 'aria-hidden': 'true' }, h('i'), h('i')), wiz,
       h('div', { class: 'credit', text: `${service} · Codex64` }));
     document.body.append(racine);
-    let enInscription = false;
 
     const entete = (etapes = 0, courante = 0) => h('div', { class: 'whead' },
       h('div', { class: 'brand' }, h('div', { class: 'g' }, marque ? marque.cloneNode(true) : icone('bouclier', 18)),
@@ -334,7 +333,7 @@ export function porte({ api, service, marque = null, sousTitre = '' }) {
       if (jeton && (!e.session || e.session.niveau === 'partiel')) return ecranJeton(e, jeton[1], jeton[2]);
       if (!e.session) return connexion(e);
       if (e.session.niveau === 'partiel') return second(e);
-      if (e.session.niveau === 'inscription') { enInscription = true; return inscription(e); }
+      if (e.session.niveau === 'inscription') return inscription(e);
       if (e.session.compte.facteurs.secours === 0) return codesSecours(e);
       racine.remove();
       resolve(e);
