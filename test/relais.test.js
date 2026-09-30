@@ -35,6 +35,9 @@ test('relais : requête transmise telle quelle, adresse du client ajoutée, en-t
     const r = await new Client(mort.port).get('/api/health');
     assert.equal(r.status, 502);
     assert.deepEqual(r.json, { error: 'MapMyLAN injoignable.' });
+    assert.equal(r.entetes['x-content-type-options'], 'nosniff');
+    assert.equal(r.entetes['x-frame-options'], 'DENY');
+    assert.equal(r.entetes['cache-control'], 'no-store');
   } finally { await mort.fermer(); }
 });
 

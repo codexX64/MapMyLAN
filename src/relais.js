@@ -7,7 +7,7 @@
 //
 //   RELAIS_CIBLE=http://<adresse du pont>:8090  RELAIS_PORT=8090  node src/relais.js
 import http from 'node:http';
-import { lireConfig } from '../socle/src/index.js';
+import { entetesSecurite, lireConfig, repondreJson } from '../socle/src/index.js';
 
 // En-têtes propres à une connexion : ils ne se transmettent pas (RFC 9110 § 7.6.1).
 const SAUT = new Set(['connection', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'te', 'trailer', 'upgrade', 'proxy-authorization', 'proxy-authenticate']);
@@ -34,7 +34,10 @@ export function creerRelais({ cible, log = console }) {
     });
     sortante.on('error', e => {
       log.warn?.(`[relais] ${e.code || e.message}`);
-      if (!res.headersSent) { res.writeHead(502, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end('{"error":"MapMyLAN injoignable."}'); } else res.destroy();
+      if (res.headersSent) return res.destroy();
+      // La seule réponse que le relais écrit lui-même : mêmes en-têtes que l'API.
+      entetesSecurite(res, { csp: "default-src 'none'; frame-ancestors 'none'" });
+      repondreJson(res, 502, { error: 'MapMyLAN injoignable.' });
     });
     // Le client parti, la requête vers l'API n'a plus de raison d'être (un flux SSE fermé).
     res.on('close', () => sortante.destroy());
