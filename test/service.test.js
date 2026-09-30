@@ -599,6 +599,13 @@ test('journal : essais d’administration, actions d’un jeton, limites des rou
   assert.deepEqual({ objet: bot.objet, ...JSON.parse(bot.details) }, { objet: 'ban_ip', discussion: '-1001234567890', cible: '192.0.2.200' });
 });
 
+test('balayage : la fiche, son historique et ses ports s’écrivent ensemble ou pas du tout', async () => {
+  const hote = { ip: '192.0.2.88', mac: '02:00:00:00:00:88', ports: [{ port: 443, protocol: 'tcp', state: 'open' }, { port: 444, protocol: {}, state: 'open' }] };
+  await assert.rejects(o.s.scanner.enregistrer(hote));
+  assert.equal(o.s.appareils.parMac('02:00:00:00:00:88'), null);
+  assert.equal(o.db.prepare("SELECT COUNT(*) n FROM historique h JOIN appareils a ON a.id = h.deviceId WHERE a.ip = '192.0.2.88'").get().n, 0);
+});
+
 test('listes : chacune plafonnée côté serveur, même sans paramètre de taille', async () => {
   const t = Date.now();
   const commande = o.db.prepare("INSERT INTO commandes(id, name, trigger, actions, createdAt, updatedAt) VALUES(?, 'essai', 'device.new', '[]', ?, ?)");

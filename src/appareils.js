@@ -1,5 +1,5 @@
 // L'inventaire : appareils, leurs ports, CVE, interfaces et historique.
-import { nouvelId } from './db.js';
+import { nouvelId, transaction } from './db.js';
 import * as F from './formes.js';
 
 const grouper = (lignes, cle = 'deviceId') => {
@@ -72,11 +72,14 @@ export class Appareils {
 
   supprimer(id) { return this.db.prepare('DELETE FROM appareils WHERE id = ?').run(id).changes > 0; }
 
-  // Les ports relevés remplacent les précédents : un port fermé depuis disparaît.
+  // Les ports relevés remplacent les précédents : un port fermé depuis
+  // disparaît. Tout ou rien : un relevé interrompu laisse les anciens.
   remplacerPorts(deviceId, ports) {
-    this.db.prepare('DELETE FROM ports WHERE deviceId = ?').run(deviceId);
     const ins = this.db.prepare('INSERT OR IGNORE INTO ports(id, deviceId, port, protocol, state, service, product, version, detectedAt) VALUES(?,?,?,?,?,?,?,?,?)');
     const t = Date.now();
-    for (const p of ports) ins.run(nouvelId(), deviceId, p.port, p.protocol, p.state, p.service || null, p.product || null, p.version || null, t);
+    transaction(this.db, () => {
+      this.db.prepare('DELETE FROM ports WHERE deviceId = ?').run(deviceId);
+      for (const p of ports) ins.run(nouvelId(), deviceId, p.port, p.protocol, p.state, p.service || null, p.product || null, p.version || null, t);
+    });
   }
 }

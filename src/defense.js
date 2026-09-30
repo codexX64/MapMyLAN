@@ -3,6 +3,7 @@
 // le dialecte du constructeur vit dans les adaptateurs.
 import { ErreurHttp } from '../socle/src/index.js';
 import { validerCible, ValeurRefusee } from './cibles.js';
+import { transaction } from './db.js';
 
 const LIBELLES = { ban: 'bloquer', quarantine: 'isoler', unban: 'lever le blocage' };
 
@@ -30,6 +31,14 @@ export class Defense {
     return d;
   }
 
+  // Le nouvel état et sa trace dans l'historique, ensemble ou pas du tout.
+  noter(id, status, details) {
+    transaction(this.s.db, () => {
+      this.s.appareils.modifier(id, { status });
+      this.s.appareils.noter(id, 'action_taken', details);
+    });
+  }
+
   async bloquer(id, { manuel = false, raison } = {}) {
     const d = this.appareil(id);
     if (d.isMainRouter) throw new ErreurHttp(409, 'Le routeur principal ne se bloque pas.');
@@ -39,8 +48,7 @@ export class Defense {
       this.s.commandes.declencher('defense.ban_failed', { ip: d.ip, error: String(e.message).slice(0, 200) });
       throw e;
     }
-    this.s.appareils.modifier(id, { status: 'banned' });
-    this.s.appareils.noter(id, 'action_taken', { action: 'ban', manual: manuel, reason: raison, vendor: r.vendor, output: r.output.slice(0, 2000) });
+    this.noter(id, 'banned', { action: 'ban', manual: manuel, reason: raison, vendor: r.vendor, output: r.output.slice(0, 2000) });
     this.s.evts.alerter('high', 'defense', `Appareil bloqué : ${d.hostname || d.ip}${raison ? ` — ${raison}` : ''}`, { deviceId: d.id, deviceIp: d.ip, deviceMac: d.mac });
     this.s.evts.emettre('device:updated', { id, status: 'banned' });
     this.s.commandes.declencher('defense.ban_success', { deviceId: d.id, ip: d.ip, name: d.hostname || d.customName || d.ip, reason: raison || 'manual' });
@@ -52,8 +60,7 @@ export class Defense {
     if (d.isMainRouter) throw new ErreurHttp(409, 'Le routeur principal ne s’isole pas.');
     if (d.whitelisted && !manuel) throw new ErreurHttp(409, 'Appareil en liste blanche : action manuelle requise.');
     const r = await this.agir('quarantine', d);
-    this.s.appareils.modifier(id, { status: 'quarantined' });
-    this.s.appareils.noter(id, 'action_taken', { action: 'quarantine', manual: manuel, reason: raison, vendor: r.vendor, output: r.output.slice(0, 2000) });
+    this.noter(id, 'quarantined', { action: 'quarantine', manual: manuel, reason: raison, vendor: r.vendor, output: r.output.slice(0, 2000) });
     this.s.evts.alerter('medium', 'defense', `Appareil isolé : ${d.hostname || d.ip}`, { deviceId: d.id, deviceIp: d.ip, deviceMac: d.mac });
     this.s.evts.emettre('device:updated', { id, status: 'quarantined' });
     this.s.commandes.declencher('defense.quarantine_success', { deviceId: d.id, ip: d.ip, name: d.hostname || d.customName || d.ip, reason: raison || 'manual' });
@@ -63,8 +70,7 @@ export class Defense {
   async liberer(id) {
     const d = this.appareil(id);
     const r = await this.agir('unban', d);
-    this.s.appareils.modifier(id, { status: 'online' });
-    this.s.appareils.noter(id, 'action_taken', { action: 'unban', vendor: r.vendor, output: r.output.slice(0, 1000) });
+    this.noter(id, 'online', { action: 'unban', vendor: r.vendor, output: r.output.slice(0, 1000) });
     this.s.evts.journaliser('info', 'defense', `Blocage levé : ${d.hostname || d.ip}`);
     this.s.evts.emettre('device:updated', { id, status: 'online' });
     this.s.commandes.declencher('defense.unban', { ip: d.ip, name: d.hostname || d.customName || d.ip });

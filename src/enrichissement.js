@@ -10,6 +10,7 @@ import http from 'node:http';
 import net from 'node:net';
 import { fabricantDe } from './oui.js';
 import { dansLeReseau, nettoyerTexte } from './cibles.js';
+import { transaction } from './db.js';
 
 const DELAI_MS = 4000;
 const TAILLE_MAX = 64 * 1024;
@@ -164,9 +165,11 @@ export class Enrichissement {
     if (retenu.os && !d.os) maj.os = retenu.os;
     if (retenu.type && (!d.type || d.type === 'unknown')) maj.type = retenu.type;
     if (Object.keys(maj).length) {
-      appareils.modifier(id, maj);
       const sources = utiles.map(r => r.source);
-      appareils.noter(id, 'enriched', { ...maj, sources });
+      transaction(this.s.db, () => {
+        appareils.modifier(id, maj);
+        appareils.noter(id, 'enriched', { ...maj, sources });
+      });
       evts.emettre('device:updated', { id, ...maj });
       evts.journaliser('info', 'enrichment', `Appareil ${d.ip} : ${Object.keys(maj).join(', ')} complété(s) par ${[...new Set(sources)].join('/')}`);
     }

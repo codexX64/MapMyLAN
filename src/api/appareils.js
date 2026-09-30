@@ -1,6 +1,6 @@
 // Routes de l'inventaire : /api/devices.
 import { Debit, ErreurHttp } from '../../socle/src/index.js';
-import { nouvelId } from '../db.js';
+import { nouvelId, transaction } from '../db.js';
 import * as F from '../formes.js';
 import { dedoublonner, fusionner, suggestionsRegroupement } from '../inventaire.js';
 import { plageUtilisable, verifierAdresse } from '../vlans.js';
@@ -41,12 +41,15 @@ export function routesAppareils(route, s, acces) {
     if (!b.customName && !b.hostname && !b.ip && !b.mac) throw new ErreurHttp(400, 'Au moins un nom, un nom d’hôte, une adresse IP ou une MAC.');
     const mac = b.mac ? b.mac.replace(/-/g, ':').toUpperCase() : null;
     if (mac && appareils.parMac(mac)) throw new ErreurHttp(409, 'Cette MAC est déjà portée par un appareil de l’inventaire.');
-    const d = appareils.creer({
-      ip: b.ip || '0.0.0.0', mac, hostname: b.hostname ? nettoyerNom(b.hostname) : null, customName: b.customName || null, vendor: b.vendor || null, model: b.model || null,
-      type: b.type || b.customType || 'unknown', customType: b.customType || null, posX: b.posX ?? null, posY: b.posY ?? null, notes: b.notes || null,
-      metadata: JSON.stringify({ manual: true, createdBy: ctx.acteur.nom }),
+    const d = transaction(db, () => {
+      const cree = appareils.creer({
+        ip: b.ip || '0.0.0.0', mac, hostname: b.hostname ? nettoyerNom(b.hostname) : null, customName: b.customName || null, vendor: b.vendor || null, model: b.model || null,
+        type: b.type || b.customType || 'unknown', customType: b.customType || null, posX: b.posX ?? null, posY: b.posY ?? null, notes: b.notes || null,
+        metadata: JSON.stringify({ manual: true, createdBy: ctx.acteur.nom }),
+      });
+      appareils.noter(cree.id, 'first_seen', { manual: true, vendor: b.vendor || 'Unknown' });
+      return cree;
     });
-    appareils.noter(d.id, 'first_seen', { manual: true, vendor: b.vendor || 'Unknown' });
     s.evts.emettre('devices:updated');
     return appareils.complet(d.id);
   }, { role: 'membre', corps: { ip: { type: 'chaine', max: 15, motif: IPV4 }, mac: { type: 'chaine', max: 17, motif: MAC }, hostname: nom(63), customName: nom(80), vendor: nom(80), model: nom(80), type: CHAMPS_APPAREIL.type, customType: CHAMPS_APPAREIL.customType, posX: coordonnee, posY: coordonnee, notes: texte(4000) } });
@@ -63,8 +66,10 @@ export function routesAppareils(route, s, acces) {
     // un réglage de sécurité, réservé aux administrateurs.
     if ('whitelisted' in b || 'isMainRouter' in b) acces.exiger(ctx, 'admin');
     if (b.vlan != null && !db.prepare('SELECT 1 FROM vlans WHERE id = ?').get(b.vlan)) throw new ErreurHttp(400, `VLAN ${b.vlan} inconnu.`);
-    appareils.modifier(d.id, b);
-    if (['notes', 'customName', 'customType', 'tags'].some(k => k in b)) appareils.noter(d.id, 'note_added', { changes: b });
+    transaction(db, () => {
+      appareils.modifier(d.id, b);
+      if (['notes', 'customName', 'customType', 'tags'].some(k => k in b)) appareils.noter(d.id, 'note_added', { changes: b });
+    });
     if ('whitelisted' in b || 'isMainRouter' in b) acces.tracer(ctx, 'appareil.protection', d.id, { listeBlanche: b.whitelisted, routeurPrincipal: b.isMainRouter });
     s.evts.emettre('device:updated', { id: d.id, ...b });
     return appareils.complet(d.id);
@@ -111,8 +116,10 @@ export function routesAppareils(route, s, acces) {
     s.equipements.noterConnexion(equipement.id);
     // On note le VLAN voulu, jamais l'adresse : tant que l'appareil n'a pas
     // repris de bail, il porte encore l'ancienne.
-    if (!retirer) appareils.modifier(d.id, { vlan: vlanId });
-    appareils.noter(d.id, 'note_added', { reservation: retirer ? null : ip, vlan: vlanId ?? null, sortie: String(sortie).slice(0, 500) });
+    transaction(db, () => {
+      if (!retirer) appareils.modifier(d.id, { vlan: vlanId });
+      appareils.noter(d.id, 'note_added', { reservation: retirer ? null : ip, vlan: vlanId ?? null, sortie: String(sortie).slice(0, 500) });
+    });
     s.evts.journaliser('info', 'devices', retirer ? `Réservation retirée pour ${d.mac}` : `Adresse ${ip} réservée pour ${d.mac}`);
     acces.tracer(ctx, retirer ? 'reservation.retiree' : 'reservation.posee', d.id, { ip: retirer ? null : ip });
     return {

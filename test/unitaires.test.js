@@ -30,6 +30,7 @@ import { lireConfigMapmylan } from '../src/config.js';
 import { Reglages } from '../src/reglages.js';
 import { Hote } from '../src/hote.js';
 import { ouvrirBase } from '../src/db.js';
+import { Appareils } from '../src/appareils.js';
 import { dossierTemporaire, serveurLocal } from './aides.js';
 
 test('valider : adresses, MAC, plages et ports ; les charges d’injection restent refusées', () => {
@@ -372,3 +373,14 @@ test('réglages : clés connues seulement, valeurs contrôlées', () => {
   assert.equal(r.ecrire('world.origin', '-33.9 , 151.2'), '-33.9 , 151.2');
   for (const faux of ['91,0', '0,181', 'nord,est', '0,0,\nligne', '0,0,' + 'x'.repeat(61), '']) assert.throws(() => r.ecrire('world.origin', faux), { status: 400 }, faux);
 });
+
+test('ports d’un appareil : un relevé interrompu laisse les ports d’avant', () => {
+  const db = ouvrirBase(dossierTemporaire());
+  const appareils = new Appareils(db);
+  const d = appareils.creer({ ip: '192.0.2.5', mac: '02:00:00:00:00:05' });
+  appareils.remplacerPorts(d.id, [{ port: 22, protocol: 'tcp', state: 'open', service: 'ssh' }]);
+  assert.throws(() => appareils.remplacerPorts(d.id, [{ port: 80, protocol: 'tcp', state: 'open' }, { port: 81, protocol: {}, state: 'open' }]));
+  assert.deepEqual(db.prepare('SELECT port FROM ports WHERE deviceId = ?').all(d.id).map(p => p.port), [22]);
+  db.close();
+});
+

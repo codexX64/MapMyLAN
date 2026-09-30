@@ -8,7 +8,7 @@
 // « -- » quand l'outil l'accepte.
 import { ErreurHttp } from '../socle/src/index.js';
 import { classer } from './classement.js';
-import { nouvelId } from './db.js';
+import { nouvelId, transaction } from './db.js';
 import { fabricantDe } from './oui.js';
 import { estIPv4, estCidr, prefixeDe, dansLeReseau, contenue, nettoyerNom, nettoyerTexte } from './cibles.js';
 
@@ -316,27 +316,36 @@ export class Scanner {
       typeConfidence: cls.confidence, typeReasons: cls.reasons, typeRunnerUp: cls.runnerUp,
     };
     const champs = { ip: h.ip, mac: h.mac || existant?.mac || null, hostname: h.hostname || null, vendor: h.vendor || null, os: h.os || null, type, status: 'online', lastSeen: Date.now(), metadata };
-    let id;
-    if (existant) {
-      id = existant.id;
-      if (existant.ip !== h.ip) A.noter(id, 'ip_change', { from: existant.ip, to: h.ip });
-      if (h.mac && existant.mac && existant.mac !== h.mac) A.noter(id, 'mac_change', { from: existant.mac, to: h.mac });
-      // Une MAC déjà portée par une autre fiche (doublon ancien) : on garde la
-      // fiche et on ne lui vole pas sa MAC.
-      if (h.mac && h.mac !== existant.mac && A.parMac(h.mac)) champs.mac = existant.mac;
-      A.modifier(id, champs);
-    } else if (h.mac) {
-      const d = A.creer({ ...champs, metadata: JSON.stringify(metadata) });
-      id = d.id;
-      A.noter(id, 'first_seen', { ip: h.ip, vendor: h.vendor || 'Unknown' });
+    if (!existant && !h.mac) return null;
+    // La fiche, son historique et ses ports ensemble ; les avis partent ensuite.
+    let nouveau = null;
+    const d = transaction(this.s.db, () => {
+      let ligne;
+      if (existant) {
+        if (existant.ip !== h.ip) A.noter(existant.id, 'ip_change', { from: existant.ip, to: h.ip });
+        if (h.mac && existant.mac && existant.mac !== h.mac) A.noter(existant.id, 'mac_change', { from: existant.mac, to: h.mac });
+        // Une MAC déjà portée par une autre fiche (doublon ancien) : on garde la
+        // fiche et on ne lui vole pas sa MAC.
+        if (h.mac && h.mac !== existant.mac && A.parMac(h.mac)) champs.mac = existant.mac;
+        ligne = A.modifier(existant.id, champs);
+      } else {
+        ligne = A.creer({ ...champs, metadata: JSON.stringify(metadata) });
+        A.noter(ligne.id, 'first_seen', { ip: h.ip, vendor: h.vendor || 'Unknown' });
+        // L'avis d'arrivée montre l'appareil tel qu'il est découvert, avant ses ports.
+        nouveau = A.complet(ligne.id);
+      }
+      if (h.ports.length) A.remplacerPorts(ligne.id, h.ports);
+      return ligne;
+    });
+    const id = d.id;
+    if (nouveau) {
       this.s.extensions.appareil('device.first_seen', { id, ip: h.ip, mac: h.mac, vendor: h.vendor || null });
-      this.s.evts.emettre('alert:new', { newDevice: true, device: A.complet(id) });
+      this.s.evts.emettre('alert:new', { newDevice: true, device: nouveau });
       const nom = d.hostname || d.ip;
       this.s.commandes.declencher('device.new', { deviceId: id, ip: d.ip, mac: d.mac, vendor: d.vendor || 'Unknown', hostname: d.hostname || '', type: d.type });
       if (!d.vendor || d.vendor === 'Unknown') this.s.commandes.declencher('device.unknown_vendor', { deviceId: id, ip: d.ip, mac: d.mac });
       if (d.type === 'iot') this.s.commandes.declencher('device.iot', { deviceId: id, ip: d.ip, name: nom, vendor: d.vendor });
-    } else return null;
-    if (h.ports.length) A.remplacerPorts(id, h.ports);
+    }
     return id;
   }
 
