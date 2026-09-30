@@ -45,7 +45,7 @@ const CONSOLE = { info: (...a) => console.log(...a), warn: (...a) => console.war
 const CONTACT_SECURITE = 'https://github.com/codexX64/MapMyLAN/security/advisories/new';
 // La politique des permissions du socle, à une exception près : la dictée
 // vocale de l'assistant ouvre le micro, depuis la page elle-même seulement.
-const PERMISSIONS = 'camera=(), microphone=(self), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=()';
+export const PERMISSIONS = 'camera=(), microphone=(self), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=()';
 // Un segment caché (/.env, /.git/…) ne désigne jamais une page : une sonde qui
 // recevrait l'interface à sa place croirait le fichier servi.
 const SEGMENT_CACHE = /(^|\/)\./;

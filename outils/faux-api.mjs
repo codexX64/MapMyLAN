@@ -25,6 +25,7 @@ const RACINE = path.resolve(ICI, '..');
 const WEB = path.join(RACINE, 'web');
 const SOCLE = path.join(RACINE, 'socle');
 const { nonceCsp, politiqueContenu, entetesSecurite, servirFichier, repondreJson } = await import(path.join(SOCLE, 'src', 'http.js'));
+const { PERMISSIONS } = await import(path.join(RACINE, 'src', 'main.js'));
 
 const [portNeuf = '8120', portAncien = '8121', DIST] = process.argv.slice(2);
 
@@ -536,9 +537,8 @@ async function api(req, res, url, ancien) {
   }
 }
 
-// La 2.0, derrière la politique de contenu du socle. Le micro n'est permis
-// qu'à la page elle-même, pour le mode vocal de l'assistant.
-const PERMISSIONS = 'camera=(), microphone=(self), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=()';
+// La 2.0, derrière la politique de contenu du socle et la politique des
+// permissions du service.
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const nonce = nonceCsp();
