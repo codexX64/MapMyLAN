@@ -281,7 +281,7 @@ export function routesReseau(route, s, acces) {
   };
   const LIEN = { type: { type: 'chaine', parmi: TYPES_LIEN }, speed: nom(20), vlan: nom(20) };
 
-  route.get('/api/topology', () => ({ links: db.prepare('SELECT * FROM liens ORDER BY createdAt').all().map(F.lien), zones: db.prepare('SELECT * FROM zones ORDER BY createdAt').all().map(F.zone) }), { role: 'lecture', jeton: true });
+  route.get('/api/topology', () => ({ links: db.prepare('SELECT * FROM liens ORDER BY createdAt LIMIT 50000').all().map(F.lien), zones: db.prepare('SELECT * FROM zones ORDER BY createdAt LIMIT 5000').all().map(F.zone) }), { role: 'lecture', jeton: true });
   route.post('/api/topology/auto-build', () => construireTopologie(s, { force: true }), { role: 'membre', jeton: true, corps: vide });
 
   route.post('/api/topology/links', ctx => {

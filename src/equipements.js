@@ -19,7 +19,7 @@ export class Equipements {
 
   ligne(id) { return this.db.prepare('SELECT * FROM equipements WHERE id = ?').get(id) || null; }
   principal() { return this.db.prepare('SELECT * FROM equipements WHERE isMainRouter = 1 ORDER BY createdAt LIMIT 1').get() || null; }
-  lister() { return this.db.prepare('SELECT * FROM equipements ORDER BY createdAt').all(); }
+  lister() { return this.db.prepare('SELECT * FROM equipements ORDER BY createdAt LIMIT 1000').all(); }
 
   sceller(id, champ, valeur) { return valeur ? this.coffre.scelle(USAGE, String(valeur), `${id}:${champ}`) : null; }
   ouvrir(ligne, champ) {

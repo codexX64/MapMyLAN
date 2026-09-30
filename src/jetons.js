@@ -57,7 +57,7 @@ export class Jetons {
   }
 
   ligne(id) { return this.db.prepare('SELECT * FROM jetons_integration WHERE id = ?').get(id) || null; }
-  lister() { return this.db.prepare('SELECT * FROM jetons_integration ORDER BY createdAt DESC').all(); }
+  lister() { return this.db.prepare('SELECT * FROM jetons_integration ORDER BY createdAt DESC LIMIT 1000').all(); }
 
   revoquer(id) {
     this.db.prepare('UPDATE jetons_integration SET revokedAt = COALESCE(revokedAt, ?) WHERE id = ?').run(Date.now(), id);

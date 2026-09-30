@@ -97,7 +97,7 @@ export function routesSysteme(route, s, acces) {
     return { ok: true };
   }, { role: 'admin', corps: vide });
 
-  route.get('/api/rules', () => db.prepare('SELECT * FROM regles ORDER BY createdAt').all().map(F.regle), { role: 'lecture' });
+  route.get('/api/rules', () => db.prepare('SELECT * FROM regles ORDER BY createdAt LIMIT 500').all().map(F.regle), { role: 'lecture' });
 
   route.patch('/api/rules/:id', ctx => {
     const r = ID.test(ctx.params.id) && db.prepare('SELECT * FROM regles WHERE id = ?').get(ctx.params.id);

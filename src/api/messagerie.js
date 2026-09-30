@@ -59,7 +59,7 @@ export function routesMessagerie(route, s, acces) {
     return r;
   }, { role: 'admin', corps: VERIFICATION });
 
-  route.get('/api/mail/mailboxes', () => db.prepare('SELECT * FROM boites ORDER BY createdAt').all().map(F.boite), { role: 'lecture' });
+  route.get('/api/mail/mailboxes', () => db.prepare('SELECT * FROM boites ORDER BY createdAt LIMIT 500').all().map(F.boite), { role: 'lecture' });
 
   route.post('/api/mail/mailboxes', ctx => {
     const b = ctx.corps;

@@ -70,6 +70,12 @@ traiter : `POST /api/compte/renfort`, puis rejouer la requête).
 d'intégration ; quotas propres aux actions coûteuses (balayage, balayage
 approfondi, ping, registres, logos, assistant) : 429 au-delà.
 
+Aucune liste n'est rendue sans borne : les paramètres `limit`/`limite` sont
+bornés par leur schéma, et les listes sans paramètre ont un plafond fixe
+(appareils 10 000, liens de la carte 50 000, zones 5 000, commandes et
+commandes du bot 1 000 chacune, consoles et équipements 1 000, jetons 1 000,
+boîtes mail 500, règles 500).
+
 ## 2. Formes communes
 
 ```

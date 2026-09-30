@@ -599,6 +599,23 @@ test('journal : essais d’administration, actions d’un jeton, limites des rou
   assert.deepEqual({ objet: bot.objet, ...JSON.parse(bot.details) }, { objet: 'ban_ip', discussion: '-1001234567890', cible: '192.0.2.200' });
 });
 
+test('listes : chacune plafonnée côté serveur, même sans paramètre de taille', async () => {
+  const t = Date.now();
+  const commande = o.db.prepare("INSERT INTO commandes(id, name, trigger, actions, createdAt, updatedAt) VALUES(?, 'essai', 'device.new', '[]', ?, ?)");
+  const zone = o.db.prepare("INSERT INTO zones(id, name, x, y, createdAt) VALUES(?, 'zone', 0, 0, ?)");
+  o.db.exec('BEGIN');
+  for (let i = 0; i < 1001; i++) commande.run(`liste-commande-${i}`, t + i, t + i);
+  for (let i = 0; i < 5001; i++) zone.run(`liste-zone-${i}`, t + i);
+  o.db.exec('COMMIT');
+  try {
+    assert.equal((await membre.get('/api/commands')).json.length, 1000);
+    assert.equal((await membre.get('/api/topology')).json.zones.length, 5000);
+  } finally {
+    o.db.prepare("DELETE FROM commandes WHERE id LIKE 'liste-commande-%'").run();
+    o.db.prepare("DELETE FROM zones WHERE id LIKE 'liste-zone-%'").run();
+  }
+});
+
 test('permissions : le micro pour la page elle-même, le reste comme la politique du socle', async () => {
   const socle = {};
   entetesSecurite({ setHeader: (k, v) => { socle[k] = v; } }, {});

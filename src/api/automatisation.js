@@ -68,7 +68,7 @@ export function routesAutomatisation(route, s, acces) {
 
   route.get('/api/commands/triggers', () => DECLENCHEURS, { role: 'lecture' });
   route.get('/api/commands/actions', () => ACTIONS, { role: 'lecture' });
-  route.get('/api/commands', () => db.prepare('SELECT * FROM commandes ORDER BY createdAt DESC').all().map(F.commande), { role: 'lecture' });
+  route.get('/api/commands', () => db.prepare('SELECT * FROM commandes ORDER BY createdAt DESC LIMIT 1000').all().map(F.commande), { role: 'lecture' });
 
   route.post('/api/commands', ctx => {
     const b = ctx.corps;
@@ -112,7 +112,7 @@ export function routesAutomatisation(route, s, acces) {
   }, { role: 'admin', renfort: true, corps: { vars: { type: 'objet', profondeur: 1 } } });
 
   route.get('/api/bot-commands/actions', () => ACTIONS_BOT, { role: 'lecture' });
-  route.get('/api/bot-commands', () => db.prepare('SELECT * FROM commandes_bot ORDER BY createdAt DESC').all().map(F.commandeBot), { role: 'lecture' });
+  route.get('/api/bot-commands', () => db.prepare('SELECT * FROM commandes_bot ORDER BY createdAt DESC LIMIT 1000').all().map(F.commandeBot), { role: 'lecture' });
 
   route.post('/api/bot-commands', ctx => {
     const b = ctx.corps;
