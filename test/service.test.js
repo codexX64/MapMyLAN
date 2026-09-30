@@ -510,6 +510,17 @@ test('fichiers statiques : interface et socle servis avec leur politique, rien h
   assert.equal((await c.get('/.well-known/security.txt')).status, 200);
 });
 
+test('segments cachés : 404, jamais l’interface à leur place', async () => {
+  const c = new Client(o.port);
+  for (const chemin of ['/.env', '/.git/config', '/%2eenv', '/carte/.cache', '/.well-known/inconnu']) {
+    const r = await c.get(chemin);
+    assert.equal(r.status, 404, chemin);
+    assert.ok(!r.texte.includes('<html'), chemin);
+  }
+  // Une adresse de page gardée en favori mène toujours à l'interface.
+  assert.equal((await c.get('/appareils')).status, 200);
+});
+
 test('permissions : le micro pour la page elle-même, le reste comme la politique du socle', async () => {
   const socle = {};
   entetesSecurite({ setHeader: (k, v) => { socle[k] = v; } }, {});

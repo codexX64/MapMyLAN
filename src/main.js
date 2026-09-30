@@ -45,6 +45,15 @@ const CONTACT_SECURITE = 'https://github.com/codexX64/MapMyLAN/security/advisori
 // La politique des permissions du socle, à une exception près : la dictée
 // vocale de l'assistant ouvre le micro, depuis la page elle-même seulement.
 const PERMISSIONS = 'camera=(), microphone=(self), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=()';
+// Un segment caché (/.env, /.git/…) ne désigne jamais une page : une sonde qui
+// recevrait l'interface à sa place croirait le fichier servi.
+const SEGMENT_CACHE = /(^|\/)\./;
+const decode = chemin => {
+  try { return decodeURIComponent(chemin); } catch {
+    // Un encodage invalide ne désigne aucun fichier : le chemin brut est jugé tel quel.
+    return chemin;
+  }
+};
 
 // Ce qu'une installation neuve contient d'emblée (la 1.4.1 le posait par
 // son script d'amorçage) : les règles de défense par défaut et les réglages
@@ -151,6 +160,7 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
       if (await portail.traiter(req, res, url, ctx)) return;
       if (await api.traiter(ctx)) return;
       if (!['GET', 'HEAD'].includes(req.method)) return repondreJson(res, 405, { error: 'Méthode non admise.' }, { Allow: 'GET, HEAD' });
+      if (SEGMENT_CACHE.test(decode(url.pathname))) return repondreJson(res, 404, { error: 'Introuvable.' });
       if (url.pathname.startsWith('/socle/') && servirFichier(req, res, path.join(RACINE, 'socle', 'web'), url.pathname.slice(6), { nonce, cache: 'public, max-age=3600' })) return;
       const fichier = url.pathname === '/' ? '/index.html' : url.pathname;
       if (servirFichier(req, res, path.join(RACINE, 'web'), fichier, { nonce })) return;
