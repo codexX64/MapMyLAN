@@ -57,7 +57,7 @@ test('valider : adresses, MAC, plages et ports ; les charges d’injection reste
   assert.throws(() => validerCible({ ip: '192.0.2.5 && curl evil' }), ValeurRefusee);
   assert.equal(nettoyerNom('host\r\nInjected'), 'hostInjected');
   assert.ok(nettoyerNom('a'.repeat(200)).length <= 63);
-  assert.equal(nettoyerNom('camera​-7'), 'camera-7', 'marque invisible retirée');
+  assert.equal(nettoyerNom('camera\u200b-7'), 'camera-7', 'marque invisible retirée');
 });
 
 test('arithmétique des plages', () => {
