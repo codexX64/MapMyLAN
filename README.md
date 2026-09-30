@@ -89,7 +89,7 @@ journaux : il sert une fois, à créer le premier compte administrateur.
 
 ```bash
 cp .env.example .env
-mkdir -p secrets extensions && openssl rand -base64 32 > secrets/socle_cle && chmod 600 secrets/socle_cle
+mkdir -p secrets extensions && openssl rand -base64 32 > secrets/socle_cle && : > secrets/socle_cle_ancienne && chmod 600 secrets/socle_cle secrets/socle_cle_ancienne
 docker compose up -d --build
 docker compose logs mapmylan | grep "Jeton d'installation"
 ```
@@ -194,6 +194,16 @@ node src/cli.js restaurer cle-privee.pem mapmylan.db < mapmylan.sauv   # sur une
 
 La sauvegarde est chiffrée pour une clé publique RSA (3072 bits au moins) : la
 clé privée qui la relit ne vit pas sur la machine de MapMyLAN.
+
+## Tourner la clé maîtresse
+
+Dans le Hub (réglages avancés de MapMyLAN) ou dans `secrets/` installé seul :
+la clé actuelle dans `SOCLE_CLE_ANCIENNE` (`socle_cle_ancienne`), une neuve
+(`openssl rand -base64 32`) dans `SOCLE_CLE` (`socle_cle`), puis redémarrer.
+Au démarrage, les secrets TOTP, ceux des équipements, des boîtes mail et des
+canaux de notification passent sous la clé neuve (journal : `coffre.rescelle`) ;
+personne ne ressaisit rien. Vider ensuite `SOCLE_CLE_ANCIENNE` et redémarrer.
+Une clé que la base ne connaît pas arrête le démarrage.
 
 ## Derrière un relais inverse
 

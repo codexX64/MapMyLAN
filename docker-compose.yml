@@ -18,7 +18,8 @@ services:
       DOCKER_HOST: tcp://127.0.0.1:2375
       EXTENSIONS_DIR: /app/extensions
       SOCLE_CLE_FILE: /run/secrets/socle_cle
-    secrets: [socle_cle]
+      SOCLE_CLE_ANCIENNE_FILE: /run/secrets/socle_cle_ancienne
+    secrets: [socle_cle, socle_cle_ancienne]
     volumes:
       - mapmylan-data:/app/data
       # Supervision de l'hôte, en lecture seule.
@@ -82,6 +83,9 @@ services:
 secrets:
   socle_cle:
     file: ./secrets/socle_cle
+  # Vide, sauf pendant une rotation (README, « Tourner la clé maîtresse »).
+  socle_cle_ancienne:
+    file: ./secrets/socle_cle_ancienne
 
 volumes:
   mapmylan-data:

@@ -36,6 +36,7 @@ import { Plafond } from './assistant/plafond.js';
 import { Flux } from './flux.js';
 import { Planificateur } from './planif.js';
 import { creerApi } from './api/index.js';
+import { resceller } from './rotation.js';
 import * as F from './formes.js';
 
 const RACINE = path.resolve(import.meta.dirname, '..');
@@ -87,6 +88,12 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
   const db = ouvrirBase(cfg.donnees);
   const socle = await demarrerSocle({ service: { id: 'mapmylan', nom: 'MapMyLAN', contactSecurite: CONTACT_SECURITE }, db, dossier: cfg.donnees, env, log });
   const { coffre, journal, portail, comptes } = socle;
+  // Rotation de SOCLE_CLE : les secrets de MapMyLAN suivent ceux du socle.
+  const tour = resceller({ db, coffre });
+  if (tour.rescelles || tour.illisibles) {
+    journal.ecrire({ action: 'coffre.rescelle', details: tour });
+    log.info(`[coffre] ${tour.rescelles} secret(s) de MapMyLAN rescellé(s) sous la clé neuve${tour.illisibles ? `, ${tour.illisibles} illisible(s) avec l'une comme l'autre : à ressaisir` : ''}.`);
+  }
 
   // Le conteneur des services : chacun reçoit ce dont il a besoin, rien n'est global.
   const s = { cfg, db, log, options, coffre, journal, portail, comptes };

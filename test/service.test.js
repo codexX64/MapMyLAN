@@ -4,6 +4,7 @@
 // effacement d'un compte.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import https from 'node:https';
 import { Client } from '../socle/essai/client.js';
 import { certificatEssai } from '../socle/essai/smtp.js';
@@ -529,4 +530,34 @@ test('permissions : le micro pour la page elle-même, le reste comme la politiqu
   for (const chemin of ['/', '/api/health', '/api/devices']) {
     assert.equal((await new Client(o.port).get(chemin)).entetes['permissions-policy'], attendue, chemin);
   }
+});
+
+test('rotation de SOCLE_CLE : les secrets des équipements, des boîtes et des canaux passent sous la clé neuve', async () => {
+  const cle = () => crypto.randomBytes(32).toString('base64');
+  const [ancienne, neuve] = [cle(), cle()];
+  let x = await lancer({ SOCLE_CLE: ancienne });
+  const dossier = x.dossier;
+  const adm = await administrateur(x);
+  await renforcer(adm);
+  assert.equal((await adm.put('/api/notifications/telegram', { enabled: false, config: { token: JETON_BOT, chatId: '-1001234567890' } })).status, 200);
+  const boite = await adm.post('/api/mail/mailboxes', { email: 'alertes@exemple.org', role: 'send', smtp: { host: 'smtp.exemple.org', port: 587, security: 'starttls' }, password: 'mot de passe de la boîte' });
+  assert.equal(boite.status, 200);
+  const equipement = x.s.equipements.enregistrer({
+    name: 'serveur-a', vendor: 'generic', isMainRouter: false, preuves: {},
+    creds: { host: '192.0.2.10', port: 22, username: 'mapmylan', transport: 'ssh', password: 'mot de passe de l’équipement' },
+  });
+  await x.arreter();
+
+  // Le geste du README : l'actuelle en SOCLE_CLE_ANCIENNE, une neuve en SOCLE_CLE ; puis l'ancienne retirée.
+  x = await lancer({ DATA_DIR: dossier, SOCLE_CLE: neuve, SOCLE_CLE_ANCIENNE: ancienne });
+  await x.arreter();
+  x = await lancer({ DATA_DIR: dossier, SOCLE_CLE: neuve });
+  try {
+    assert.equal(x.s.equipements.identifiants(x.s.equipements.ligne(equipement.id)).password, 'mot de passe de l’équipement');
+    const b = x.db.prepare('SELECT * FROM boites WHERE id = ?').get(boite.json.id);
+    assert.equal(x.s.coffre.ouvre('boite', b.passwordEnc, `${b.id}:password`), 'mot de passe de la boîte');
+    assert.equal(x.s.notifications.config('telegram', { memeEteint: true })?.token, JETON_BOT);
+    const trace = x.db.prepare("SELECT details FROM socle_journal WHERE action = 'coffre.rescelle'").all();
+    assert.deepEqual(trace.map(t => JSON.parse(t.details)), [{ rescelles: 3, illisibles: 0 }]);
+  } finally { await x.arreter(); }
 });
