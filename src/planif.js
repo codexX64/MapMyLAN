@@ -30,7 +30,9 @@ export class Planificateur {
     await scanner.toutBalayer();
     // Les VLAN déclarés sur l'équipement, relevés au même rythme : sans eux,
     // chaque appareil retomberait sur son sous-réseau faute de rattachement.
-    await vlans.relever().catch(() => null);
+    // Un équipement muet est déjà rendu par relever() ; ce qui lève ici est
+    // une panne à voir, qui n'arrête pas le cycle.
+    await vlans.relever().catch(e => this.s.evts.journaliser('warn', 'vlan', `Relevé des VLAN en échec : ${String(e.message).slice(0, 160)}`));
     scores.toutNoter();
     await appliquerRegles(this.s);
   }
