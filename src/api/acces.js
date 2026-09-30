@@ -56,11 +56,13 @@ export class Acces {
   }
 
   // Une action d'administration ou de défense au journal chaîné du socle :
-  // qui, quoi, sur quoi, d'où. Jamais de secret ni de commande complète.
+  // qui, quoi, sur quoi, d'où. Jamais de secret ni de commande complète. Un
+  // jeton y est nommé sous « integration » : le journal retire toute clé
+  // dont le nom évoque un secret (« jeton » compris).
   tracer(ctx, action, objet = null, details = null) {
     this.s.journal.ecrire({
       acteur: ctx.acteur?.compte || null, action, objet, ip: ctx.ip,
-      details: { ...(ctx.acteur?.type === 'jeton' ? { jeton: ctx.acteur.nom } : {}), ...(details || {}) },
+      details: { ...(ctx.acteur?.type === 'jeton' ? { integration: ctx.acteur.nom } : {}), ...(details || {}) },
     });
   }
 }

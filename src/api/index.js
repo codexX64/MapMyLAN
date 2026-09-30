@@ -64,7 +64,14 @@ export function creerApi(s) {
       if (e instanceof Refus && e.status === 403) {
         s.journal.rare(`refus:${ctx.acteur?.id}:${req.method} ${url.pathname}`, {
           acteur: ctx.acteur?.compte || null, action: 'acces.refuse', objet: url.pathname, ip: ctx.ip, resultat: 'refus',
-          details: { cause: e.message.slice(0, 120), ...(ctx.acteur?.type === 'jeton' ? { jeton: ctx.acteur.nom } : {}) },
+          details: { cause: e.message.slice(0, 120), ...(ctx.acteur?.type === 'jeton' ? { integration: ctx.acteur.nom } : {}) },
+        });
+      }
+      // Une limite propre à une route compte avec les autres limites (vigie).
+      if (e instanceof ErreurHttp && e.status === 429) {
+        s.journal.rare(`limite:${ctx.acteur?.id || ctx.ip}:${req.method} ${url.pathname}`, {
+          acteur: ctx.acteur?.compte || null, action: 'limite.atteinte', objet: url.pathname, ip: ctx.ip, resultat: 'refus',
+          details: ctx.acteur?.type === 'jeton' ? { integration: ctx.acteur.nom } : null,
         });
       }
       throw e;

@@ -50,6 +50,7 @@ export function routesMessagerie(route, s, acces) {
     controler(b);
     const email = b.email.trim().toLowerCase();
     const enPlace = parEmail(email);
+    acces.tracer(ctx, 'boite.verification', enPlace?.id || null);
     const password = b.password || motDePasseDe(enPlace);
     if (!password) throw new ErreurHttp(400, 'Mot de passe manquant.');
     const r = await verifierBoite({ sortie: s.sortie, email, password, role: b.role || 'both', imap: b.imap, smtp: b.smtp, autorite: b.autorite || null });

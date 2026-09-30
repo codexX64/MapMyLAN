@@ -116,6 +116,7 @@ export function routesSysteme(route, s, acces) {
 
   route.post('/api/poste/test', async ctx => {
     if (!essais.prendre(ctx.acteur.id)) throw new ErreurHttp(429, 'Trop d’essais : attends une minute.');
+    acces.tracer(ctx, 'poste.essai');
     const r = await s.poste.essayer();
     if (!r.ok) ctx.statut = 502;
     return r;
@@ -142,6 +143,7 @@ export function routesSysteme(route, s, acces) {
   route.post('/api/notifications/:channel/test', async ctx => {
     const c = canal(ctx);
     if (!essais.prendre(ctx.acteur.id)) throw new ErreurHttp(429, 'Trop d’essais : attends une minute.');
+    acces.tracer(ctx, 'notification.essai', c);
     return notifications.essayer(c, configDe(c, ctx.corps.config));
   }, { role: 'admin', corps: { config: { type: 'objet', profondeur: 1 } } });
 

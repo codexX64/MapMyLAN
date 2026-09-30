@@ -129,6 +129,7 @@ export function routesReseau(route, s, acces) {
   // l'administrateur n'a pas confirmé l'empreinte.
   route.post('/api/router/detect', async ctx => {
     const creds = credsDe(ctx.corps);
+    acces.tracer(ctx, 'equipement.reconnaissance', null, { hote: creds.host, transport: creds.transport });
     const vu = await equipements.reconnaitre(creds);
     if (vu.tls) {
       return {
@@ -142,6 +143,7 @@ export function routesReseau(route, s, acces) {
 
   route.post('/api/router/test', async ctx => {
     const b = ctx.corps;
+    acces.tracer(ctx, 'equipement.essai', null, { hote: b.useSaved ? null : b.host || null, enregistre: b.useSaved === true });
     let l = null, a, contexte;
     if (b.useSaved) {
       ({ ligne: l, adaptateur: a, ctx: contexte } = equipements.principalPilotable());
@@ -221,6 +223,7 @@ export function routesReseau(route, s, acces) {
   route.post('/api/ssh/test', async ctx => {
     const b = ctx.corps;
     const creds = credsDe(b);
+    acces.tracer(ctx, 'console.essai', null, { hote: creds.host, transport: creds.transport });
     if (creds.transport === 'api') {
       const preuves = await equipements.preuves(creds, b);
       return essayer(() => adaptateur(b.vendor || 'unifi').test(equipements.contexte(creds, { certificat: preuves.certificat })));

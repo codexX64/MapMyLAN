@@ -25,6 +25,7 @@ export const ACTIONS_BOT = [
   ['topology_summary', 'Résumé de la carte', [], false],
 ].map(([id, label, params, destructive]) => ({ id, label, params, destructive }));
 export const IDS_ACTIONS_BOT = new Set(ACTIONS_BOT.map(a => a.id));
+const DESTRUCTRICES = new Set(ACTIONS_BOT.filter(a => a.destructive).map(a => a.id));
 
 const CONFIRMATION_MS = 30_000;
 
@@ -37,8 +38,21 @@ export class CommandesBot {
 
   appareilParIp(ip) { return estIPv4(ip) ? this.s.db.prepare('SELECT * FROM appareils WHERE ip = ? ORDER BY lastSeen DESC LIMIT 1').get(ip) : null; }
 
+  // Un refus du bot compte avec les autres refus d'accès (vigie).
+  refuser(commande, discussion) {
+    this.s.journal.rare(`bot:${discussion}:${commande}`, { action: 'acces.refuse', objet: commande.slice(0, 40), resultat: 'refus', details: { discussion: String(discussion).slice(0, 40) } });
+  }
+
   async action(id, params, { discussion, args = [] }) {
     const { db, defense } = this.s;
+    // Une action sur le réseau venue de Telegram laisse sa trace au journal
+    // chaîné ; celle lancée depuis l'interface y est déjà, avec son compte.
+    if (DESTRUCTRICES.has(id) && discussion !== 'interface') {
+      this.s.journal.ecrire({
+        action: 'bot.action', objet: id,
+        details: { discussion: String(discussion).slice(0, 40), ...(args[0] ? { cible: String(args[0]).slice(0, 45) } : {}), ...(params?.deviceId ? { equipement: params.deviceId } : {}) },
+      });
+    }
     const compte = sql => db.prepare(sql).get().n;
     const ipDe = () => args[0] || params?.ip;
     switch (id) {
@@ -141,7 +155,11 @@ export class CommandesBot {
     // La liste des commandes dit ce que le bot sait faire sur le réseau : elle
     // ne se donne qu'à la discussion principale.
     if (/^\/(help|start|aide)\b/i.test(t)) {
-      if (!estPrincipale) { this.s.evts.journaliser('warn', 'bot', 'Aide demandée depuis une discussion inconnue.'); return 'Non autorisé.'; }
+      if (!estPrincipale) {
+        this.s.evts.journaliser('warn', 'bot', 'Aide demandée depuis une discussion inconnue.');
+        this.refuser(t.split(/\s+/)[0], discussion);
+        return 'Non autorisé.';
+      }
       const liste = this.s.db.prepare('SELECT trigger, description, action, confirm FROM commandes_bot WHERE enabled = 1 ORDER BY trigger').all();
       return '<b>Bot MapMyLAN</b>\n\nCommandes intégrées :\n/status /network /alerts /scan\n/ban &lt;ip&gt; /unban &lt;ip&gt; /quarantine &lt;ip&gt;\n/device &lt;ip&gt;\n'
         + (liste.length ? '\n<b>Tes commandes :</b>\n' + liste.map(c => `${h(c.trigger)}${c.confirm ? ' (confirmation)' : ''} — ${h(c.description || c.action)}`).join('\n') : '')
@@ -155,6 +173,7 @@ export class CommandesBot {
       try { permises = JSON.parse(cmd.allowedChatIds || '[]').map(String); } catch { permises = []; }
       if (!(permises.length ? permises : [principale].filter(Boolean)).includes(discussion)) {
         this.s.evts.journaliser('warn', 'bot', `${cmd.trigger} refusée à une discussion non autorisée.`);
+        this.refuser(cmd.trigger, discussion);
         return 'Non autorisé.';
       }
       if (cmd.cooldownSec > 0 && cmd.lastFiredAt && (Date.now() - cmd.lastFiredAt) / 1000 < cmd.cooldownSec) return `Patience : réessaie dans ${Math.ceil(cmd.cooldownSec - (Date.now() - cmd.lastFiredAt) / 1000)} s.`;

@@ -570,6 +570,35 @@ test('logos : jamais gardés par le navigateur, soixante domaines neufs par minu
   }
 });
 
+test('journal : essais d’administration, actions d’un jeton, limites des routes et bot Telegram au journal chaîné', async () => {
+  const nombre = action => o.db.prepare('SELECT COUNT(*) n FROM socle_journal WHERE action = ?').get(action).n;
+  const ESSAIS = ['equipement.reconnaissance', 'equipement.essai', 'console.essai', 'poste.essai', 'notification.essai', 'boite.verification'];
+  const avant = Object.fromEntries(ESSAIS.map(a => [a, nombre(a)]));
+  await admin.post('/api/router/detect', { host: '192.0.2.1', transport: 'ssh' });
+  await admin.post('/api/router/test', { useSaved: true });
+  await admin.post('/api/ssh/test', { host: '192.0.2.1', username: 'essai' });
+  await admin.post('/api/poste/test', {});
+  await admin.post('/api/notifications/telegram/test', {});
+  await admin.post('/api/mail/verify', { email: 'alertes@exemple.org', role: 'send', smtp: { host: 'smtp.exemple.org', port: 587, security: 'starttls' }, password: 'x' });
+  for (const a of ESSAIS) assert.equal(nombre(a), avant[a] + 1, a);
+
+  // Un jeton est nommé dans la trace de ce qu'il fait.
+  assert.equal((await new Client(o.port).post('/api/devices/scan', {}, porteur(GRAINE_HUB))).status, 200);
+  const balayage = o.db.prepare("SELECT details FROM socle_journal WHERE action = 'balayage.lance' ORDER BY n DESC LIMIT 1").get();
+  assert.equal(JSON.parse(balayage.details).integration, 'hub');
+
+  const depuis = { entetes: { 'x-forwarded-for': '198.51.100.252' } };
+  for (let i = 0; i < 20; i++) assert.equal((await membre.post('/api/net/whois', { ips: [] }, depuis)).status, 200);
+  assert.equal((await membre.post('/api/net/whois', { ips: [] }, depuis)).status, 429);
+  assert.equal(o.db.prepare("SELECT COUNT(*) n FROM socle_journal WHERE action = 'limite.atteinte' AND objet = '/api/net/whois'").get().n, 1);
+
+  assert.equal(await o.s.bot.message('/aide', '424242'), 'Non autorisé.');
+  assert.equal(o.db.prepare("SELECT COUNT(*) n FROM socle_journal WHERE action = 'acces.refuse' AND objet = '/aide'").get().n, 1);
+  await o.s.bot.action('ban_ip', null, { discussion: '-1001234567890', args: ['192.0.2.200'] });
+  const bot = o.db.prepare("SELECT objet, details FROM socle_journal WHERE action = 'bot.action' ORDER BY n DESC LIMIT 1").get();
+  assert.deepEqual({ objet: bot.objet, ...JSON.parse(bot.details) }, { objet: 'ban_ip', discussion: '-1001234567890', cible: '192.0.2.200' });
+});
+
 test('permissions : le micro pour la page elle-même, le reste comme la politique du socle', async () => {
   const socle = {};
   entetesSecurite({ setHeader: (k, v) => { socle[k] = v; } }, {});
