@@ -120,7 +120,6 @@ export function pageRouteur(p) {
   return h('div', { class: 'page-routeur' }, tete, corps);
 }
 
-// Formulaire de connexion
 function formulaireEquipement(adaptateurs, equipement, apres) {
   const v = {
     vendor: equipement?.vendor || 'unifi',

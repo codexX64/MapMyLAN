@@ -518,7 +518,6 @@ export function traficMondial(p) {
   ro.observe(globe);
   p.au(() => ro.disconnect());
 
-  // Boucle de rendu
   let ctx = null;
   try { ctx = canvas.getContext('2d'); } catch { ctx = null; }
   const TERRE = terre(), TRAITS = traits();

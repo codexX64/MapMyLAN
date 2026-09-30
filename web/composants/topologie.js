@@ -84,7 +84,6 @@ export function carteTopologie(p, { agencement, surAgencement }) {
 
   const positions = () => (arbre ? arbre.positions : libres);
 
-  // Nœuds du DOM
   const monde = s('g');
   const couches = { plan: s('g'), zones: s('g'), attaches: s('g'), liens: s('g'), apercu: s('g'), noeuds: s('g') };
   monde.append(couches.plan, couches.zones, couches.attaches, couches.liens, couches.apercu, couches.noeuds);
@@ -340,7 +339,6 @@ export function carteTopologie(p, { agencement, surAgencement }) {
   }
   function retirerPlan() { plan = null; ecrireLocal('mapmylan_plan', null); dessinerPlan(); }
 
-  // Zones
   function dessinerZones() {
     remplir(couches.zones, ...E.topology.zones.map(z => {
       const meta = metaZone(z);
@@ -388,7 +386,6 @@ export function carteTopologie(p, { agencement, surAgencement }) {
     }).filter(Boolean)));
   }
 
-  // Liaisons
   function dessinerLiens() {
     const pos = positions();
     const parId = new Map(E.devices.map(d => [d.id, d]));
@@ -468,7 +465,6 @@ export function carteTopologie(p, { agencement, surAgencement }) {
     remplir(couches.apercu, a ? s('line', { x1: a.x, y1: a.y, x2: souris.x, y2: souris.y, stroke: 'var(--accent)', 'stroke-width': 2, 'stroke-dasharray': '4 4', opacity: 0.7 }) : '');
   }
 
-  // Appareils
   const noeuds = new Map();
   function dessinerNoeuds() {
     const pos = positions();

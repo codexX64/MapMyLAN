@@ -88,13 +88,12 @@ export function disposerEnArbre(
 
   const infra = appareils.filter(estInfra).sort(ordonner);
 
-  // 1. La racine
-  // La passerelle principale si elle est désignée, sinon l'équipement le plus
-  // haut placé. Sans aucun équipement réseau, on prend le premier appareil :
-  // le dessin devient une simple colonne, ce qui reste honnête.
+  // La racine : la passerelle principale si elle est désignée, sinon
+  // l'équipement le plus haut placé. Sans aucun équipement réseau, on prend
+  // le premier appareil : le dessin devient une simple colonne, ce qui reste
+  // honnête.
   const racine = (infra[0] || appareils[0]).id;
 
-  // 2. Qui pend de qui
   const enfants = new Map();
   const vus = new Set([racine]);
 
@@ -188,7 +187,6 @@ export function disposerEnArbre(
     fils.sort((a, b) => ordonner(parId.get(a), parId.get(b)));
   }
 
-  // 3. Les colonnes
   // Une colonne par génération : la profondeur dans l'arbre, pas la nature de
   // l'appareil. C'est ce qui distingue cette vue de celle par étages.
   const profondeur = { [racine]: 0 };
@@ -201,7 +199,6 @@ export function disposerEnArbre(
     }
   }
 
-  // 4. Les lignes
   // Chaque feuille prend la ligne suivante ; chaque père se centre en face de
   // ses fils. Deux sous-arbres ne peuvent donc pas se marcher dessus.
   const y = {};
@@ -229,8 +226,7 @@ export function disposerEnArbre(
     };
   }
 
-  // 5. Les troncs
-  // Le trait vertical qui porte une fratrie. Un fils unique aligné sur son
+  // Les troncs : le trait vertical qui porte une fratrie. Un fils unique aligné sur son
   // père n'en a pas besoin : la liaison est alors une simple horizontale.
   for (const [idPere, fils] of enfants) {
     const pp = positions[idPere];
