@@ -226,8 +226,9 @@ export function disposerEnArbre(
     };
   }
 
-  // Les troncs : le trait vertical qui porte une fratrie. Un fils unique aligné sur son
-  // père n'en a pas besoin : la liaison est alors une simple horizontale.
+  // Les troncs : le trait vertical qui porte une fratrie. Un fils unique
+  // aligné sur son père n'en a pas besoin : la liaison est alors une simple
+  // horizontale.
   for (const [idPere, fils] of enfants) {
     const pp = positions[idPere];
     if (!pp || !fils.length) continue;
