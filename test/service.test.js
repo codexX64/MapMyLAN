@@ -9,6 +9,7 @@ import https from 'node:https';
 import { Client } from '../socle/essai/client.js';
 import { certificatEssai } from '../socle/essai/smtp.js';
 import { entetesSecurite } from '../socle/src/index.js';
+import { Sortie } from '../src/sortie.js';
 import { lancer, administrateur, inviter, renforcer, serveurLocal, ouvrirFlux, ReseauSimule } from './aides.js';
 
 const GRAINE_HUB = 'hub_' + 'e'.repeat(40);
@@ -546,6 +547,27 @@ test('débit global : le 601e appel d’une adresse dans la minute répond 429, 
   assert.match(refus.entetes['content-security-policy'] || '', /frame-ancestors 'none'/);
   assert.equal(refus.entetes['x-content-type-options'], 'nosniff');
   assert.equal(refus.entetes['cache-control'], 'no-store');
+});
+
+test('logos : jamais gardés par le navigateur, soixante domaines neufs par minute et par compte', async () => {
+  assert.equal((await admin.put('/api/settings/world.logos', { value: true })).status, 200);
+  const sorties = [];
+  const avant = o.s.logos.sortie;
+  // La frontière : les fournisseurs de logos, remplacés par un faux transport.
+  o.s.logos.sortie = new Sortie({ transport: async url => { sorties.push(url.href); return new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'content-type': 'image/png' } }); } });
+  const depuis = { entetes: { 'x-forwarded-for': '198.51.100.251' } };
+  try {
+    const premier = await membre.get('/api/logos/exemple.org', depuis);
+    assert.equal(premier.status, 200);
+    assert.equal(premier.entetes['cache-control'], 'no-store');
+    for (let i = 1; i < 60; i++) assert.equal((await membre.get(`/api/logos/d${i}.exemple.org`, depuis)).status, 200);
+    assert.equal((await membre.get('/api/logos/d60.exemple.org', depuis)).status, 429);
+    assert.equal((await membre.get('/api/logos/exemple.org', depuis)).status, 200, 'un domaine déjà cherché ne compte pas');
+    assert.equal(sorties.length, 60);
+  } finally {
+    o.s.logos.sortie = avant;
+    await admin.put('/api/settings/world.logos', { value: false });
+  }
 });
 
 test('permissions : le micro pour la page elle-même, le reste comme la politique du socle', async () => {

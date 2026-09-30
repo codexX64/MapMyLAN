@@ -18,7 +18,6 @@ const TYPES = new Set(['image/png', 'image/x-icon', 'image/vnd.microsoft.icon', 
 const TAILLE_MAX = 256 * 1024;
 const DUREE_TROUVE = 30 * 86400e3, DUREE_ABSENT = 86400e3;
 const ENTREES_MAX = 2000;
-export const CACHE_NAVIGATEUR_S = 7 * 86400;
 
 export class Logos {
   constructor({ sortie, reglages }) { this.sortie = sortie; this.reglages = reglages; this.cache = new Map(); }
@@ -40,6 +39,9 @@ export class Logos {
       return corps.length ? { type, corps } : null;
     } catch { return null; }
   }
+
+  // Déjà cherché, logo trouvé ou non : servi sans sortir.
+  connu(domaine, maintenant = Date.now()) { return (this.cache.get(domaine)?.expire || 0) > maintenant; }
 
   // null : pas de logo, l'interface affiche sa pastille. Ce résultat est gardé
   // aussi, sinon chaque affichage relancerait quatre requêtes.

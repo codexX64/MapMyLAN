@@ -68,7 +68,7 @@ traiter : `POST /api/compte/renfort`, puis rejouer la requête).
 
 600 requêtes par minute et par adresse, 120 par minute et par jeton
 d'intégration ; quotas propres aux actions coûteuses (balayage, balayage
-approfondi, ping, registres, assistant) : 429 au-delà.
+approfondi, ping, registres, logos, assistant) : 429 au-delà.
 
 ## 2. Formes communes
 
@@ -400,7 +400,7 @@ corps : { trigger: "/[a-z0-9_]{1,32}", description?, action (id du catalogue), p
 
 | Méthode | Chemin | Rôle | Réponse |
 |---|---|---|---|
-| GET | `/api/logos/:domaine` | lecture | image (PNG, ICO, JPEG, GIF, WebP — **[2.0]** jamais SVG), 404 si éteint ou absent, 400 si le domaine est invalide |
+| GET | `/api/logos/:domaine` | lecture | image (PNG, ICO, JPEG, GIF, WebP — **[2.0]** jamais SVG), `Cache-Control: no-store`, 404 si éteint ou absent, 400 si le domaine est invalide, 429 au-delà de 60 domaines jamais cherchés par minute et par compte |
 
 ### Boîtes mail — `/api/mail`
 

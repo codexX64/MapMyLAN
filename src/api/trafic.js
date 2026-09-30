@@ -1,7 +1,7 @@
 // Routes du trafic vers l'extérieur, des registres (RDAP) et des logos.
 import { Debit, ErreurHttp } from '../../socle/src/index.js';
 import { adresseDeRegistre } from '../registre.js';
-import { domaineValide, CACHE_NAVIGATEUR_S } from '../logos.js';
+import { domaineValide } from '../logos.js';
 import { vide } from './schemas.js';
 
 const INSTANT = { type: 'entier', min: 0, max: 8.64e15 };
@@ -9,7 +9,7 @@ const plusOuMoins = v => (v === null || v === undefined || v === '' ? undefined 
 
 export function routesTrafic(route, s, acces) {
   const { db, trafic, registre, logos } = s;
-  const quotas = { collecte: new Debit({ max: 6 }), registre: new Debit({ max: 20 }) };
+  const quotas = { collecte: new Debit({ max: 6 }), registre: new Debit({ max: 20 }), logos: new Debit({ max: 60 }) };
   let dernierAvis = 0;
 
   route.get('/api/traffic/flows', ctx => {
@@ -79,15 +79,18 @@ export function routesTrafic(route, s, acces) {
   }, { role: 'lecture', corps: { ips: { type: 'liste', requis: true, max: 64, de: { type: 'chaine', max: 45 } } } });
 
   // Une image téléchargée ailleurs, servie comme telle : jamais de SVG, et
-  // une politique qui interdit tout script même ouverte seule.
+  // une politique qui interdit tout script même ouverte seule. Le serveur la
+  // garde ; le navigateur non, comme toute réponse authentifiée.
   route.get('/api/logos/:domaine', async ctx => {
     if (!logos.actifs()) throw new ErreurHttp(404, 'Logos éteints.');
     const domaine = String(ctx.params.domaine).toLowerCase();
     if (!domaineValide(domaine)) throw new ErreurHttp(400, 'Domaine invalide.');
+    // Un domaine jamais cherché coûte jusqu'à quatre requêtes sortantes.
+    if (!logos.connu(domaine) && !quotas.logos.prendre(ctx.acteur.id)) throw new ErreurHttp(429, 'Trop de logos demandés : attends une minute.');
     const logo = await logos.logo(domaine);
     if (!logo) throw new ErreurHttp(404, 'Pas de logo.');
     ctx.res.writeHead(200, {
-      'Content-Type': logo.type, 'Content-Length': logo.corps.length, 'Cache-Control': `private, max-age=${CACHE_NAVIGATEUR_S}`,
+      'Content-Type': logo.type, 'Content-Length': logo.corps.length, 'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox",
     });
     ctx.res.end(logo.corps);
