@@ -41,8 +41,6 @@ export const estHote = v => estIP(v) || estNomHote(v);
 export function exigerIP(v, quoi = 'Adresse IP') { if (!estIP(v)) throw new ValeurRefusee(quoi, v); return v; }
 export function exigerIPv4(v, quoi = 'Adresse IPv4') { if (!estIPv4(v)) throw new ValeurRefusee(quoi, v); return v; }
 export function exigerMAC(v, quoi = 'Adresse MAC') { if (!estMAC(v)) throw new ValeurRefusee(quoi, v); return v.replace(/-/g, ':').toUpperCase(); }
-export function exigerCidr(v, quoi = 'Plage') { if (!estCidr(v)) throw new ValeurRefusee(quoi, v); return v; }
-export function exigerHote(v, quoi = 'Hôte') { if (!estHote(v)) throw new ValeurRefusee(quoi, v); return v; }
 
 // La cible d'une action de défense : point de passage obligé avant qu'une
 // adresse n'entre dans une commande du routeur.

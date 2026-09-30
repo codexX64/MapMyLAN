@@ -71,15 +71,6 @@ export function marquer(t, nom) {
   return { [cle]: 1, ...reste };
 }
 
-export function rendreLisible(t) {
-  const l = [t.titre];
-  if (t.description) l.push('', t.description);
-  if (t.zone.host || t.zone.ip) l.push('', `Appareil : ${[t.zone.host, t.zone.ip].filter(Boolean).join(' · ')}`);
-  if (t.metriques.length) l.push('', ...t.metriques.map(m => `${m.label} : ${m.valeur}${m.seuil ? ` (seuil ${m.seuil})` : ''}`));
-  if (t.symptomes.length) l.push('', ...t.symptomes.map(s => `— ${s}`));
-  return l.join('\n');
-}
-
 // Envoie le ticket à l'API de billetterie, par la garde de sortie. Les
 // erreurs restent distinguées : une clé refusée, un quota et une panne
 // appellent trois réactions différentes.

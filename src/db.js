@@ -162,8 +162,6 @@ const MIGRATIONS = [
     CREATE TABLE quotas_ia (qui TEXT NOT NULL, jour TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (qui, jour));`),
 ];
 
-export const VERSION_SCHEMA = MIGRATIONS.length;
-
 function migrer(db) {
   db.exec('CREATE TABLE IF NOT EXISTS meta (cle TEXT PRIMARY KEY, valeur TEXT NOT NULL)');
   const actuelle = Number(db.prepare("SELECT valeur FROM meta WHERE cle = 'schema'").get()?.valeur || 0);

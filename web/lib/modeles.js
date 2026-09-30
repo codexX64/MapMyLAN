@@ -80,10 +80,10 @@ function phrase(d) {
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
-    // Les tirets et points d'un nom d'hôte cachent les mots : « serveur-a2.exemple.org »
-    // doit se lire comme « serveur a2 exemple org ».
-    .replace(/[._]+/g, ' ')
-    .replace(/-(?=[a-z0-9])/g, '-');
+    // Les points d'un nom d'hôte cachent les mots : « serveur-a2.exemple.org »
+    // doit se lire comme « serveur-a2 exemple org » (un tiret sépare déjà
+    // deux mots pour les motifs).
+    .replace(/[._]+/g, ' ');
 }
 
 /**

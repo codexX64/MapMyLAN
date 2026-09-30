@@ -9,7 +9,7 @@ import { ErreurHttp } from '../socle/src/index.js';
 import { nouvelId } from './db.js';
 import { iso } from './formes.js';
 import { envoyerCourriel } from './courriel.js';
-import { construireTicket, envoyerApi, marquer, rendreLisible, EVENEMENTS } from './ticket.js';
+import { construireTicket, envoyerApi, marquer, EVENEMENTS } from './ticket.js';
 
 export const CANAUX = ['telegram', 'email', 'billetterie'];
 // Les champs secrets de chaque canal : jamais rendus, gardés s'ils sont omis.

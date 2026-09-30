@@ -10,7 +10,6 @@ import { SessionHttp, exigerUrlEquipement } from './adaptateurs/session.js';
 import { lireCertificat, tlsEpingle } from './certificat.js';
 
 const USAGE = 'equipement';
-export const CHAMPS_SECRETS = ['passwordEnc', 'privateKeyEnc', 'passphraseEnc'];
 
 export class Equipements {
   constructor({ db, coffre, ssh, sortie }) {
