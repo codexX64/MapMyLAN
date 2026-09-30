@@ -1,0 +1,13 @@
+{
+  "name": "mapmylan",
+  "version": "2.0.0",
+  "description": "Cartographie du réseau local : appareils, balayages, scores de risque, alertes, quarantaine, et un assistant qui répond.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": { "node": ">=24.7" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  }
+}
