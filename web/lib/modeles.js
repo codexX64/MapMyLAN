@@ -16,7 +16,7 @@
 // dépôt est public et sous licence MIT, les visuels produits par Ubiquiti,
 // Dell ou Cisco ne le sont pas. Ce qu'il choisit, ce sont les silhouettes
 // originales de `composants/silhouettes.js`. Pour aller plus loin — la photo exacte d'un
-// PowerEdge R730 sur sa vignette — il faut une image fournie par
+// PowerEdge R640 sur sa vignette — il faut une image fournie par
 // l'exploitant sur son installation, ce que fait déjà la photo d'appareil.
 //
 // Enfin, c'est une heuristique : elle affine une supposition, elle ne prétend
@@ -25,7 +25,7 @@
 /** Un motif reconnu → la famille de dessin de `composants/silhouettes.js`.
  *
  *  `exige` sert aux références nues, celles qui ne portent pas de marque : un
- *  « R730 » est un châssis Dell, mais un « T480 » est un portable Lenovo. La
+ *  « R640 » est un châssis Dell, mais un « T480 » est un portable Lenovo. La
  *  référence seule ne suffit donc pas, il faut le constructeur avec. */
 
 // L'ordre compte : le premier motif qui correspond gagne. Les modèles précis
