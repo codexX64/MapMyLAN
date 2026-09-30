@@ -1078,7 +1078,16 @@
     ],
     "egress": [
       "rdap.org",
-      "api.telegram.org"
+      "rdap.db.ripe.net",
+      "rdap.arin.net",
+      "rdap.apnic.net",
+      "rdap.lacnic.net",
+      "rdap.afrinic.net",
+      "api.telegram.org",
+      "icons.duckduckgo.com",
+      "www.google.com",
+      "unavatar.io",
+      "logo.clearbit.com"
     ]
   },
   "ai": {
