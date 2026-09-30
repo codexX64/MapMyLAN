@@ -295,7 +295,7 @@ test('consoles SSH : clé d’hôte confirmée à l’enregistrement, secret jam
   // Une commande tapée peut porter un secret en argument : une commande
   // automatique qui l'écrit au journal n'en reçoit que le programme.
   const trace = await admin.post('/api/commands', { name: 'trace ssh', trigger: 'ssh.exec_success', actions: [{ kind: 'log', level: 'warn' }] });
-  assert.equal((await admin.post(`/api/ssh/${cree.json.id}/exec`, { command: 'show secret=argument-sensible-42' })).status, 200);
+  assert.equal((await admin.post(`/api/ssh/${cree.json.id}/exec`, { command: 'show argument-sensible-42' })).status, 200);
   let tracee;
   for (let i = 0; i < 50 && !tracee; i++, await new Promise(r => setTimeout(r, 20))) tracee = (await lecteur.get('/api/logs?level=warn')).json.find(l => l.message.startsWith('[trace ssh]'));
   assert.ok(tracee && tracee.message.includes('"cmd":"show"'), tracee?.message);

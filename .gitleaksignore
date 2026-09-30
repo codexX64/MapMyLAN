@@ -1,0 +1,3 @@
+# Valeurs d'essai déjà dans l'historique, relevées par gitleaks et vérifiées une à une :
+# argument fabriqué d'une commande SSH d'essai (l'essai ne l'écrit plus sous cette forme).
+e3b3798672a21966f7bfe555698a772f08d6136f:test/service.test.js:generic-api-key:298
