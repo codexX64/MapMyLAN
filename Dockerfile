@@ -14,16 +14,11 @@ RUN printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian
  && rm -f /etc/apt/sources.list.d/debian.sources \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates nmap arp-scan iputils-ping openssh-client avahi-utils samba-common-bin snmp iproute2 libcap2-bin \
- # Le service tourne sous « node », sans aucune capacité. Seuls ces trois
- # programmes reçoivent, au lancement, l'accès aux sockets bruts (ARP, ICMP,
- # SYN) ; nmap y ajoute NET_ADMIN, qu'il exige pour ses sondes de pilotes.
- && setcap cap_net_raw,cap_net_admin+ep "$(command -v nmap)" \
- && setcap cap_net_raw+ep "$(command -v arp-scan)" \
- && setcap cap_net_raw+ep "$(command -v ping)" \
- && apt-get purge -y libcap2-bin && apt-get autoremove -y \
+      ca-certificates nmap arp-scan iputils-ping openssh-client avahi-utils samba-common-bin snmp iproute2 \
  && rm -rf /var/lib/apt/lists/* \
- # Aucun programme setuid ou setgid ne reste : personne ne redevient root.
+ # Aucun programme setuid ou setgid, aucune capacité de fichier : personne ne
+ # redevient root, rien ne s'élève à l'exécution. L'accès aux sockets bruts du
+ # balayage est donné au lancement du conteneur (voir docker-compose.yml).
  && find / -xdev -perm /6000 -type f -exec chmod a-s {} +
 
 WORKDIR /app

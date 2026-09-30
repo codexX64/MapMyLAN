@@ -30,16 +30,22 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
-    # Aucune capacité pour le service lui-même ; le conteneur borne à ces deux-là
-    # ce que nmap, arp-scan et ping reçoivent au lancement (capacités de fichier,
-    # posées dans l'image). NET_RAW : sockets bruts (ARP, ICMP, SYN) ;
-    # NET_ADMIN : exigé par nmap pour ses sondes.
+    # nmap, arp-scan et ping ont besoin des sockets bruts (NET_RAW : ARP, ICMP,
+    # SYN), et rien d'autre. Docker ne donne aucune capacité à un processus
+    # lancé sous un autre compte que root, et no-new-privileges écarte les
+    # capacités de fichier : le conteneur part donc en root, avec NET_RAW plus
+    # les trois capacités qu'il faut pour en sortir, et setpriv passe aussitôt
+    # au compte node en ne gardant que NET_RAW, transmise aux outils (capacité
+    # ambiante) ; SETUID, SETGID et SETPCAP quittent l'ensemble limite avant
+    # que MapMyLAN ne démarre. Une commande lancée dans le conteneur prend
+    # « -u node » (docker compose exec -u node …).
+    user: "0:0"
+    entrypoint: ["setpriv", "--reuid=node", "--regid=node", "--clear-groups", "--inh-caps=-all,+net_raw", "--ambient-caps=-all,+net_raw", "--bounding-set=-all,+net_raw", "--"]
     cap_drop: [ALL]
-    cap_add: [NET_RAW, NET_ADMIN]
-    # Pas de no-new-privileges ici, et c'est voulu : il empêcherait ces trois
-    # programmes de recevoir leurs capacités de fichier, et le service devrait
-    # alors tourner en root. L'image n'a plus aucun programme setuid.
+    cap_add: [NET_RAW, SETUID, SETGID, SETPCAP]
+    security_opt: ["no-new-privileges:true"]
     mem_limit: 1g
+    cpus: 2.0
     pids_limit: 256
     # Journaux du conteneur, où part aussi le journal de sécurité : gardés par
     # le démon Docker, hors de portée du service, cinq fichiers de 10 Mo.
@@ -79,6 +85,9 @@ services:
       - /run
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
 
 secrets:
   socle_cle:

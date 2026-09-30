@@ -384,3 +384,21 @@ test('ports d’un appareil : un relevé interrompu laisse les ports d’avant',
   db.close();
 });
 
+
+test('conteneur : NET_RAW seule pour MapMyLAN, sans élévation possible, dans les deux manifestes et l’image', () => {
+  const lire = f => fs.readFileSync(path.join(import.meta.dirname, '..', f), 'utf8');
+  for (const f of ['docker-compose.yml', 'deploy/compose.hub.yml']) {
+    const bloc = /^ {2}(?:mapmylan|api):\n([\s\S]*?)(?=^ {2}\S)/m.exec(lire(f))[1];
+    assert.match(bloc, /^ {4}cap_drop: \[ALL\]$/m, f);
+    assert.match(bloc, /^ {4}cap_add: \[NET_RAW, SETUID, SETGID, SETPCAP\]$/m, f);
+    assert.match(bloc, /^ {4}security_opt: \["no-new-privileges:true"\]$/m, f);
+    assert.match(bloc, /^ {4}cpus: /m, f);
+    // Root au lancement seulement : setpriv passe à node et ne garde que NET_RAW.
+    const entree = JSON.parse(/^ {4}entrypoint: (\[.*\])$/m.exec(bloc)[1]);
+    assert.deepEqual(entree.filter(a => /^--(reuid|regid|inh-caps|ambient-caps|bounding-set)=/.test(a)),
+      ['--reuid=node', '--regid=node', '--inh-caps=-all,+net_raw', '--ambient-caps=-all,+net_raw', '--bounding-set=-all,+net_raw'], f);
+  }
+  assert.deepEqual(JSON.parse(lire('hub.json')).permissions.capAdd, ['NET_RAW', 'SETUID', 'SETGID', 'SETPCAP']);
+  assert.doesNotMatch(lire('Dockerfile'), /setcap|NET_ADMIN/);
+  assert.match(lire('Dockerfile'), /^USER node$/m);
+});

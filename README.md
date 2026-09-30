@@ -99,13 +99,15 @@ La clé maîtresse vit hors du volume de données (secret Docker). Renseigner
 `http://<hôte>:8090` (ou l'adresse du relais inverse), coller le jeton, créer
 le compte et ses facteurs.
 
-**Pourquoi ces capacités.** Le conteneur tourne sous `node`, sans aucune
-capacité pour le service. Seuls `nmap`, `arp-scan` et `ping` reçoivent au
-lancement l'accès aux sockets bruts (`NET_RAW`), et `nmap` `NET_ADMIN`, par
-capacités de fichier posées dans l'image ; le conteneur borne à ces deux-là.
-L'option `no-new-privileges` n'est pas posée sur ce conteneur : elle
-empêcherait ces capacités de fichier, et le service devrait tourner en root.
-L'image ne contient plus aucun programme setuid.
+**Pourquoi ces capacités.** `nmap`, `arp-scan` et `ping` ont besoin des
+sockets bruts (`NET_RAW`) et de rien d'autre. Docker ne donne aucune capacité
+à un processus lancé sous un autre compte que root, et `no-new-privileges`
+(posé) écarte les capacités de fichier : le conteneur part donc en root avec
+`NET_RAW`, `SETUID`, `SETGID` et `SETPCAP`, et `setpriv` passe aussitôt au
+compte `node` en ne gardant que `NET_RAW`, transmise aux outils. MapMyLAN
+tourne sous `node`, les trois autres capacités retirées de l'ensemble limite.
+L'image ne contient ni programme setuid ni capacité de fichier. Une commande
+lancée dans le conteneur prend `-u node` (voir « Sauvegardes »).
 
 Sans Docker : Node 24.7 ou plus récent, les outils `nmap arp-scan iputils-ping
 openssh-client avahi-utils samba-common-bin snmp iproute2`, puis `npm start`.
@@ -189,7 +191,7 @@ inscriptible par le groupe ou par tous, ou d'un autre propriétaire, est refusé
 ## Sauvegardes
 
 ```bash
-docker compose exec -T mapmylan node src/cli.js sauvegarde < cle-publique.pem > mapmylan.sauv
+docker compose exec -u node -T mapmylan node src/cli.js sauvegarde < cle-publique.pem > mapmylan.sauv
 node src/cli.js restaurer cle-privee.pem mapmylan.db < mapmylan.sauv   # sur une autre machine
 ```
 

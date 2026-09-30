@@ -1071,8 +1071,10 @@
     "privileged": false,
     "hostNetwork": true,
     "capAdd": [
-      "NET_ADMIN",
-      "NET_RAW"
+      "NET_RAW",
+      "SETUID",
+      "SETGID",
+      "SETPCAP"
     ],
     "egress": [
       "rdap.org",
