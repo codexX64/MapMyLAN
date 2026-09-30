@@ -10,8 +10,8 @@
 // de ses fils, les liaisons se tracent en coudes à angle droit. C'est la
 // lecture d'un schéma de baie, pas celle d'un inventaire.
 //
-// Le module ne dessine rien : il rend des coordonnées. Il n'a donc besoin ni
-// de React ni du DOM, et se vérifie tout seul.
+// Le module ne dessine rien : il rend des coordonnées. Il n'a donc pas besoin
+// du DOM, et se vérifie tout seul.
 
 /** Ce qui fait partie de l'ossature plutôt que des feuilles. */
 const INFRA = new Set(['router', 'gateway', 'firewall', 'switch', 'ap', 'accesspoint']);
