@@ -220,6 +220,8 @@ réécrit l'hôte. MapMyLAN n'est pas fait pour être exposé nu sur Internet.
 ```bash
 npm test                                   # tests du service
 (cd socle && node --test)                  # tests du socle embarqué
+node outils/parcours-navigateur.mjs        # parcours de l'interface dans Chromium (Playwright requis)
+node outils/faux-api.mjs                   # l'interface devant des données inventées, sans réseau
 ```
 
 Les essais démarrent de vrais serveurs locaux : droits de chaque route par
