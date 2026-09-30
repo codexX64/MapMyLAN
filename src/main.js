@@ -42,6 +42,9 @@ const RACINE = path.resolve(import.meta.dirname, '..');
 const CONSOLE = { info: (...a) => console.log(...a), warn: (...a) => console.warn(...a), error: (...a) => console.error(...a) };
 // Signalement privé d'une faille, sur le dépôt : lu par le mainteneur.
 const CONTACT_SECURITE = 'https://github.com/codexX64/MapMyLAN/security/advisories/new';
+// La politique des permissions du socle, à une exception près : la dictée
+// vocale de l'assistant ouvre le micro, depuis la page elle-même seulement.
+const PERMISSIONS = 'camera=(), microphone=(self), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=()';
 
 // Ce qu'une installation neuve contient d'emblée (la 1.4.1 le posait par
 // son script d'amorçage) : les règles de défense par défaut et les réglages
@@ -144,7 +147,7 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
       ctx.url = url;
       const nonce = nonceCsp();
       // blob: pour les images : l'interface détoure localement un logo choisi par l'utilisateur.
-      entetesSecurite(res, { secure: ctx.securise, csp: politiqueContenu({ nonce, secure: ctx.securise, img: ['blob:'] }) });
+      entetesSecurite(res, { secure: ctx.securise, csp: politiqueContenu({ nonce, secure: ctx.securise, img: ['blob:'] }), permissions: PERMISSIONS });
       if (await portail.traiter(req, res, url, ctx)) return;
       if (await api.traiter(ctx)) return;
       if (!['GET', 'HEAD'].includes(req.method)) return repondreJson(res, 405, { error: 'Méthode non admise.' }, { Allow: 'GET, HEAD' });

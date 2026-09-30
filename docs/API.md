@@ -455,3 +455,5 @@ Routes du socle, inchangées : `etat`, `installation`, `connexion` (+ `/totp`,
 - Politique de contenu : celle du socle (`script-src 'self' 'nonce-…'`,
   aucune source tierce), plus `img-src blob:` pour le détourage local d'un
   logo choisi par l'utilisateur.
+- Politique des permissions : celle du socle (toutes les fonctions refusées),
+  sauf `microphone=(self)` pour la dictée vocale de l'assistant.

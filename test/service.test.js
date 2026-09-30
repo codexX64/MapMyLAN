@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import https from 'node:https';
 import { Client } from '../socle/essai/client.js';
 import { certificatEssai } from '../socle/essai/smtp.js';
+import { entetesSecurite } from '../socle/src/index.js';
 import { lancer, administrateur, inviter, renforcer, serveurLocal, ouvrirFlux, ReseauSimule } from './aides.js';
 
 const GRAINE_HUB = 'hub_' + 'e'.repeat(40);
@@ -497,4 +498,14 @@ test('fichiers statiques : interface et socle servis avec leur politique, rien h
   assert.equal((await c.get('/%2e%2e/package.json')).status, 404);
   assert.equal((await c.get('/api/inconnue')).status, 404);
   assert.equal((await c.get('/.well-known/security.txt')).status, 200);
+});
+
+test('permissions : le micro pour la page elle-même, le reste comme la politique du socle', async () => {
+  const socle = {};
+  entetesSecurite({ setHeader: (k, v) => { socle[k] = v; } }, {});
+  const attendue = socle['Permissions-Policy'].replace('microphone=()', 'microphone=(self)');
+  assert.notEqual(attendue, socle['Permissions-Policy']);
+  for (const chemin of ['/', '/api/health', '/api/devices']) {
+    assert.equal((await new Client(o.port).get(chemin)).entetes['permissions-policy'], attendue, chemin);
+  }
 });
