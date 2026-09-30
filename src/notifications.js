@@ -166,8 +166,10 @@ export class Notifications {
     return r;
   }
 
+  // La relève du bot est une tâche de fond : sans planificateur (planifier:
+  // false), elle ne démarre pas davantage quand on enregistre le canal.
   demarrerBot() {
-    if (this.bot.actif || !this.config('telegram')) return;
+    if (this.s.options.planifier === false || this.bot.actif || !this.config('telegram')) return;
     this.bot.actif = true;
     this.bot.arret = new AbortController();
     const signal = this.bot.arret.signal;

@@ -16,11 +16,9 @@ let o, reseau, admin, membre, lecteur, telegram, ollama;
 
 before(async () => {
   reseau = new ReseauSimule();
-  // La relève longue du bot : le faux Telegram fait attendre, comme le vrai.
   telegram = await serveurLocal((req, res) => {
     res.setHeader('content-type', 'application/json');
-    if (req.url.includes('/getUpdates')) setTimeout(() => res.end('{"ok":true,"result":[]}'), 300);
-    else res.end('{"ok":true,"result":{}}');
+    res.end('{"ok":true,"result":{}}');
   });
   ollama = await serveurLocal((req, res) => {
     res.setHeader('content-type', 'application/json');
@@ -399,6 +397,9 @@ test('Telegram : secret jamais rendu, texte échappé, SMS retiré', async () =>
   const pub = await admin.get('/api/notifications/telegram');
   assert.deepEqual(pub.json, { channel: 'telegram', enabled: true, config: { chatId: '42' }, secrets: { token: true } });
   assert.equal((await admin.put('/api/notifications/telegram', { enabled: true, config: { chatId: '43' } })).status, 200, 'un secret omis garde celui en place');
+  await new Promise(r => setTimeout(r, 400));
+  assert.equal(o.s.notifications.bot.actif, false, 'sans tâches de fond, le bot n’écoute pas');
+  assert.ok(!telegram.recues.some(r => r.url.includes('/getUpdates')), 'aucune relève partie vers Telegram');
   const essai = await admin.post('/api/notifications/telegram/test', {});
   assert.equal(essai.json.ok, true, JSON.stringify(essai.json));
   await o.s.notifications.diffuser('critical', 'Appareil <b>inconnu</b>', 'Nom annoncé : <a href="x">clic</a>', { IP: '192.0.2.66' });
