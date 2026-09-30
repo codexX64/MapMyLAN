@@ -39,8 +39,9 @@ function rang(d) {
   if (t === 'firewall') return 1;
   if (t === 'router' || t === 'gateway') return 2;
   if (t === 'switch') return 3;
-  if (INFRA.has(t)) return 4;              // bornes
-  return 5;                                // tout le reste : des feuilles
+  // Les bornes ; tout le reste est une feuille.
+  if (INFRA.has(t)) return 4;
+  return 5;
 }
 
 /** À nature égale, on range par adresse : deux relevés successifs donnent
@@ -73,18 +74,14 @@ function dernierOctet(ip) {
  * Tout appareil sans liaison connue se retrouvait accroché à un point d'accès
  * qui n'avait aucun client, ce qui est faux et se voit tout de suite.
  */
-export function disposerEnArbre(
-  appareils,
-  liens = [],
-) {
+export function disposerEnArbre(appareils, liens = []) {
   const positions = {};
   const troncs = [];
   const rattachements = {};
   if (!appareils.length) return { positions, troncs, rattachements };
 
-  const parId = new Map(appareils.map((d) => [d.id, d]));
-  const ordonner = (a, b) =>
-    rang(a) - rang(b) || dernierOctet(a.ip) - dernierOctet(b.ip);
+  const parId = new Map(appareils.map(d => [d.id, d]));
+  const ordonner = (a, b) => rang(a) - rang(b) || dernierOctet(a.ip) - dernierOctet(b.ip);
 
   const infra = appareils.filter(estInfra).sort(ordonner);
 
@@ -109,7 +106,7 @@ export function disposerEnArbre(
   for (const d of appareils) {
     if (d.mac) parMac.set(String(d.mac).toUpperCase(), d.id);
   }
-  const parLaMac = (m) => (m ? parMac.get(String(m).toUpperCase()) : undefined);
+  const parLaMac = m => (m ? parMac.get(String(m).toUpperCase()) : undefined);
 
   // Les liaisons, indexées par appareil, à la main et automatiques séparées.
   const voisins = new Map();
@@ -129,7 +126,7 @@ export function disposerEnArbre(
   }
 
   /** Ce que le contrôleur a mesuré sur cet appareil, du plus précis au moins. */
-  const mesures = (d) => [
+  const mesures = d => [
     parLaMac(d.uplinkMac),
     parLaMac(d.swMac),
     // La borne ne vaut que pour un appareil dont le média est mesuré sans fil.
@@ -141,11 +138,11 @@ export function disposerEnArbre(
    * qu'à un nœud DÉJÀ placé : c'est ce qui garantit un arbre, même si les
    * mesures ou les liaisons forment une boucle.
    */
-  const passe = (candidats) => {
+  const passe = candidats => {
     let fait = false;
     for (const d of appareils) {
       if (vus.has(d.id)) continue;
-      const pere = candidats(d).find((x) => x && x !== d.id && vus.has(x));
+      const pere = candidats(d).find(x => x && x !== d.id && vus.has(x));
       if (!pere) continue;
       attacher(d.id, pere);
       fait = true;
@@ -169,9 +166,9 @@ export function disposerEnArbre(
   };
 
   for (;;) {
-    if (passe((d) => voisinsManuels.get(d.id) || [])) continue;
+    if (passe(d => voisinsManuels.get(d.id) || [])) continue;
     if (passe(mesures)) continue;
-    if (passe((d) => voisins.get(d.id) || [])) continue;
+    if (passe(d => voisins.get(d.id) || [])) continue;
     if (prochainInfra()) continue;
     break;
   }
@@ -203,7 +200,7 @@ export function disposerEnArbre(
   // ses fils. Deux sous-arbres ne peuvent donc pas se marcher dessus.
   const y = {};
   let ligne = 0;
-  const poser = (id) => {
+  const poser = id => {
     const fils = enfants.get(id) || [];
     if (!fils.length) {
       y[id] = ligne * PAS_LIGNE;
@@ -232,7 +229,7 @@ export function disposerEnArbre(
   for (const [idPere, fils] of enfants) {
     const pp = positions[idPere];
     if (!pp || !fils.length) continue;
-    const ys = fils.map((f) => positions[f]?.y).filter((v) => v !== undefined);
+    const ys = fils.map(f => positions[f]?.y).filter(v => v !== undefined);
     if (!ys.length) continue;
     const y1 = Math.min(...ys), y2 = Math.max(...ys);
     if (y1 === y2) continue;
