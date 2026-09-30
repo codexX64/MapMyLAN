@@ -235,7 +235,7 @@ export function disposerEnArbre(
   for (const [idPere, fils] of enfants) {
     const pp = positions[idPere];
     if (!pp || !fils.length) continue;
-    const ys = fils.map((f) => positions[f]?.y).filter((v) => v !== undefined) ;
+    const ys = fils.map((f) => positions[f]?.y).filter((v) => v !== undefined);
     if (!ys.length) continue;
     const y1 = Math.min(...ys), y2 = Math.max(...ys);
     if (y1 === y2) continue;

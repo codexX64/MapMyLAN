@@ -108,4 +108,3 @@ export function pageReglages() {
         h('div', { class: 'aide', text: 'Une destination hors de cette liste est refusée si elle tombe dans une plage privée. Enregistrer demande une confirmation d’identité récente.' }),
         h('div', { class: 'boutons-debut' }, btn({ solid: true, icone: 'check', onclick: enregistrerSorties }, t('action.save'))))));
 }
-

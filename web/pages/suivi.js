@@ -355,4 +355,3 @@ ${l('Hôtes retenus', m.retenus.length)}${l('Segments', E.vlans.length)}</table>
   peindre();
   return sec;
 }
-
