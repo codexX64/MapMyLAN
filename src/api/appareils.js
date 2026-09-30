@@ -1,6 +1,6 @@
 // Routes de l'inventaire : /api/devices.
 import { Debit, ErreurHttp } from '../../socle/src/index.js';
-import { nouvelId, transaction } from '../db.js';
+import { modifierLigne, nouvelId, transaction } from '../db.js';
 import * as F from '../formes.js';
 import { dedoublonner, fusionner, suggestionsRegroupement } from '../inventaire.js';
 import { plageUtilisable, verifierAdresse } from '../vlans.js';
@@ -202,8 +202,7 @@ export function routesAppareils(route, s, acces) {
     const i = iface(d.id, ctx.params.ifaceId);
     const b = { ...ctx.corps };
     if (b.mac) { b.mac = b.mac.replace(/-/g, ':').toUpperCase(); macLibre(b.mac, i.id); }
-    const cles = Object.keys(b).filter(k => ['mac', 'ip', 'type', 'label', 'posX', 'posY', 'isPrimary'].includes(k));
-    if (cles.length) db.prepare(`UPDATE interfaces SET ${cles.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cles.map(k => (typeof b[k] === 'boolean' ? (b[k] ? 1 : 0) : b[k])), i.id);
+    modifierLigne(db, 'interfaces', i.id, b, ['mac', 'ip', 'type', 'label', 'posX', 'posY', 'isPrimary']);
     s.evts.emettre('topology:updated');
     return F.interfaceReseau(db.prepare('SELECT * FROM interfaces WHERE id = ?').get(i.id));
   }, { role: 'membre', corps: { ...INTERFACE, isPrimary: { type: 'booleen' } }, effacables: ['mac', 'ip', 'label', 'posX', 'posY'] });

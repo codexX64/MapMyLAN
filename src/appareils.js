@@ -1,5 +1,5 @@
 // L'inventaire : appareils, leurs ports, CVE, interfaces et historique.
-import { nouvelId, transaction } from './db.js';
+import { modifierLigne, nouvelId, transaction } from './db.js';
 import * as F from './formes.js';
 
 const grouper = (lignes, cle = 'deviceId') => {
@@ -57,16 +57,11 @@ export class Appareils {
     return this.ligne(d.id);
   }
 
-  // Mise à jour d'une liste fermée de colonnes : le nom d'une colonne ne
-  // vient jamais d'une requête.
   modifier(id, champs) {
     const COLONNES = ['ip', 'mac', 'hostname', 'customName', 'vendor', 'model', 'os', 'type', 'customType', 'vlan', 'zone', 'tags', 'notes', 'role', 'status',
       'trustScore', 'activityScore', 'vulnScore', 'dangerScore', 'scoreReasons', 'whitelisted', 'isMainRouter', 'posX', 'posY', 'pinned', 'lastSeen', 'metadata'];
-    const cles = Object.keys(champs).filter(k => COLONNES.includes(k));
-    if (!cles.length) return this.ligne(id);
-    const valeur = (k, v) => (['tags', 'scoreReasons', 'metadata'].includes(k) && v !== null && typeof v === 'object' ? JSON.stringify(v)
-      : typeof v === 'boolean' ? (v ? 1 : 0) : v);
-    this.db.prepare(`UPDATE appareils SET ${cles.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cles.map(k => valeur(k, champs[k])), id);
+    const enJson = ['tags', 'scoreReasons', 'metadata'].filter(k => champs[k] !== null && typeof champs[k] === 'object');
+    modifierLigne(this.db, 'appareils', id, { ...champs, ...Object.fromEntries(enJson.map(k => [k, JSON.stringify(champs[k])])) }, COLONNES);
     return this.ligne(id);
   }
 

@@ -1,6 +1,7 @@
 // Routes du service : santé, tableau de bord, alertes, journal, réglages,
 // règles, notifications, machine hôte, jetons d'intégration et flux temps réel.
 import { Debit, ErreurHttp, valider } from '../../socle/src/index.js';
+import { modifierLigne } from '../db.js';
 import * as F from '../formes.js';
 import { VERSION } from '../config.js';
 import { CLES } from '../reglages.js';
@@ -103,8 +104,7 @@ export function routesSysteme(route, s, acces) {
     const r = ID.test(ctx.params.id) && db.prepare('SELECT * FROM regles WHERE id = ?').get(ctx.params.id);
     if (!r) throw new ErreurHttp(404, 'Règle introuvable.');
     const b = ctx.corps;
-    const cles = ['name', 'enabled', 'threshold', 'action', 'exceptWhitelist'].filter(k => k in b);
-    if (cles.length) db.prepare(`UPDATE regles SET ${cles.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cles.map(k => (typeof b[k] === 'boolean' ? (b[k] ? 1 : 0) : b[k])), r.id);
+    modifierLigne(db, 'regles', r.id, b, ['name', 'enabled', 'threshold', 'action', 'exceptWhitelist']);
     acces.tracer(ctx, 'regle.modifiee', r.id, b);
     return F.regle(db.prepare('SELECT * FROM regles WHERE id = ?').get(r.id));
   }, {

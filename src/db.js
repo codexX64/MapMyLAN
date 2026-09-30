@@ -190,6 +190,18 @@ export function ouvrirBase(dossier, nom = 'mapmylan.db') {
   return db;
 }
 
+// Les colonnes reçues d'une ligne, prises dans une liste fermée : le nom d'une
+// colonne ne vient jamais d'une requête. Un champ absent ne change rien, null
+// efface, un booléen s'écrit 0 ou 1 ; `toujours` s'écrit même sans autre
+// changement (une date de mise à jour).
+export function modifierLigne(db, table, id, champs, colonnes, toujours = {}) {
+  const valeurs = {};
+  for (const k of colonnes) if (champs[k] !== undefined) valeurs[k] = typeof champs[k] === 'boolean' ? Number(champs[k]) : champs[k];
+  Object.assign(valeurs, toujours);
+  const cles = Object.keys(valeurs);
+  if (cles.length) db.prepare(`UPDATE ${table} SET ${cles.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cles.map(k => valeurs[k]), id);
+}
+
 // Plusieurs écritures, toutes ou aucune. Réentrant : une transaction ouverte
 // par l'appelant (celle du socle à la suppression d'un compte, par exemple)
 // est réutilisée plutôt que doublée.

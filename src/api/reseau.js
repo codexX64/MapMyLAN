@@ -1,6 +1,6 @@
 // Routes du réseau lui-même : VLAN, équipement principal, consoles SSH et carte.
 import { ErreurHttp } from '../../socle/src/index.js';
-import { nouvelId, transaction } from '../db.js';
+import { modifierLigne, nouvelId, transaction } from '../db.js';
 import * as F from '../formes.js';
 import { adaptateur, catalogue, reconnaitre as parBanniere } from '../adaptateurs/index.js';
 import { exigerUrlEquipement } from '../adaptateurs/session.js';
@@ -102,8 +102,7 @@ export function routesReseau(route, s, acces) {
     const v = numeroVlan(ctx.params.id);
     const b = { ...ctx.corps };
     if (b.subnet) b.subnet = vlans.valider(b);
-    const cles = ['name', 'subnet', 'color', 'description', 'isolated'].filter(k => k in b);
-    if (cles.length) db.prepare(`UPDATE vlans SET ${cles.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cles.map(k => (typeof b[k] === 'boolean' ? (b[k] ? 1 : 0) : b[k])), v.id);
+    modifierLigne(db, 'vlans', v.id, b, ['name', 'subnet', 'color', 'description', 'isolated']);
     return F.vlan(db.prepare('SELECT * FROM vlans WHERE id = ?').get(v.id));
   }, { role: 'membre', corps: VLAN, effacables: ['description'] });
 
@@ -297,9 +296,8 @@ export function routesReseau(route, s, acces) {
     const b = { ...ctx.corps };
     if ('fromIfaceId' in b) b.fromIfaceId = interfaceDe(b.fromIfaceId, l.fromId);
     if ('toIfaceId' in b) b.toIfaceId = interfaceDe(b.toIfaceId, l.toId);
-    const cles = ['type', 'speed', 'vlan', 'fromIfaceId', 'toIfaceId'].filter(k => k in b);
     try {
-      if (cles.length) db.prepare(`UPDATE liens SET ${cles.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cles.map(k => b[k]), l.id);
+      modifierLigne(db, 'liens', l.id, b, ['type', 'speed', 'vlan', 'fromIfaceId', 'toIfaceId']);
     } catch (e) {
       if (/UNIQUE/.test(e.message)) throw new ErreurHttp(409, 'Ce lien existe déjà.');
       throw e;
@@ -336,9 +334,7 @@ export function routesReseau(route, s, acces) {
 
   route.patch('/api/topology/zones/:id', ctx => {
     const z = zone(ctx.params.id);
-    const b = ctx.corps;
-    const cles = ['name', 'color', 'x', 'y', 'width', 'height', 'notes'].filter(k => k in b);
-    if (cles.length) db.prepare(`UPDATE zones SET ${cles.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...cles.map(k => b[k]), z.id);
+    modifierLigne(db, 'zones', z.id, ctx.corps, ['name', 'color', 'x', 'y', 'width', 'height', 'notes']);
     s.evts.emettre('topology:updated');
     return F.zone(zone(z.id));
   }, { role: 'membre', corps: ZONE, effacables: ['notes'] });

@@ -3,7 +3,7 @@
 // lancer une commande SSH) : leur écriture est réservée aux administrateurs,
 // sous renfort.
 import { ErreurHttp } from '../../socle/src/index.js';
-import { nouvelId } from '../db.js';
+import { modifierLigne, nouvelId } from '../db.js';
 import * as F from '../formes.js';
 import { ACTIONS, DECLENCHEURS, IDS_DECLENCHEURS } from '../commandes.js';
 import { ACTIONS_BOT, IDS_ACTIONS_BOT } from '../commandes-bot.js';
@@ -85,14 +85,12 @@ export function routesAutomatisation(route, s, acces) {
     const b = ctx.corps;
     if (b.actions) verifierActions(b.actions);
     const valeurs = {
-      name: b.name, trigger: b.trigger, template: b.template, cooldownSec: b.cooldownSec,
-      enabled: b.enabled === undefined ? undefined : b.enabled ? 1 : 0,
+      name: b.name, trigger: b.trigger, template: b.template, cooldownSec: b.cooldownSec, enabled: b.enabled,
       filter: b.filter === undefined ? undefined : b.filter === null ? null : JSON.stringify(b.filter),
       actions: b.actions === undefined ? undefined : JSON.stringify(b.actions),
     };
-    const cles = Object.keys(valeurs).filter(k => valeurs[k] !== undefined);
-    db.prepare(`UPDATE commandes SET ${[...cles.map(k => `${k} = ?`), 'updatedAt = ?'].join(', ')} WHERE id = ?`).run(...cles.map(k => valeurs[k]), Date.now(), c.id);
-    acces.tracer(ctx, 'commande.modifiee', c.id, { champs: cles });
+    modifierLigne(db, 'commandes', c.id, valeurs, Object.keys(valeurs), { updatedAt: Date.now() });
+    acces.tracer(ctx, 'commande.modifiee', c.id, { champs: Object.keys(valeurs).filter(k => valeurs[k] !== undefined) });
     return F.commande(commande(c.id));
   }, { role: 'admin', renfort: true, corps: COMMANDE, effacables: ['filter', 'template'] });
 
@@ -134,12 +132,11 @@ export function routesAutomatisation(route, s, acces) {
     const valeurs = {
       trigger: b.trigger === undefined ? undefined : declencheur(b.trigger), description: b.description, action: b.action,
       params: b.params === undefined ? undefined : b.params === null ? null : JSON.stringify(b.params),
-      enabled: b.enabled === undefined ? undefined : b.enabled ? 1 : 0, confirm: b.confirm === undefined ? undefined : b.confirm ? 1 : 0,
+      enabled: b.enabled, confirm: b.confirm,
       allowedChatIds: b.allowedChatIds === undefined ? undefined : JSON.stringify(b.allowedChatIds), cooldownSec: b.cooldownSec,
     };
-    const cles = Object.keys(valeurs).filter(k => valeurs[k] !== undefined);
-    unique(() => db.prepare(`UPDATE commandes_bot SET ${[...cles.map(k => `${k} = ?`), 'updatedAt = ?'].join(', ')} WHERE id = ?`).run(...cles.map(k => valeurs[k]), Date.now(), c.id));
-    acces.tracer(ctx, 'commande-bot.modifiee', c.id, { champs: cles });
+    unique(() => modifierLigne(db, 'commandes_bot', c.id, valeurs, Object.keys(valeurs), { updatedAt: Date.now() }));
+    acces.tracer(ctx, 'commande-bot.modifiee', c.id, { champs: Object.keys(valeurs).filter(k => valeurs[k] !== undefined) });
     return F.commandeBot(commandeBot(c.id));
   }, { role: 'admin', renfort: true, corps: COMMANDE_BOT, effacables: ['description', 'params'] });
 
