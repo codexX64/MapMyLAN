@@ -165,7 +165,7 @@ const PICTO_TYPE = {
   ap: 'air', accesspoint: 'air', server: 'server', nas: 'server',
   computer: 'chip', laptop: 'chip', desktop: 'chip', pc: 'chip',
   phone: 'chip', tablet: 'chip', printer: 'printer', camera: 'cam',
-  iot: 'plug', plug: 'plug', tv: 'eye', console: 'chip',
+  iot: 'plug', plug: 'plug', sensor: 'plug', tv: 'eye', console: 'chip',
   pi: 'pi', raspberry: 'pi', docker: 'server', container: 'server', vm: 'server',
   hypervisor: 'server', voip: 'chip', unknown: 'unknown',
 };

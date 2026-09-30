@@ -152,6 +152,9 @@ test('inventaire : création, champ effacé, protections réservées, objets d�
     assert.equal(r.status, 200, `${type} : ${JSON.stringify(r.json)}`);
     assert.equal(r.json.customType, type, 'le type choisi à l’ajout manuel est gardé tel quel');
   }
+  // Ceux que la fiche de la 1.4.1 proposait, et qu'une reprise apporte.
+  for (const type of ['computer', 'sensor']) assert.equal((await membre.patch(`/api/devices/${b.json.id}`, { customType: type })).json.customType, type);
+  assert.equal((await membre.patch(`/api/devices/${b.json.id}`, { customType: 'frigo' })).status, 400);
   assert.equal((await membre.patch(`/api/devices/${a.json.id}`, { notes: null, tags: ['baie', 'critique'] })).json.notes, null);
   assert.equal((await membre.patch(`/api/devices/${a.json.id}`, { whitelisted: true })).status, 403);
   assert.equal((await admin.patch(`/api/devices/${a.json.id}`, { whitelisted: true })).json.whitelisted, true);

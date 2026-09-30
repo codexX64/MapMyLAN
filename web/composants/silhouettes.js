@@ -28,7 +28,7 @@ const FAMILLE = {
   phone: 'mobile', tablet: 'mobile',
   printer: 'imprimante',
   camera: 'camera',
-  iot: 'objet', plug: 'objet',
+  iot: 'objet', plug: 'objet', sensor: 'objet',
   tv: 'ecran', console: 'ecran',
   unknown: 'inconnu',
   chip: 'ordinateur', air: 'borne', cam: 'camera', eye: 'ecran', shield: 'routeur',
