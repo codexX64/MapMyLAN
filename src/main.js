@@ -112,7 +112,8 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
   s.registre = new Registre({ sortie: s.sortie, reglages: s.reglages });
   s.logos = new Logos({ sortie: s.sortie, reglages: s.reglages });
   s.hote = new Hote({ cfg, db, plages: () => s.scanner.plagesActives().map(p => p.cidr) });
-  s.plafond = new Plafond({ db, cfg, journal, comptes });
+  s.plafond = new Plafond({ db, journal, comptes, parCompte: cfg.iaJour, total: cfg.iaJourTotal });
+  s.plafondVoix = new Plafond({ db, journal, comptes, parCompte: cfg.voixJour, total: cfg.voixJourTotal, usage: 'voix' });
   for (const [nom, Classe] of [['scanner', Scanner], ['scores', Scores], ['defense', Defense], ['enrichissement', Enrichissement], ['vlans', Vlans],
     ['notifications', Notifications], ['commandes', Commandes], ['consoles', Consoles], ['bot', CommandesBot], ['trafic', Trafic], ['assistant', Assistant]]) s[nom] = new Classe(s);
   s.flux = new Flux({ evts: s.evts, comptes, ...(options.fluxControleMs ? { controleMs: options.fluxControleMs } : {}) });
@@ -131,7 +132,7 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
   comptes.apresSuppression.push(id => {
     s.assistant.arreter(id);
     db.prepare('DELETE FROM assistant_tours WHERE compte = ?').run(id);
-    db.prepare('DELETE FROM quotas_ia WHERE qui = ?').run(`compte:${id}`);
+    for (const p of [s.plafond, s.plafondVoix]) p.effacer(`compte:${id}`);
   });
   portail.exporteur = async id => ({
     assistant: s.assistant.fil(id),

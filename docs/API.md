@@ -68,7 +68,7 @@ traiter : `POST /api/compte/renfort`, puis rejouer la requête).
 
 600 requêtes par minute et par adresse, 120 par minute et par jeton
 d'intégration ; quotas propres aux actions coûteuses (balayage, balayage
-approfondi, ping, registres, logos, assistant) : 429 au-delà.
+approfondi, ping, registres, logos, assistant, voix) : 429 au-delà.
 
 Aucune liste n'est rendue sans borne : les paramètres `limit`/`limite` sont
 bornés par leur schéma, et les listes sans paramètre ont un plafond fixe
@@ -433,14 +433,16 @@ clair) est refusé. Certificats toujours vérifiés.
 | POST | `/api/assistant/stop` | lecture | `{}` | `{ arrete }` |
 | POST | `/api/assistant/nouvelle` | lecture | `{}` | `{ ok: true }` |
 | GET | `/api/assistant/voix` | lecture | — | `{ disponible, raison }` |
-| POST | `/api/assistant/voix/transcrire` | lecture | audio brut, `Content-Type: audio/*` (415 sinon), ≤ 12 Mo | `{ texte, arret, ms }` (409 sans VOX, 502 si VOX échoue ; 20 par minute avec `dire`) |
+| POST | `/api/assistant/voix/transcrire` | lecture | audio brut, `Content-Type: audio/*` (415 sinon), ≤ 12 Mo | `{ texte, arret, ms }` (409 sans VOX, 502 si VOX échoue ; 20 par minute avec `dire`, **[2.0]** plafond journalier de la voix) |
 | POST | `/api/assistant/voix/dire` | lecture | `{ text: 1-1500 }` | audio (`Content-Type` de VOX) |
 
 `Tour { id, request, reply, widgets, duree, modele, voix, parole?, relais?, sources?, le }` — le fil est
 propre à chaque compte. **[2.0]** Plafond journalier d'appels à l'IA par
 compte et pour l'instance (429 au-delà, les administrateurs sont prévenus une
 fois par jour), et par minute par compte. Les réponses directes (sans modèle)
-ne comptent pas.
+ne comptent pas. **[2.0]** La voix a son propre plafond journalier, par compte
+et pour l'instance : chaque transcription et chaque lecture confiée à VOX
+compte (429 au-delà, les administrateurs sont prévenus).
 
 ### Comptes — `/api/compte/*` (socle)
 

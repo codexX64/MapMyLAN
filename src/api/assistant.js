@@ -1,6 +1,6 @@
 // Routes de l'assistant : le fil (propre à chaque compte), les questions,
-// la voix (VOX). Les appels au modèle sont plafonnés par compte, par minute
-// et par jour, et pour l'instance entière.
+// la voix (VOX). Les appels au modèle et à VOX sont plafonnés par compte, par
+// minute et par jour, et pour l'instance entière.
 import { Debit, ErreurHttp } from '../../socle/src/index.js';
 import { prendrePhoto } from '../assistant/photo.js';
 import { relances } from '../assistant/index.js';
@@ -16,12 +16,15 @@ async function relayer(fn) {
 }
 
 export function routesAssistant(route, s) {
-  const { assistant, liaisons, plafond } = s;
+  const { assistant, liaisons, plafond, plafondVoix } = s;
   const parMinute = new Debit({ max: s.cfg.iaMinute });
   const voix = new Debit({ max: 20 });
   const qui = ctx => `compte:${ctx.acteur.compte}`;
   const payer = ctx => () => {
     if (!plafond.prendre(qui(ctx))) throw new ErreurHttp(429, 'Plafond journalier de l’assistant atteint : réessaie demain, les administrateurs sont prévenus.');
+  };
+  const payerVoix = ctx => () => {
+    if (!plafondVoix.prendre(qui(ctx))) throw new ErreurHttp(429, 'Plafond journalier de la voix atteint : réessaie demain, les administrateurs sont prévenus.');
   };
 
   route.get('/api/assistant', async ctx => {
@@ -48,12 +51,12 @@ export function routesAssistant(route, s) {
 
   route.post('/api/assistant/voix/transcrire', ctx => {
     if (!voix.prendre(ctx.acteur.compte)) throw new ErreurHttp(429, 'Trop de transcriptions : attends une minute.');
-    return relayer(() => liaisons.transcrire(ctx.brut));
+    return relayer(() => liaisons.transcrire(ctx.brut, { payer: payerVoix(ctx) }));
   }, { role: 'lecture', brut: 'audio/', limite: 12 * 1048576 });
 
   route.post('/api/assistant/voix/dire', async ctx => {
     if (!voix.prendre(ctx.acteur.compte)) throw new ErreurHttp(429, 'Trop de lectures : attends une minute.');
-    const { son, type } = await relayer(() => liaisons.dire(ctx.corps.text));
+    const { son, type } = await relayer(() => liaisons.dire(ctx.corps.text, { payer: payerVoix(ctx) }));
     ctx.res.writeHead(200, { 'Content-Type': type, 'Content-Length': son.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
     ctx.res.end(son);
   }, { role: 'lecture', corps: { text: { type: 'chaine', requis: true, min: 1, max: 1500 } } });

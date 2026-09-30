@@ -263,6 +263,23 @@
       "default": 1000,
       "min": 1,
       "advanced": true
+    },
+    {
+      "key": "MAPMYLAN_VOIX_JOUR",
+      "label": "Transcriptions et lectures de la voix par compte et par jour",
+      "type": "number",
+      "default": 400,
+      "min": 1,
+      "advanced": true,
+      "help": "Plafond d'appels à VOX (dictée et lecture des réponses) par compte et par jour ; les administrateurs sont prévenus quand il est atteint."
+    },
+    {
+      "key": "MAPMYLAN_VOIX_JOUR_TOTAL",
+      "label": "Transcriptions et lectures de la voix par jour, pour toute l'instance",
+      "type": "number",
+      "default": 2000,
+      "min": 1,
+      "advanced": true
     }
   ],
   "api": {

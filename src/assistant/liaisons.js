@@ -87,9 +87,12 @@ export class Liaisons {
     return etat;
   }
 
-  async transcrire(audio) {
+  // payer : compte l'appel sous le plafond de la voix, ou lève ; seulement
+  // quand VOX va vraiment travailler.
+  async transcrire(audio, { payer }) {
     if (!audio?.length) throw new ErreurLiaison('Audio vide.', 400);
     if (!this.cfg.voxUrl) throw new ErreurLiaison('VOX n’est pas relié à MapMyLAN.', 409);
+    payer();
     let r;
     try { r = await this.fetch(`${this.cfg.voxUrl}/v1/transcrire`, { method: 'POST', redirect: 'error', headers: { ...this.entetesVox(), 'content-type': 'audio/wav' }, body: audio, signal: AbortSignal.timeout(45_000) }); } catch { throw new ErreurLiaison('VOX est injoignable.'); }
     const j = await r.json().catch(() => ({}));
@@ -98,10 +101,11 @@ export class Liaisons {
     return { texte, arret: MOTS_ARRET.test(texte), ms: Number.isFinite(j.ms) ? j.ms : null };
   }
 
-  async dire(texte) {
+  async dire(texte, { payer }) {
     const t = String(texte || '').trim();
     if (!t) throw new ErreurLiaison('Rien à dire.', 400);
     if (!this.cfg.voxUrl) throw new ErreurLiaison('VOX n’est pas relié à MapMyLAN.', 409);
+    payer();
     let r;
     try { r = await this.fetch(`${this.cfg.voxUrl}/v1/dire`, { method: 'POST', redirect: 'error', headers: { ...this.entetesVox(), 'content-type': 'application/json' }, body: JSON.stringify({ text: t.slice(0, 1500) }), signal: AbortSignal.timeout(30_000) }); } catch { throw new ErreurLiaison('VOX est injoignable.'); }
     if (!r.ok) throw new ErreurLiaison(`VOX a répondu une erreur (HTTP ${r.status}).`);

@@ -44,6 +44,8 @@ services:
       INTEGRATION_TOKEN_SEED: "{{config.HUB_TOKEN}}"
       MAPMYLAN_IA_JOUR: "{{config.MAPMYLAN_IA_JOUR}}"
       MAPMYLAN_IA_JOUR_TOTAL: "{{config.MAPMYLAN_IA_JOUR_TOTAL}}"
+      MAPMYLAN_VOIX_JOUR: "{{config.MAPMYLAN_VOIX_JOUR}}"
+      MAPMYLAN_VOIX_JOUR_TOTAL: "{{config.MAPMYLAN_VOIX_JOUR_TOTAL}}"
       # L'assistant. Le Hub pose ces adresses quand Ollama et VOX existent, et
       # redéploie MapMyLAN quand l'un d'eux arrive. Adresses « vues de la
       # machine » (hostUrl) : ce conteneur est en réseau hôte.

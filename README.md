@@ -166,6 +166,7 @@ invalide arrête MapMyLAN au démarrage avec la liste des erreurs.
 | `VOX_URL` / `VOX_JETON` | voix | — |
 | `SYNAPSE_URL` / `SYNAPSE_JETON` | mémoire partagée | — |
 | `MAPMYLAN_IA_JOUR` / `_JOUR_TOTAL` / `_MINUTE` | plafonds d'appels au modèle : par compte et par jour, instance par jour, par compte et par minute | `200` / `1000` / `10` |
+| `MAPMYLAN_VOIX_JOUR` / `_JOUR_TOTAL` | plafonds de transcriptions et de lectures par VOX : par compte et par jour, instance par jour | `400` / `2000` |
 | `POSTE_URL` / `POSTE_FROM` / `POSTE_SEND_KEY` / `POSTE_ALIAS` | relais d'envoi « Poste » (https) | — |
 | `SERVICE_UI` | adresse de MapMyLAN pour un humain | — |
 | `EXTENSIONS_DIR` | dossier des extensions (lecture seule) | — |

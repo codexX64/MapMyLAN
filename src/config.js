@@ -38,10 +38,13 @@ export const SPEC = {
   prefixeRegroupement: { env: 'GROUPING_PREFIX', type: 'chaine', motif: /^\d{1,3}\.\d{1,3}$/ },
   extensions: { env: 'EXTENSIONS_DIR', type: 'chaine', motif: /^\/[\w./-]{0,200}$/ },
   // Plafonds de l'assistant (SEC-LLM-002) : par compte et par jour, pour toute
-  // l'instance et par jour, par compte et par minute.
+  // l'instance et par jour, par compte et par minute. La voix a les siens :
+  // une question dictée puis lue coûte une transcription et une lecture.
   iaJour: { env: 'MAPMYLAN_IA_JOUR', type: 'entier', min: 1, max: 100000, defaut: 200 },
   iaJourTotal: { env: 'MAPMYLAN_IA_JOUR_TOTAL', type: 'entier', min: 1, max: 1000000, defaut: 1000 },
   iaMinute: { env: 'MAPMYLAN_IA_MINUTE', type: 'entier', min: 1, max: 600, defaut: 10 },
+  voixJour: { env: 'MAPMYLAN_VOIX_JOUR', type: 'entier', min: 1, max: 100000, defaut: 400 },
+  voixJourTotal: { env: 'MAPMYLAN_VOIX_JOUR_TOTAL', type: 'entier', min: 1, max: 1000000, defaut: 2000 },
 };
 
 export function lireConfigMapmylan(env = process.env) {
