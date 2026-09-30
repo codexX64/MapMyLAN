@@ -19,8 +19,8 @@
 // PowerEdge R640 sur sa vignette — il faut une image fournie par
 // l'exploitant sur son installation, ce que fait déjà la photo d'appareil.
 //
-// Enfin, c'est une heuristique : elle affine une supposition, elle ne prétend
-// pas identifier. En cas de doute, elle rend la main au type.
+// C'est une heuristique : elle affine une supposition, elle ne prétend pas
+// identifier. En cas de doute, elle rend la main au type.
 
 /** Un motif reconnu → la famille de dessin de `composants/silhouettes.js`.
  *
