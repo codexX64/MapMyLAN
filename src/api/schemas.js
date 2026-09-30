@@ -5,7 +5,9 @@ export const CIDR = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0
 export const ID = /^[A-Za-z0-9_-]{6,80}$/;
 export const COULEUR = /^#[0-9a-fA-F]{6}$/;
 export const HOTE = /^(?!-)[A-Za-z0-9.-]{1,253}$/;
-export const TYPES_APPAREIL = ['router', 'firewall', 'switch', 'ap', 'server', 'nas', 'hypervisor', 'docker', 'pc', 'laptop', 'phone', 'tablet', 'printer', 'camera', 'tv', 'console', 'pi', 'iot', 'voip', 'unknown'];
+// Ceux que le classement produit, plus « vm » et « container », que l'ajout
+// manuel de la 1.4.1 proposait.
+export const TYPES_APPAREIL = ['router', 'firewall', 'switch', 'ap', 'server', 'nas', 'hypervisor', 'docker', 'vm', 'container', 'pc', 'laptop', 'phone', 'tablet', 'printer', 'camera', 'tv', 'console', 'pi', 'iot', 'voip', 'unknown'];
 
 export const nom = (max = 80, requis = false) => ({ type: 'chaine', max, ...(requis ? { requis, min: 1 } : {}) });
 export const texte = (max = 4000) => ({ type: 'chaine', max });

@@ -22,7 +22,7 @@ const FAMILLE = {
   router: 'routeur', gateway: 'routeur', firewall: 'routeur',
   switch: 'commutateur',
   ap: 'borne', accesspoint: 'borne',
-  server: 'serveur', nas: 'serveur', docker: 'serveur', vm: 'serveur',
+  server: 'serveur', nas: 'serveur', docker: 'serveur', container: 'serveur', vm: 'serveur',
   pi: 'carte', raspberry: 'carte',
   computer: 'ordinateur', laptop: 'ordinateur', desktop: 'ordinateur', pc: 'ordinateur',
   phone: 'mobile', tablet: 'mobile',

@@ -191,7 +191,7 @@ export function carteTopologie(p, { agencement, surAgencement }) {
       if (ty === 'firewall') return 0;
       if (ty === 'router' || d.isMainRouter) return 1;
       if (ty === 'switch' || ty === 'ap') return 2;
-      if (ty === 'server' || ty === 'nas' || ty === 'vm' || ty === 'docker') return 3;
+      if (ty === 'server' || ty === 'nas' || ty === 'vm' || ty === 'docker' || ty === 'container') return 3;
       return 4 + (segmentDe(d) % 2);
     };
     const etages = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [] };
@@ -788,9 +788,6 @@ const TYPES_MANUELS = [
   ['camera', '📷', 'Camera'], ['tv', '📺', 'TV / Media'], ['console', '🎮', 'Console'], ['iot', '⚡', 'IoT'],
   ['vm', '📦', 'VM'], ['container', '🐳', 'Container'], ['unknown', '❓', 'Unknown'],
 ];
-// Le serveur n'a pas de type « machine virtuelle » ni « conteneur » : ils
-// s'enregistrent sous ceux qu'il connaît et qui en portent le picto.
-const TYPE_ADMIS = { vm: 'server', container: 'docker' };
 
 function fenetreAppareil(enregistrer) {
   const f = { customName: '', type: 'switch', vendor: '', model: '', ip: '', mac: '', hostname: '', notes: '' };
@@ -826,8 +823,7 @@ function fenetreAppareil(enregistrer) {
           // où il attend une chaîne.
           const facultatifs = Object.fromEntries(['hostname', 'ip', 'mac', 'vendor', 'model', 'notes']
             .filter(k => String(f[k]).trim()).map(k => [k, String(f[k]).trim()]));
-          const type = TYPE_ADMIS[f.type] || f.type;
-          await enregistrer({ customName: f.customName, type, customType: type, ...facultatifs });
+          await enregistrer({ customName: f.customName, type: f.type, customType: f.type, ...facultatifs });
           fermer();
         } catch (e) { toast(e.message, true); ajouter.disabled = false; ajouter.textContent = 'Add device'; }
       });

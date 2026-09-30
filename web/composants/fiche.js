@@ -14,13 +14,13 @@ import { composer, partieHote, verifier } from '../lib/adresses.js';
 import { photoAppareil } from './photo.js';
 
 // Catalogue des types proposés à la main. La valeur est ce qui est enregistré
-// dans customType ; c'est elle qui choisit le picto partout ailleurs. La
-// liste est exactement celle que le serveur admet (et que son classement
-// produit) : un type hors liste serait refusé à l'enregistrement.
+// dans customType ; c'est elle qui choisit le picto partout ailleurs. Chacun
+// est admis par le serveur : un type hors de sa liste serait refusé à
+// l'enregistrement (« container » ne se propose qu'à l'ajout manuel, comme en 1.4.1).
 const TYPES = [
   ['router', 'Passerelle'], ['switch', 'Commutateur'], ['ap', 'Borne sans fil'],
   ['firewall', 'Pare-feu'], ['server', 'Serveur'], ['nas', 'Stockage'],
-  ['hypervisor', 'Hyperviseur'], ['docker', 'Conteneur'], ['pc', 'Ordinateur'],
+  ['hypervisor', 'Hyperviseur'], ['vm', 'Machine virtuelle'], ['docker', 'Conteneur'], ['pc', 'Ordinateur'],
   ['laptop', 'Portable'], ['phone', 'Téléphone'], ['tablet', 'Tablette'],
   ['printer', 'Imprimante'], ['camera', 'Caméra'], ['tv', 'Téléviseur'],
   ['console', 'Console'], ['iot', 'Objet connecté'], ['pi', 'Nano-ordinateur'],

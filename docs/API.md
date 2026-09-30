@@ -177,6 +177,7 @@ au moins un parmi `customName`, `hostname`, `ip`, `mac`.
 `PATCH /api/devices/:id` : `{ customName?, customType?, vendor?, model?, vlan?: int|null, zone?, tags?: string[], notes?, role?, whitelisted?, isMainRouter?, posX?, posY?, pinned?, type? }`.
 Effaçables : `customName`, `customType`, `vendor`, `model`, `vlan`, `zone`, `notes`, `role`, `posX`, `posY`.
 `vlan` doit désigner un VLAN existant (400 sinon). Interfaces : `mac`, `ip`, `label`, `posX`, `posY` effaçables.
+`type` et `customType` (ici et dans `POST /api/devices/manual`) : `router`, `firewall`, `switch`, `ap`, `server`, `nas`, `hypervisor`, `docker`, `vm`, `container`, `pc`, `laptop`, `phone`, `tablet`, `printer`, `camera`, `tv`, `console`, `pi`, `iot`, `voip`, `unknown` (400 sinon).
 
 **[2.0]** `subnet` de `POST /api/devices/scan` : une plage déclarée (Réglages
 → plages de balayage, ou sous-réseau d'un VLAN), préfixe /16 ou plus étroit ;

@@ -146,6 +146,11 @@ test('inventaire : création, champ effacé, protections réservées, objets d�
   assert.equal(a.json.mac, 'AA:BB:CC:00:00:10');
   assert.match(a.json.id, /^[A-Za-z0-9_-]{16}$/, 'identifiant aléatoire');
   const b = await membre.post('/api/devices/manual', { ip: '192.0.2.11', customName: 'camera-7' });
+  for (const type of ['vm', 'container']) {
+    const r = await membre.post('/api/devices/manual', { customName: `${type}-3`, type, customType: type });
+    assert.equal(r.status, 200, `${type} : ${JSON.stringify(r.json)}`);
+    assert.equal(r.json.customType, type, 'le type choisi à l’ajout manuel est gardé tel quel');
+  }
   assert.equal((await membre.patch(`/api/devices/${a.json.id}`, { notes: null, tags: ['baie', 'critique'] })).json.notes, null);
   assert.equal((await membre.patch(`/api/devices/${a.json.id}`, { whitelisted: true })).status, 403);
   assert.equal((await admin.patch(`/api/devices/${a.json.id}`, { whitelisted: true })).json.whitelisted, true);
