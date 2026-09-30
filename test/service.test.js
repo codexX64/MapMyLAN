@@ -292,6 +292,15 @@ test('consoles SSH : clé d’hôte confirmée à l’enregistrement, secret jam
   assert.match(appel.env.SSH_ASKPASS, /demande-secret\.js$/);
   assert.equal(appel.env.SSH_ASKPASS_REQUIRE, 'force');
   assert.deepEqual(reseau.dernierSecret, { lu: reseau.motDePasse, fichierRestant: false }, 'lu une fois par SSH_ASKPASS, puis effacé');
+  // Une commande tapée peut porter un secret en argument : une commande
+  // automatique qui l'écrit au journal n'en reçoit que le programme.
+  const trace = await admin.post('/api/commands', { name: 'trace ssh', trigger: 'ssh.exec_success', actions: [{ kind: 'log', level: 'warn' }] });
+  assert.equal((await admin.post(`/api/ssh/${cree.json.id}/exec`, { command: 'show secret=argument-sensible-42' })).status, 200);
+  let tracee;
+  for (let i = 0; i < 50 && !tracee; i++, await new Promise(r => setTimeout(r, 20))) tracee = (await lecteur.get('/api/logs?level=warn')).json.find(l => l.message.startsWith('[trace ssh]'));
+  assert.ok(tracee && tracee.message.includes('"cmd":"show"'), tracee?.message);
+  assert.ok(!JSON.stringify((await lecteur.get('/api/logs?limit=1000')).json).includes('argument-sensible-42'));
+  await admin.del(`/api/commands/${trace.json.id}`);
   // Défense par l'équipement enregistré : une commande écrite, une adresse validée.
   const cible = (await lecteur.get('/api/devices')).json.find(d => d.ip === '192.0.2.21');
   const bloque = await membre.post(`/api/devices/${cible.id}/ban`, { reason: 'essai' });
