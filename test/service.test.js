@@ -466,6 +466,16 @@ test('données personnelles : export du compte, puis effacement de tout ce qui l
   assert.equal((await admin.get('/api/compte/export')).json.mapmylan.jetonsCrees.some(j => j.id === jeton.json.id), true);
 });
 
+test('machine hôte : cœurs, disque libre et cartes rendus, comme la page les affiche', async () => {
+  for (const r of [await membre.get('/api/host/stats'), await new Client(o.port).get('/api/host/stats', porteur(GRAINE_HUB))]) {
+    assert.equal(r.status, 200);
+    assert.ok(Number.isInteger(r.json.cores) && r.json.cores >= 1, JSON.stringify(r.json.cores));
+    assert.equal(typeof r.json.diskFreeGB, 'number');
+    assert.ok(Array.isArray(r.json.interfaces));
+    for (const c of r.json.interfaces) assert.deepEqual(Object.keys(c).sort(), ['address', 'internal', 'name', 'role']);
+  }
+});
+
 test('fichiers statiques : interface et socle servis avec leur politique, rien hors des dossiers', async () => {
   const c = new Client(o.port);
   const page = await c.get('/');

@@ -92,7 +92,7 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
   s.poste = new Poste({ cfg, evts: s.evts });
   s.registre = new Registre({ sortie: s.sortie, reglages: s.reglages });
   s.logos = new Logos({ sortie: s.sortie, reglages: s.reglages });
-  s.hote = new Hote({ cfg, db });
+  s.hote = new Hote({ cfg, db, plages: () => s.scanner.plagesActives().map(p => p.cidr) });
   s.plafond = new Plafond({ db, cfg, journal, comptes });
   for (const [nom, Classe] of [['scanner', Scanner], ['scores', Scores], ['defense', Defense], ['enrichissement', Enrichissement], ['vlans', Vlans],
     ['notifications', Notifications], ['commandes', Commandes], ['consoles', Consoles], ['bot', CommandesBot], ['trafic', Trafic], ['assistant', Assistant]]) s[nom] = new Classe(s);

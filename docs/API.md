@@ -267,8 +267,14 @@ redirections, retour à la ligne) : 400.
 
 | Méthode | Chemin | Rôle | Réponse |
 |---|---|---|---|
-| GET | `/api/host/stats` | lecture, jeton | `{ cpuPct, memPct, memUsedMB, memTotalMB, diskPct, tempC, loadAvg, netRxKBs, netTxKBs, uptimeSec, containers: [{ id, name, image, state, status }] }` |
+| GET | `/api/host/stats` | lecture, jeton | `{ cpuPct, cores\|null, memPct, memUsedMB, memTotalMB, diskPct, diskFreeGB\|null, tempC, loadAvg, netRxKBs, netTxKBs, uptimeSec, interfaces: [{ name, address, internal, role }], containers: [{ id, name, image, state, status }] }` |
 | GET | `/api/host/history?minutes=60` | lecture | `HostMetric[]` (1 ≤ minutes ≤ 1440) |
+
+**[2.0]** `cores` (cœurs de la machine, lus dans son `/proc`), `diskFreeGB`
+(espace libre de la racine, en Gio) et `interfaces` (cartes de la machine,
+première adresse IPv4 en notation CIDR, à défaut une IPv6 hors lien local ;
+`role` : `"balayage"`, `"boucle locale"`, `"pont de conteneurs"` ou `"autre"`) :
+la page Machine hôte de la 1.4.1 les affichait, mais son serveur ne les rendait pas.
 
 ### Système — `/api`
 

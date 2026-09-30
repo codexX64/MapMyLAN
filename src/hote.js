@@ -3,13 +3,19 @@
 // socket Docker — jamais le socket lui-même, et seulement en lecture.
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import { nouvelId } from './db.js';
+import { dansLeReseau } from './cibles.js';
 
 const TAILLE_MAX_DOCKER = 2 * 1048576;
+const CARTES_MAX = 32;
+const PONTS = /^(docker|br-|veth|virbr|cni|flannel)/;
 
 export class Hote {
-  constructor({ cfg, db }) {
-    this.cfg = cfg; this.db = db;
+  // plages : les plages balayées, pour reconnaître la carte qui les porte ;
+  // cartes : os.networkInterfaces, que les essais remplacent.
+  constructor({ cfg, db, plages = () => [], cartes = os.networkInterfaces }) {
+    this.cfg = cfg; this.db = db; this.plages = plages; this.cartes = cartes;
     this.cpu = null; this.reseau = null;
     this.docker = cfg.docker ? (cfg.docker.startsWith('unix://') ? { socketPath: cfg.docker.slice(7) } : { host: cfg.docker.slice(6).split(':')[0], port: Number(cfg.docker.split(':').pop()) }) : null;
   }
@@ -32,11 +38,38 @@ export class Hote {
     return { pct: total ? ((total - dispo) / total) * 100 : 0, usedMB: Math.round((total - dispo) / 1024), totalMB: Math.round(total / 1024) };
   }
 
+  // Les lignes « cpuN » du /proc de l'hôte : ses cœurs, pas la part que le
+  // conteneur en reçoit.
+  coeurs() {
+    return this.lire(`${this.cfg.proc}/stat`).split('\n').filter(l => /^cpu\d+\s/.test(l)).length || null;
+  }
+
+  // Le système de fichiers racine, comme le « df / » de la 1.4.1 ; l'espace
+  // libre est celui qu'un processus non privilégié peut encore écrire.
   disque() {
     try {
       const s = fs.statfsSync('/');
-      return s.blocks ? Math.round(((s.blocks - s.bfree) / s.blocks) * 100) : 0;
-    } catch { return 0; }
+      return { pct: s.blocks ? Math.round(((s.blocks - s.bfree) / s.blocks) * 100) : 0, libresGo: Math.round((s.bavail * s.bsize) / 2 ** 30 * 10) / 10 };
+    } catch { return { pct: 0, libresGo: null }; }
+  }
+
+  // Le conteneur est en réseau hôte : ses cartes sont celles de la machine.
+  // Une carte sans IPv4 ni IPv6 routable (un veth, par exemple) n'apprend rien.
+  interfaces() {
+    let cartes;
+    try { cartes = this.cartes(); } catch { return []; }
+    const plages = this.plages();
+    const out = [];
+    for (const [name, adresses] of Object.entries(cartes || {})) {
+      const v4 = adresses.find(a => a.family === 'IPv4');
+      const retenue = v4 || adresses.find(a => a.family === 'IPv6' && !/^fe80:/i.test(a.address));
+      if (!retenue) continue;
+      const internal = !!retenue.internal;
+      const balaye = !internal && (name === this.cfg.interfaceScan || (!!v4 && plages.some(c => dansLeReseau(v4.address, c))));
+      out.push({ name, address: retenue.cidr || retenue.address, internal, role: internal ? 'boucle locale' : balaye ? 'balayage' : PONTS.test(name) ? 'pont de conteneurs' : 'autre' });
+      if (out.length >= CARTES_MAX) break;
+    }
+    return out;
   }
 
   temperature() {
@@ -83,14 +116,14 @@ export class Hote {
   }
 
   async mesures() {
-    const cpu = this.processeur(), mem = this.memoire(), net = this.debit();
+    const cpu = this.processeur(), mem = this.memoire(), net = this.debit(), disque = this.disque();
     const charge = parseFloat(this.lire(`${this.cfg.proc}/loadavg`).split(' ')[0]) || 0;
     return {
-      cpuPct: Math.round(cpu * 10) / 10, memPct: Math.round(mem.pct * 10) / 10, memUsedMB: mem.usedMB, memTotalMB: mem.totalMB,
-      diskPct: this.disque(), tempC: this.temperature(), loadAvg: charge,
+      cpuPct: Math.round(cpu * 10) / 10, cores: this.coeurs(), memPct: Math.round(mem.pct * 10) / 10, memUsedMB: mem.usedMB, memTotalMB: mem.totalMB,
+      diskPct: disque.pct, diskFreeGB: disque.libresGo, tempC: this.temperature(), loadAvg: charge,
       netRxKBs: Math.round(net.rxKBs * 10) / 10, netTxKBs: Math.round(net.txKBs * 10) / 10,
       uptimeSec: parseInt(this.lire(`${this.cfg.proc}/uptime`).split(' ')[0], 10) || 0,
-      containers: await this.conteneurs(),
+      interfaces: this.interfaces(), containers: await this.conteneurs(),
     };
   }
 

@@ -28,6 +28,7 @@ import { Ssh, empreinteCle } from '../src/ssh.js';
 import { exigerUrlEquipement } from '../src/adaptateurs/session.js';
 import { lireConfigMapmylan } from '../src/config.js';
 import { Reglages } from '../src/reglages.js';
+import { Hote } from '../src/hote.js';
 import { ouvrirBase } from '../src/db.js';
 import { dossierTemporaire, serveurLocal } from './aides.js';
 
@@ -328,6 +329,33 @@ test('configuration invalide : tout est listé, rien ne démarre', () => {
   const secret = dossierTemporaire();
   fs.writeFileSync(path.join(secret, 'vox'), 'jeton-vox-venu-d-un-fichier-0123\n');
   assert.equal(lireConfigMapmylan({ VOX_JETON_FILE: path.join(secret, 'vox') }).voxJeton, 'jeton-vox-venu-d-un-fichier-0123');
+});
+
+test('machine hôte : cœurs de l’hôte, disque libre, cartes et leur rôle', async () => {
+  const proc = dossierTemporaire();
+  fs.writeFileSync(path.join(proc, 'stat'), 'cpu  10 0 10 80 0 0 0 0 0 0\ncpu0 5 0 5 40 0 0 0 0 0 0\ncpu1 5 0 5 40 0 0 0 0 0 0\ncpu2 1 0 1 1 0 0 0 0 0 0\ncpu3 1 0 1 1 0 0 0 0 0 0\nintr 0\n');
+  const carte = (address, cidr, family = 'IPv4', internal = false) => ({ address, cidr, family, internal, netmask: '', mac: '00:00:00:00:00:00' });
+  const cartes = () => ({
+    lo: [carte('127.0.0.1', '127.0.0.1/8', 'IPv4', true)],
+    eth0: [carte('fe80::1', 'fe80::1/64', 'IPv6'), carte('192.0.2.2', '192.0.2.2/24')],
+    eth1: [carte('198.51.100.7', '198.51.100.7/24')],
+    docker0: [carte('203.0.113.1', '203.0.113.1/24')],
+    veth7: [carte('fe80::7', 'fe80::7/64', 'IPv6')],
+  });
+  const hote = new Hote({ cfg: { proc, sys: proc }, db: null, plages: () => ['192.0.2.0/24'], cartes });
+  const m = await hote.mesures();
+  assert.equal(m.cores, 4, 'les lignes cpuN, pas la ligne « cpu » du total');
+  assert.equal(typeof m.diskFreeGB, 'number');
+  assert.ok(m.diskFreeGB >= 0);
+  assert.deepEqual(m.interfaces, [
+    { name: 'lo', address: '127.0.0.1/8', internal: true, role: 'boucle locale' },
+    { name: 'eth0', address: '192.0.2.2/24', internal: false, role: 'balayage' },
+    { name: 'eth1', address: '198.51.100.7/24', internal: false, role: 'autre' },
+    { name: 'docker0', address: '203.0.113.1/24', internal: false, role: 'pont de conteneurs' },
+  ], 'l’IPv4 d’abord ; une carte au seul lien local IPv6 n’apparaît pas');
+  const choisie = new Hote({ cfg: { proc, sys: proc, interfaceScan: 'eth1' }, db: null, cartes });
+  assert.equal(choisie.interfaces().find(c => c.name === 'eth1').role, 'balayage', 'SCAN_INTERFACE désigne la carte de balayage');
+  assert.equal(new Hote({ cfg: { proc: dossierTemporaire(), sys: proc }, db: null, cartes: () => ({}) }).coeurs(), null, '/proc illisible : inconnu, pas zéro');
 });
 
 test('réglages : clés connues seulement, valeurs contrôlées', () => {
