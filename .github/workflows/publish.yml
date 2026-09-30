@@ -1,0 +1,88 @@
+name: publish
+
+# Image publiée, parce qu'un installeur ne construit pas : le Hub ne télécharge
+# qu'un fichier Compose. L'image est d'abord construite pour amd64 et passée
+# au crible ; elle n'est poussée, pour amd64 et arm64, que si le crible passe.
+#
+# Rien ici ne nomme personne : le jeton est celui que GitHub fournit à
+# l'exécution et les étiquettes OCI sont posées explicitement.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  REGISTRE: ghcr.io
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Construction locale, pour le crible
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: mapmylan:crible
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Crible des vulnérabilités de l'image
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: mapmylan:crible
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+          output-format: table
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRE }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: etiquettes
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRE }}/codexx64/mapmylan
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=MapMyLAN
+            org.opencontainers.image.description=Cartographie, surveillance et defense du reseau local
+            org.opencontainers.image.vendor=CodexX64
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.etiquettes.outputs.tags }}
+          labels: ${{ steps.etiquettes.outputs.labels }}
+          cache-from: type=gha
+          provenance: mode=min
+          sbom: true
