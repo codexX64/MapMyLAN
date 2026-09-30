@@ -400,6 +400,15 @@ test('Telegram : secret jamais rendu, texte échappé, SMS retiré', async () =>
   await new Promise(r => setTimeout(r, 400));
   assert.equal(o.s.notifications.bot.actif, false, 'sans tâches de fond, le bot n’écoute pas');
   assert.ok(!telegram.recues.some(r => r.url.includes('/getUpdates')), 'aucune relève partie vers Telegram');
+  // Contrat de docs/API.md : des chiffres, avec le « - » initial d'une discussion de groupe.
+  for (const [chatId, statut] of [['-1001234567890', 200], ['1-2', 400], ['--5', 400], ['12a', 400], ['1'.repeat(21), 400]]) {
+    assert.equal((await admin.put('/api/notifications/telegram', { enabled: true, config: { chatId } })).status, statut, chatId);
+  }
+  const groupe = await admin.post('/api/bot-commands', { trigger: 'groupe', action: 'status', allowedChatIds: ['-1001234567890'] });
+  assert.equal(groupe.status, 200, JSON.stringify(groupe.json));
+  assert.equal((await admin.post('/api/bot-commands', { trigger: 'groupe2', action: 'status', allowedChatIds: ['+33'] })).status, 400);
+  await admin.del(`/api/bot-commands/${groupe.json.id}`);
+  assert.equal((await admin.put('/api/notifications/telegram', { enabled: true, config: { chatId: '43' } })).status, 200);
   const essai = await admin.post('/api/notifications/telegram/test', {});
   assert.equal(essai.json.ok, true, JSON.stringify(essai.json));
   await o.s.notifications.diffuser('critical', 'Appareil <b>inconnu</b>', 'Nom annoncé : <a href="x">clic</a>', { IP: '192.0.2.66' });

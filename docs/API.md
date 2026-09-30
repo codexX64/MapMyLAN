@@ -325,7 +325,7 @@ la page Machine hôte de la 1.4.1 les affichait, mais son serveur ne les rendait
 
 Canaux (`:channel`) et leur `config` — un secret absent ou vide garde celui qui est en place :
 
-- `telegram` : `{ token (secret), chatId: chaîne de chiffres }` ;
+- `telegram` : `{ token (secret), chatId: 1 à 20 chiffres, précédés d'un « - » pour un groupe }` ;
 - `email` : `{ address, password (secret), provider?: "gmail"|"outlook"|"apple"|"autre", host?, port?, secure?: bool (vrai : TLS dès la connexion ; faux : STARTTLS exigé), from?, to?, autorite?: PEM }` ;
 - `billetterie` **[2.0]** : `{ url (https, ou interne autorisée), cle (secret), entete?, marqueur?, seuil?: "p1".."p4" }` — les alertes y partent au format ticket structuré (`services/ticket.ts` de la 1.4.1, jusqu'ici non branché).
 - **[2.0]** `sms` retiré (le manuel interdit le SMS, REQ-AUTH-009) : 400.
@@ -364,7 +364,7 @@ corps : { name, trigger (id du catalogue), filter?: { minScore?, minCvss?, minPc
 ```
 CommandeBot { id, trigger ("/nom"), description|null, action, params|null, enabled, confirm, allowedChatIds: string[], cooldownSec, lastFiredBy|null, lastFiredAt|null, fireCount, createdAt, updatedAt }
 corps : { trigger: "/[a-z0-9_]{1,32}", description?, action (id du catalogue), params?: { deviceId?, cmd?, text?, ip? },
-          enabled?, confirm?, allowedChatIds?: string[] ≤20, cooldownSec? }
+          enabled?, confirm?, allowedChatIds?: string[] ≤20 (même forme que chatId), cooldownSec? }
 ```
 
 ### Registres — `/api/net`
