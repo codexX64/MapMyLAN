@@ -1,0 +1,107 @@
+# MapMyLAN installé par le Hub.
+# Les {{...}} sont remplacés à l'installation : secrets générés, port d'hôte,
+# volume nommé et réseau partagé du Hub.
+services:
+  # Réseau de la machine : le balayage ARP ne traverse pas un pont Docker.
+  # Déclaré dans permissions.hostNetwork du manifeste, validé à l'installation.
+  # L'API n'écoute que sur l'adresse du pont (BIND_ADDRESS) : le réseau local
+  # ne l'atteint pas, le relais ci-dessous si.
+  api:
+    image: ghcr.io/codexx64/mapmylan:{{config.IMAGE_TAG}}
+    container_name: {{service.host}}-api
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    # Aucune capacité pour le service lui-même ; le conteneur borne à ces deux-là
+    # ce que nmap, arp-scan et ping reçoivent au lancement (capacités de fichier).
+    cap_drop: [ALL]
+    cap_add: [NET_RAW, NET_ADMIN]
+    # Pas de no-new-privileges ici, et c'est voulu : il empêcherait nmap,
+    # arp-scan et ping de recevoir leurs capacités de fichier, et le service
+    # devrait alors tourner en root. L'image n'a plus aucun programme setuid.
+    mem_limit: 1g
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    volumes:
+      - {{volume.data}}:/app/data
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    environment:
+      DATA_DIR: /app/data
+      HOTE: "{{config.BIND_ADDRESS}}"
+      PORT: "8090"
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      SCAN_INTERFACE: "{{config.SCAN_INTERFACE}}"
+      SCAN_SUBNET: "{{config.SCAN_SUBNET}}"
+      SCAN_INTERVAL: "{{config.SCAN_INTERVAL}}"
+      INTEGRATION_TOKEN_SEED: "{{config.HUB_TOKEN}}"
+      MAPMYLAN_IA_JOUR: "{{config.MAPMYLAN_IA_JOUR}}"
+      MAPMYLAN_IA_JOUR_TOTAL: "{{config.MAPMYLAN_IA_JOUR_TOTAL}}"
+      # L'assistant. Le Hub pose ces adresses quand Ollama et VOX existent, et
+      # redéploie MapMyLAN quand l'un d'eux arrive. Adresses « vues de la
+      # machine » (hostUrl) : ce conteneur est en réseau hôte.
+      IA_URL: "{{provider.llm.chat.hostUrl}}"
+      IA_MODELE: "{{config.IA_MODELE}}"
+      IA_MODELE_DEFAUT: "{{provider.llm.chat.config.DEFAULT_MODEL}}"
+      VOX_URL: "{{provider.voice.stt.hostUrl}}"
+      VOX_JETON: "{{provider.voice.stt.config.HUB_TOKEN}}"
+      # SYNAPSE, la mémoire partagée des services : l'assistant y pose sa fiche
+      # et son état, y lit ce que les services voisins savent, y remonte ses
+      # échanges. Jeton de cerveau dérivé par le Hub, pour ce seul service.
+      SYNAPSE_URL: "{{provider.memory.brief.hostUrl}}"
+      SYNAPSE_JETON: "{{provider.memory.brief.jetonCerveau}}"
+      SERVICE_UI: "{{service.ui}}"
+      # Comptes : clé maîtresse gardée par le Hub (jamais sur le volume),
+      # poivre des mots de passe (celui de la 1.4.1 si elle est reprise).
+      SOCLE_CLE: "{{config.SOCLE_CLE}}"
+      SOCLE_CLE_ANCIENNE: "{{config.SOCLE_CLE_ANCIENNE}}"
+      SOCLE_POIVRE: "{{config.PASSWORD_PEPPER}}"
+      SOCLE_HTTP: "{{config.SOCLE_HTTP}}"
+      SOCLE_JETON_INSTALLATION: "{{config.SOCLE_JETON_INSTALLATION}}"
+      SOCLE_PROXYS: "{{config.SOCLE_PROXYS}}"
+      SOCLE_ORIGINES: "{{config.SOCLE_ORIGINES}}"
+      SOCLE_URL_PUBLIQUE: "{{config.SOCLE_URL_PUBLIQUE}}"
+      SOCLE_SMTP_HOTE: "{{config.SOCLE_SMTP_HOTE}}"
+      SOCLE_SMTP_PORT: "{{config.SOCLE_SMTP_PORT}}"
+      SOCLE_SMTP_SECURITE: "{{config.SOCLE_SMTP_SECURITE}}"
+      SOCLE_SMTP_UTILISATEUR: "{{config.SOCLE_SMTP_UTILISATEUR}}"
+      SOCLE_SMTP_MOTDEPASSE: "{{config.SOCLE_SMTP_MOTDEPASSE}}"
+      SOCLE_SMTP_DE: "{{config.SOCLE_SMTP_DE}}"
+      # Reprise d'une 1.4.1 seulement (node src/cli.js importer-v1).
+      MAPMYLAN_V1_MASTER_KEY: "{{config.MASTER_KEY}}"
+
+  # Le relais : même image, sur le réseau du Hub, qui transmet chaque requête
+  # à l'API (flux temps réel compris). Il ne décide rien.
+  relais:
+    image: ghcr.io/codexx64/mapmylan:{{config.IMAGE_TAG}}
+    container_name: {{service.host}}
+    restart: unless-stopped
+    command: ["node", "src/relais.js"]
+    networks: [hub]
+    ports:
+      - "{{hostport.http}}:8090"
+    environment:
+      RELAIS_CIBLE: "http://{{config.BIND_ADDRESS}}:8090"
+      RELAIS_PORT: "8090"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    pids_limit: 64
+    depends_on: [api]
+
+networks:
+  hub:
+    name: {{hub.network}}
+    external: true
+
+volumes:
+  {{volume.data}}:
+    name: {{volume.data}}
