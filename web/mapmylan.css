@@ -333,7 +333,9 @@ section.page>.card+.card,section.page>.card+.set,section.page>.split+.card,secti
 .planwrap{background:var(--well);background-image:radial-gradient(circle at 1px 1px,var(--hair) 1px,transparent 0);background-size:22px 22px;padding:6px}
 #carte .planwrap{height:calc(100vh - 260px);min-height:420px}
 .plan svg.map{display:block;width:100%;height:auto}
-.topo svg.map{height:100%;touch-action:none;user-select:none;-webkit-user-select:none}
+/* Dans la carte, le dessin couvre exactement le cadre, posé en absolu : Safari
+   ne le dimensionne plus d'après son viewBox quand le cadre change de hauteur. */
+.topo svg.map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none}
 .planbar{display:flex;align-items:center;gap:20px;padding:12px 18px;font-size:12px;color:var(--muted);flex-wrap:wrap;row-gap:8px}
 .planbar div{display:flex;align-items:center;gap:8px}
 .planbar .ln{display:block;width:18px;border-top:1.5px solid var(--faint)}
