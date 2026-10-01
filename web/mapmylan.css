@@ -371,11 +371,11 @@ section.page>.card+.card,section.page>.card+.set,section.page>.split+.card,secti
 .glyphe-arbre .tp{stroke-dasharray:3 3}
 .glyphe-arbre .tq{stroke-width:2;stroke-linecap:round}
 .glyphe-arbre .tc{fill:none;stroke:color-mix(in srgb,var(--ink) 62%,var(--paper));stroke-width:2.4}
-.lien-arbre{fill:none;stroke:color-mix(in srgb,var(--ink) 30%,transparent);stroke-width:1.4;vector-effect:non-scaling-stroke}
-.lien-arbre.air{stroke:color-mix(in srgb,var(--ink) 45%,transparent);stroke-dasharray:5 5}
+.lien-arbre{fill:none;stroke:color-mix(in srgb,var(--ink) 30%,transparent);stroke-width:3.2}
+.lien-arbre.air{stroke:color-mix(in srgb,var(--ink) 45%,transparent);stroke-dasharray:12 12}
 .lien-arbre.deduit{opacity:.75}
 .lien-arbre.suspect{stroke:var(--alarm)}
-.lien-arbre.choisi{stroke:var(--accent);stroke-width:2.4}
+.lien-arbre.choisi{stroke:var(--accent);stroke-width:5.6}
 html[data-gamme="console"] .glyphe-arbre .c{fill:var(--k-g-c)}
 html[data-gamme="console"] .glyphe-arbre .d{fill:var(--k-g-d)}
 html[data-gamme="console"] .glyphe-arbre .m{fill:var(--k-g-m)}
