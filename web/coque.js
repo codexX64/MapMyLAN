@@ -16,6 +16,7 @@ import { h, ic, pictoType, remplir } from './dom.js';
 import { E, api, choisirPage, choisirAppareil, changerDisposition, lancerBalayage, poser } from './etat.js';
 import { t, langue, changerLangue } from './i18n.js';
 import { boutonAssistant, basculer as basculerAssistant } from './assistant/panneau.js';
+import { estSombre, appliquerTheme } from '/socle/compte.js';
 
 // Le raccourci de la palette, tel que le clavier de la machine le nomme.
 const RACCOURCI = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K';
@@ -62,13 +63,11 @@ const RAIL_ATELIER_BAS = [
 const deux = n => String(n).padStart(2, '0');
 
 /** Le thème actif, qu'il soit choisi ou hérité du système. */
-const estSombre = () => document.documentElement.dataset.theme === 'dark'
-  || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
-
 export function basculerTheme() {
   const cle = estSombre() ? 'light' : 'dark';
   document.documentElement.dataset.theme = cle;
   try { localStorage.setItem('theme', cle); } catch { /* le choix vaut pour la session */ }
+  appliquerTheme();
 }
 
 async function seDeconnecter() {

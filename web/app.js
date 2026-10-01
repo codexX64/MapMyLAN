@@ -40,7 +40,8 @@ function apparence() {
   const suivreSysteme = () => {
     let choisi = null;
     try { choisi = localStorage.getItem('theme'); } catch { /* aucun choix lisible */ }
-    if (!choisi) racine.dataset.theme = systeme.matches ? 'dark' : 'light';
+    // Sans choix, la gamme Console est sombre ; SOMA suit le système.
+    if (!choisi) racine.dataset.theme = racine.dataset.gamme === 'console' || systeme.matches ? 'dark' : 'light';
   };
   suivreSysteme();
   systeme.addEventListener('change', suivreSysteme);

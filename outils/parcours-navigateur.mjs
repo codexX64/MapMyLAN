@@ -343,10 +343,12 @@ await geste('disposition atelier : bascule, aperçu et carte, retour', async () 
   return 'aller et retour';
 });
 
-// Thème sombre : même contrôle aux largeurs extrêmes, captures pour la comparaison.
-await page.evaluate(() => { localStorage.setItem('theme', 'dark'); document.documentElement.dataset.theme = 'dark'; });
-await tour(page, 'sombre-', { largeurs: [390, 1440], captures: [390, 1440] });
-await page.evaluate(() => { localStorage.setItem('theme', 'light'); document.documentElement.dataset.theme = 'light'; });
+// L’autre variante (sombre en SOMA, claire en Console) : même contrôle aux largeurs extrêmes, captures pour la comparaison.
+// En gamme Console, l'autre variante est la claire (blanc et bleu).
+const [AUTRE, DEFAUT] = GAMME === 'console' ? ['light', 'dark'] : ['dark', 'light'];
+await page.evaluate(t => { localStorage.setItem('theme', t); document.documentElement.dataset.theme = t; }, AUTRE);
+await tour(page, AUTRE === 'dark' ? 'sombre-' : 'clair-', { largeurs: [390, 1440], captures: [390, 1440] });
+await page.evaluate(t => { localStorage.setItem('theme', t); document.documentElement.dataset.theme = t; }, DEFAUT);
 
 await geste('fiche : nom donné modifié', async () => {
   await aller(page, 'devices');

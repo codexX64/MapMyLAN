@@ -91,7 +91,7 @@
       "options": [
         {
           "value": "console",
-          "label": "Console — noir, gris neutres, accent vert"
+          "label": "Console — noir et vert, ou blanc et bleu (bascule dans MapMyLAN)"
         },
         {
           "value": "soma",
