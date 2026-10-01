@@ -27,6 +27,10 @@ export function routesAppareils(route, s, acces) {
   route.get('/api/devices/health/score', () => ({ score: s.scores.sante() }), { role: 'lecture', jeton: true });
   route.get('/api/devices/scans/latest', () => F.balayage(db.prepare('SELECT * FROM balayages ORDER BY startedAt DESC LIMIT 1').get()), { role: 'lecture', jeton: true });
   route.get('/api/devices/scan/ranges', () => scanner.plagesActives(), { role: 'lecture', jeton: true });
+  // Les balayages terminés d'une période, pour le graphe « Appareils vus » :
+  // ce que le scanner a réellement trouvé, plage par plage.
+  route.get('/api/devices/scans', ctx => db.prepare("SELECT * FROM balayages WHERE status = 'complete' AND startedAt > ? ORDER BY startedAt LIMIT 5000")
+    .all(Date.now() - ctx.q.heures * 3_600_000).map(F.balayage), { role: 'lecture', requete: { heures: { type: 'entier', min: 1, max: 720, defaut: 24 } } });
 
   route.post('/api/devices/scan', ctx => {
     payer('balayage', ctx, 'Trop de balayages demandés : attends une minute.');

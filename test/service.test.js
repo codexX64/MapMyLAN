@@ -142,6 +142,24 @@ test('jetons d’intégration : créés sous renfort, montrés une fois, limité
   assert.equal((await membre.get('/api/integrations')).status, 403);
 });
 
+test('balayages d’une période : terminés seulement, dans la fenêtre demandée, fenêtre bornée', async () => {
+  const maintenant = Date.now();
+  const inserer = o.db.prepare('INSERT INTO balayages(id, type, subnet, status, hostsFound, startedAt, endedAt) VALUES(?, ?, ?, ?, ?, ?, ?)');
+  inserer.run('essai-b1', 'full', '198.51.100.0/24', 'complete', 7, maintenant - 2 * 3_600_000, maintenant - 2 * 3_600_000 + 9000);
+  inserer.run('essai-b2', 'full', '198.51.100.0/24', 'failed', 0, maintenant - 3_600_000, maintenant - 3_600_000 + 100);
+  inserer.run('essai-b3', 'full', '198.51.100.0/24', 'complete', 5, maintenant - 30 * 3_600_000, maintenant - 30 * 3_600_000 + 8000);
+  try {
+    const ids = r => r.json.filter(b => b.id.startsWith('essai-')).map(b => b.id);
+    assert.deepEqual(ids(await lecteur.get('/api/devices/scans')), ['essai-b1']);
+    assert.deepEqual(ids(await lecteur.get('/api/devices/scans?heures=48')), ['essai-b3', 'essai-b1']);
+    const b1 = (await lecteur.get('/api/devices/scans')).json.find(b => b.id === 'essai-b1');
+    assert.equal(b1.hostsFound, 7);
+    assert.equal(typeof b1.startedAt, 'string');
+    assert.equal((await lecteur.get('/api/devices/scans?heures=721')).status, 400);
+    assert.equal((await new Client(o.port).get('/api/devices/scans')).status, 401);
+  } finally { o.db.prepare("DELETE FROM balayages WHERE id LIKE 'essai-%'").run(); }
+});
+
 test('inventaire : création, champ effacé, protections réservées, objets d’un autre appareil', async () => {
   const a = await membre.post('/api/devices/manual', { ip: '192.0.2.10', mac: 'aa-bb-cc-00-00-10', customName: 'serveur-a', notes: 'rangée 3' });
   assert.equal(a.status, 200);

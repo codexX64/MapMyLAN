@@ -13,12 +13,14 @@ import { t } from '../i18n.js';
 import { depuis, nomAppareil, glyphe, ETATS, tonEtat, liaison, triParRisque } from '../communs.js';
 import { carteTopologie } from '../composants/topologie.js';
 import { traficMondial } from '../composants/monde.js';
+import { grapheVus } from '../composants/graphe-vus.js';
 
 const boutonBalayage = () => btn({ solid: true, icone: 'refresh', disabled: E.scanRunning, onclick: () => lancerBalayage() },
   E.scanRunning ? t('act.scanning') : t('act.scan'));
 
 export function tableauDeBord(p) {
   const sec = h('section', { class: 'page on' });
+  const graphe = grapheVus(p);
   let charge = [];
   // Seule série réellement conservée par le serveur : celle de la machine
   // hôte. Elle sert de fond à la tuile « santé ».
@@ -62,6 +64,7 @@ export function tableauDeBord(p) {
         fig({ icone: 'port', ton: 'plain', libelle: t('fig.openPorts'), valeur: ports, delta: `sur ${devices.length} hôtes` }),
         fig({ icone: 'shield', libelle: t('fig.health'), valeur: E.healthScore, unite: '/100',
           delta: `${E.vlans.length} segments déclarés`, courbe: charge.length > 1 ? courbe(charge, 'accent') : undefined })),
+      graphe,
       split('',
         carte({ titre: t('card.watch'), note: t('card.watch.note') },
           h('table', {},
