@@ -278,7 +278,7 @@ function jauge(input) {
 }
 
 export function basculeTheme() {
-  const b = h('button', { class: 'ghost', type: 'button', title: 'Clair ou sombre', 'aria-label': 'Changer de thème' });
+  const b = h('button', { class: 'ghost bascule-theme', type: 'button', title: 'Clair ou sombre', 'aria-label': 'Changer de thème' });
   const peint = () => {
     const sombre = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
     b.replaceChildren(icone(sombre ? 'soleil' : 'lune'));
@@ -294,6 +294,10 @@ export function basculeTheme() {
 }
 export function appliquerTheme() {
   try { const t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* rien */ }
+  // La gamme Console est sombre seulement : la barre du navigateur mobile suit.
+  if (document.documentElement.dataset.gamme === 'console') {
+    for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = '#000000';
+  }
 }
 
 // Promesse résolue quand la session est complète : le service peut alors

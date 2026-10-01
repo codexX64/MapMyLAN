@@ -25,6 +25,17 @@
 @font-face{font-family:"IBM Plex Mono";font-style:normal;font-display:swap;font-weight:500;src:url(polices/ibm-plex-mono-latin-500-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 @font-face{font-family:"IBM Plex Mono";font-style:normal;font-display:swap;font-weight:500;src:url(polices/ibm-plex-mono-latin-ext-500-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
 
+/* Polices de la gamme Console (Geist et Geist Mono, SIL OFL 1.1, paquets
+   @fontsource/geist-sans et @fontsource/geist-mono 5.3.0). Le navigateur ne
+   les télécharge que si une page les emploie : rien en gamme SOMA. */
+@font-face{font-family:"Geist";font-style:normal;font-display:swap;font-weight:400;src:url(polices/geist-sans-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Geist";font-style:normal;font-display:swap;font-weight:500;src:url(polices/geist-sans-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Geist";font-style:normal;font-display:swap;font-weight:600;src:url(polices/geist-sans-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Geist Mono";font-style:normal;font-display:swap;font-weight:400;src:url(polices/geist-mono-latin-400-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Geist Mono";font-style:normal;font-display:swap;font-weight:400;src:url(polices/geist-mono-latin-ext-400-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Geist Mono";font-style:normal;font-display:swap;font-weight:500;src:url(polices/geist-mono-latin-500-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Geist Mono";font-style:normal;font-display:swap;font-weight:500;src:url(polices/geist-mono-latin-ext-500-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+
 :root{
   --paper:#F6F6F3;--surface:#FFFFFF;--well:#F1F1ED;--hair:#E5E5E0;--hair-soft:#EDEDE8;
   --ink:#14161A;--ink-soft:#3E434A;--muted:#858B93;--faint:#B2B7BD;
@@ -55,6 +66,106 @@
   --lift:0 1px 2px rgba(0,0,0,.4),0 12px 30px -16px rgba(0,0,0,.7);
   --lift-hi:0 1px 2px rgba(0,0,0,.5),0 20px 44px -20px rgba(0,0,0,.85);
   --grain:.035;color-scheme:dark}
+
+/* Gamme Console : noir franc, gris neutres, un seul accent vert ; Geist et
+ * Geist Mono. Sombre seulement : elle passe devant le choix clair ou sombre
+ * (sélecteur plus spécifique que :root[data-theme]), et la bascule disparaît.
+ * Choisie par le service (SOCLE_THEME=console, posée par le Hub), rendue dans
+ * la page avant le premier affichage : pas d'éclair d'une gamme à l'autre. */
+html:root[data-gamme="console"]{
+  --paper:#000000;--surface:#0D0D0D;--well:#141414;--hair:#222222;--hair-soft:#1A1A1A;
+  --ink:#EDEDED;--ink-soft:#A3A3A3;--muted:#8A8A8A;--faint:#6B6B6B;
+  --accent:#7EE2A8;--wash:#1F3A2A;--alarm:#FF7B72;--alarm-wash:#3A1D1B;--warn:#E3B341;--warn-wash:#3A2E14;
+  --ok:#7EE2A8;--ok-wash:#1F3A2A;--on-ink:#000000;
+  --lift:0 0 0 1px #222222;
+  --lift-hi:0 0 0 1px #2C2C2C,0 30px 80px rgba(0,0,0,.6);
+  --grain:0;
+  --sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r-ctl:8px;--r-carte:14px;
+  color-scheme:dark}
+html[data-gamme="console"] .bascule-theme{display:none!important}
+
+/* Composants de la gamme Console : la console d'agents de la maquette (barre
+   latérale sur panneau, compteurs en chiffres à chasse fixe, cartes bordées
+   d'un trait, en-têtes de tableau en bandeau, boutons sombres bordés). Rien
+   ne bouge de place : seules l'apparence et quelques mesures changent, si bien
+   que les replis sans chevauchement de SOMA restent valables. */
+@media (min-width:1101px){html:root[data-gamme="console"]{--rail:260px}}
+html[data-gamme="console"] body{font-size:14px}
+html[data-gamme="console"] h1,html[data-gamme="console"] h2,html[data-gamme="console"] h3,html[data-gamme="console"] h4{font-weight:500}
+html[data-gamme="console"] ::-webkit-scrollbar-thumb{background:#2C2C2C;border-color:var(--paper)}
+html[data-gamme="console"] .rail{background:var(--surface);border-right:1px solid var(--hair);padding:16px 12px}
+html[data-gamme="console"] .mark{padding:6px 8px 14px;margin-bottom:4px}
+html[data-gamme="console"] .mark b{font-size:14px;font-weight:500;letter-spacing:0}
+html[data-gamme="console"] .grp{margin-bottom:0}
+html[data-gamme="console"] .grp>span{font-size:12px;letter-spacing:0;text-transform:none;color:var(--faint);padding:20px 10px 6px;margin:0}
+html[data-gamme="console"] .nav{padding:8px 10px;border-radius:8px;color:var(--ink-soft);font-size:14px;gap:10px}
+html[data-gamme="console"] .nav:hover{background:var(--well);color:var(--ink)}
+html[data-gamme="console"] .nav.on{background:#1B1B1B;box-shadow:none;color:var(--ink);font-weight:400}
+html[data-gamme="console"] .nav.on svg{color:inherit}
+html[data-gamme="console"] .nav .cnt{font-size:11px;color:var(--ink-soft);background:#1B1B1B;border:1px solid #2C2C2C;border-radius:5px;padding:0 6px}
+html[data-gamme="console"] .railcard{background:var(--well);border:1px solid var(--hair);box-shadow:none;border-radius:10px}
+html[data-gamme="console"] .ghost{border-radius:8px}
+html[data-gamme="console"] .ghost:hover{background:var(--well);box-shadow:none}
+html[data-gamme="console"] .who{background:#EDEDED;color:#000}
+html[data-gamme="console"] .title{font-size:28px;font-weight:500;letter-spacing:-.02em}
+html[data-gamme="console"] .lede{color:var(--ink-soft);font-size:14px}
+html[data-gamme="console"] .btn{padding:7px 12px;border:1px solid #2C2C2C;border-radius:8px;background:var(--well);color:var(--ink);box-shadow:none;font-weight:400;font-size:14px;min-height:34px}
+html[data-gamme="console"] .btn:hover{background:#1B1B1B;box-shadow:none;transform:none}
+html[data-gamme="console"] .btn.solid{background:var(--well);color:var(--ink);border-color:#3A3A3A}
+html[data-gamme="console"] .btn.accent{background:var(--wash);color:var(--accent);border-color:#2C5A3F}
+html[data-gamme="console"] .btn.danger.solid{background:var(--alarm-wash);color:var(--alarm);border-color:#5A2C2A}
+html[data-gamme="console"] .btn.sm{padding:4px 10px;font-size:13px;min-height:28px}
+html[data-gamme="console"] .btn.flat{background:none;border-color:transparent;color:var(--ink-soft)}
+html[data-gamme="console"] .btn.flat:hover{background:var(--well);color:var(--ink)}
+html[data-gamme="console"] .views{background:var(--well);border:1px solid var(--hair);border-radius:8px;padding:2px;box-shadow:none;gap:0}
+html[data-gamme="console"] .view{padding:4px 10px;border-radius:6px;font-size:13px;color:var(--ink-soft);border:1px solid transparent}
+html[data-gamme="console"] .view.on{background:#1B1B1B;color:var(--ink);border-color:#2C2C2C;font-weight:400}
+html[data-gamme="console"] .figs{gap:10px;margin-bottom:12px}
+html[data-gamme="console"] .fig{padding:16px 18px;transition:none}
+html[data-gamme="console"] .fig:hover{box-shadow:var(--lift);transform:none}
+html[data-gamme="console"] .fig .tile{display:none}
+html[data-gamme="console"] .fig>span{font-size:13px;letter-spacing:0;text-transform:none;color:var(--ink-soft)}
+html[data-gamme="console"] .fig strong{font-family:var(--mono);font-size:26px;font-weight:400;letter-spacing:-.02em;margin:8px 0 6px;line-height:1.2}
+html[data-gamme="console"] .fig strong em{font-size:14px;color:var(--faint)}
+html[data-gamme="console"] .fig .delta{font-size:12px;color:var(--accent)}
+html[data-gamme="console"] .card>header{padding:18px 20px 14px}
+html[data-gamme="console"] .card>header h2{font-size:15px;font-weight:500}
+html[data-gamme="console"] .card>header .note{font-size:12px;color:var(--faint)}
+html[data-gamme="console"] .card .pad{padding:0 20px 18px}
+html[data-gamme="console"] .split{gap:12px}
+html[data-gamme="console"] .page>*+*{margin-top:12px}
+html[data-gamme="console"] th{font-weight:400;font-size:13px;letter-spacing:0;text-transform:none;color:var(--faint);padding:10px 14px;background:var(--well);border-bottom:none}
+html[data-gamme="console"] td{padding:12px 14px;border-bottom:none;border-top:1px solid var(--hair);font-size:14px}
+html[data-gamme="console"] tbody tr:hover td{background:#111111}
+html[data-gamme="console"] .who-cell small{font-size:12px;color:var(--faint)}
+html[data-gamme="console"] .itile{background:none;color:var(--ink-soft);width:20px;height:20px;border-radius:0}
+html[data-gamme="console"] .itile.hot,html[data-gamme="console"] .itile.key{background:none;color:var(--accent)}
+html[data-gamme="console"] .chip{background:var(--well);border:1px solid #2C2C2C;border-radius:6px;color:var(--ink-soft);font-size:12px;padding:2px 8px}
+html[data-gamme="console"] .chip.a{background:none;border-color:transparent;color:var(--ink-soft);padding:0;font-size:14px}
+html[data-gamme="console"] .chip.w,html[data-gamme="console"] .chip.o{background:none;border-color:transparent;color:var(--accent);padding:0;font-size:14px}
+html[data-gamme="console"] .chip.ok{background:var(--wash);color:var(--accent);border-color:#2C5A3F;border-radius:999px;padding:2px 9px}
+html[data-gamme="console"] .notice{padding:12px 20px;border-bottom:none;border-top:1px solid var(--hair)}
+html[data-gamme="console"] .flowrow{border-bottom:none;border-top:1px solid var(--hair);padding:13px 20px}
+html[data-gamme="console"] .flowrow:hover{background:#111111}
+html[data-gamme="console"] .toggle{background:#2C2C2C}
+html[data-gamme="console"] .toggle i{background:#EDEDED;box-shadow:none}
+html[data-gamme="console"] .toggle.on i,html[data-gamme="console"] .toggle[aria-checked="true"] i{background:#000}
+html[data-gamme="console"] .lbl{font-size:12px;text-transform:none;letter-spacing:0;color:var(--ink-soft)}
+html[data-gamme="console"] .field{background:var(--surface);border:1px solid var(--hair);border-radius:8px;min-height:38px;padding:8px 12px;font-size:14px}
+html[data-gamme="console"] .field:focus{border-color:#3A3A3A}
+html[data-gamme="console"] .note.info,html[data-gamme="console"] .note.ok{background:var(--wash);border:1px solid #2C5A3F;color:#CFEEDD}
+html[data-gamme="console"] .note.info svg{color:var(--accent)}
+html[data-gamme="console"] .note.warn{border:1px solid #5A4A22}
+html[data-gamme="console"] .note.bad{border:1px solid #5A2C2A}
+html[data-gamme="console"] .voile{background:rgba(0,0,0,.6);backdrop-filter:blur(5px)}
+html[data-gamme="console"] .dialogue{background:#232323;border:1px solid #3A3A3A;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+html[data-gamme="console"] .dialogue .field{background:#1A1A1A;border-color:#333333}
+html[data-gamme="console"] .toast{background:#1E1E1E;color:var(--ink);border:1px solid #2C2C2C;border-radius:10px;box-shadow:none}
+html[data-gamme="console"] .toast.bad{background:var(--alarm-wash);color:var(--alarm);border-color:#5A2C2A}
+html[data-gamme="console"] .porte{background:#000000}
+html[data-gamme="console"] .porte .wiz{background:var(--surface);border:1px solid var(--hair);box-shadow:none}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
