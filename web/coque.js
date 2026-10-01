@@ -173,7 +173,7 @@ function barreHaut(app) {
       h('button', { class: 'ghost langue', type: 'button', title: t('top.language'), onclick: () => changerLangue(langue() === 'fr' ? 'en' : 'fr'), text: langue().toUpperCase() }),
       boutonAssistant(32, 16),
       h('button', { class: 'ghost cache-etroit', type: 'button', title: t('top.notifications'), 'aria-label': t('top.notifications'), onclick: () => choisirPage('notifications') }, ic('bell', 16)),
-      h('button', { class: 'ghost', type: 'button', title: t('top.appearance'), 'aria-label': t('top.appearance'), onclick: basculerTheme }, ic('mode', 16)),
+      h('button', { class: 'ghost bascule-theme', type: 'button', title: t('top.appearance'), 'aria-label': t('top.appearance'), onclick: basculerTheme }, ic('mode', 16)),
       h('button', { class: 'ghost', type: 'button', title: t('top.logout'), 'aria-label': t('top.logout'), onclick: seDeconnecter }, ic('power', 16)),
       h('div', { class: 'who cache-etroit', title: E.moi?.identifiant || '', text: initiales })));
 }
@@ -202,7 +202,7 @@ function atelierHaut(p) {
       basculeDisposition('reading'),
       boutonAssistant(28, 15),
       h('button', { class: 'ghost', type: 'button', style: petit, title: t('top.notifications'), 'aria-label': t('top.notifications'), onclick: () => choisirPage('notifications') }, ic('bell', 15)),
-      h('button', { class: 'ghost', type: 'button', style: petit, title: t('top.appearance'), 'aria-label': t('top.appearance'), onclick: basculerTheme }, ic('mode', 15)),
+      h('button', { class: 'ghost bascule-theme', type: 'button', style: petit, title: t('top.appearance'), 'aria-label': t('top.appearance'), onclick: basculerTheme }, ic('mode', 15)),
       h('button', { class: 'ghost', type: 'button', style: petit, title: t('top.logout'), 'aria-label': t('top.logout'), onclick: seDeconnecter }, ic('power', 15))));
 }
 

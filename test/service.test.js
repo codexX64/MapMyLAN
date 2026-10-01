@@ -5,6 +5,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import https from 'node:https';
 import { Client } from '../socle/essai/client.js';
 import { certificatEssai } from '../socle/essai/smtp.js';
@@ -700,4 +701,21 @@ test('rotation de SOCLE_CLE : les secrets des équipements, des boîtes et des c
     const trace = x.db.prepare("SELECT details FROM socle_journal WHERE action = 'coffre.rescelle'").all();
     assert.deepEqual(trace.map(t => JSON.parse(t.details)), [{ rescelles: 3, illisibles: 0 }]);
   } finally { await x.arreter(); }
+});
+
+test('thème : la page porte celui de SOCLE_THEME, champ du Hub (Console par défaut) ; SOMA hors Hub', async () => {
+  assert.match((await new Client(o.port).get('/')).texte, /<html lang="fr" data-shell="reading" data-gamme="soma">/);
+  const x = await lancer({ SOCLE_THEME: 'console' });
+  try {
+    for (const chemin of ['/', '/carte']) assert.match((await new Client(x.port).get(chemin)).texte, /data-gamme="console"/, chemin);
+  } finally { await x.arreter(); }
+  await assert.rejects(() => lancer({ SOCLE_THEME: 'clair' }), /SOCLE_THEME/);
+  const lire = f => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  assert.match(lire('deploy/compose.hub.yml'), /^ {6}SOCLE_THEME: "\{\{config\.SOCLE_THEME\}\}"$/m);
+  const manifeste = JSON.parse(lire('hub.json'));
+  const champ = manifeste.config.find(c => c.key === 'SOCLE_THEME');
+  assert.equal(champ.type, 'select');
+  assert.equal(champ.default, 'console');
+  assert.deepEqual(champ.options.map(o => o.value).sort(), ['console', 'soma']);
+  assert.equal(manifeste.minHubVersion, '0.5.64', 'un champ de configuration ne demande pas de Hub plus récent');
 });

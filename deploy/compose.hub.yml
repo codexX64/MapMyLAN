@@ -71,6 +71,7 @@ services:
       SOCLE_PROXYS: "{{config.SOCLE_PROXYS}}"
       SOCLE_ORIGINES: "{{config.SOCLE_ORIGINES}}"
       SOCLE_URL_PUBLIQUE: "{{config.SOCLE_URL_PUBLIQUE}}"
+      SOCLE_THEME: "{{config.SOCLE_THEME}}"
       SOCLE_SMTP_HOTE: "{{config.SOCLE_SMTP_HOTE}}"
       SOCLE_SMTP_PORT: "{{config.SOCLE_SMTP_PORT}}"
       SOCLE_SMTP_SECURITE: "{{config.SOCLE_SMTP_SECURITE}}"

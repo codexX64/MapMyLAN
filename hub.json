@@ -83,6 +83,24 @@
       "advanced": true
     },
     {
+      "key": "SOCLE_THEME",
+      "label": "Thème de l'interface",
+      "type": "select",
+      "default": "console",
+      "required": true,
+      "options": [
+        {
+          "value": "console",
+          "label": "Console — noir, gris neutres, accent vert"
+        },
+        {
+          "value": "soma",
+          "label": "SOMA — clair ou sombre, accent bleu"
+        }
+      ],
+      "help": "Modifiable à tout moment : le service est redéployé avec le thème choisi, comptes et données intacts."
+    },
+    {
       "key": "IA_MODELE",
       "label": "Modèle de l'assistant",
       "type": "select",

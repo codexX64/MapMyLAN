@@ -173,9 +173,9 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
       if (SEGMENT_CACHE.test(decode(url.pathname))) return repondreJson(res, 404, { error: 'Introuvable.' });
       if (url.pathname.startsWith('/socle/') && servirFichier(req, res, path.join(RACINE, 'socle', 'web'), url.pathname.slice(6), { nonce, cache: 'public, max-age=3600' })) return;
       const fichier = url.pathname === '/' ? '/index.html' : url.pathname;
-      if (servirFichier(req, res, path.join(RACINE, 'web'), fichier, { nonce })) return;
+      if (servirFichier(req, res, path.join(RACINE, 'web'), fichier, { nonce, gamme: socle.cfg.gamme })) return;
       // Une adresse de page sans extension (lien gardé en favori) mène à l'interface.
-      if (!path.extname(url.pathname) && servirFichier(req, res, path.join(RACINE, 'web'), '/index.html', { nonce })) return;
+      if (!path.extname(url.pathname) && servirFichier(req, res, path.join(RACINE, 'web'), '/index.html', { nonce, gamme: socle.cfg.gamme })) return;
       repondreJson(res, 404, { error: 'Introuvable.' });
     } catch (e) {
       // Un équipement ou un service tiers en échec : son message, écrit ici,

@@ -23,6 +23,7 @@
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--surface-hover:#1C1F23;--v-ok:#6F78F2;--v-err:#E2574F;--v-warn:#D9A441}}
 :root[data-theme="dark"]{--surface-hover:#1C1F23;--v-ok:#6F78F2;--v-err:#E2574F;--v-warn:#D9A441}
+html:root[data-gamme="console"]{--surface-hover:#141414;--v-ok:#7EE2A8;--v-err:#FF7B72;--v-warn:#E3B341}
 
 /* Texte de MapMyLAN : hauteur de ligne du navigateur et chiffres de largeur
    fixe partout, comme en 1.4 — les colonnes de nombres ne dansent pas. Les

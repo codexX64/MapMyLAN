@@ -69,7 +69,7 @@ export function premierReglage() {
           h('div', { class: 'ob-brand' },
             h('span', { class: 'g' }, IcoCarte(19)),
             h('div', {}, h('b', { text: 'MapMyLAN' }), h('span', { text: t('ob.brand.sub') })),
-            h('button', { class: 'th', type: 'button', title: t('ob.theme'), 'aria-label': t('ob.theme'), onclick: basculerTheme },
+            h('button', { class: 'th bascule-theme', type: 'button', title: t('ob.theme'), 'aria-label': t('ob.theme'), onclick: basculerTheme },
               trait(17, s('circle', { cx: 12, cy: 12, r: 8 }), s('path', { d: 'M12 4a8 8 0 0 0 0 16z', fill: 'currentColor', stroke: 'none' })))),
           pas),
         corps, pied));
