@@ -146,6 +146,7 @@ const PICTOS = {
   actions: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   chevron: '<path d="M6 9.5 12 15.5 18 9.5"/>',
+  deplier: '<path d="m7 9 5-5 5 5M7 15l5 5 5-5"/>',
 };
 // Des constantes de ce fichier, lues comme SVG par le socle : jamais une donnée.
 ajouterPictos(Object.fromEntries(Object.entries(PICTOS).map(([k, v]) => [`m:${k}`, v])));

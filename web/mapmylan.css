@@ -60,7 +60,7 @@ b.tronque,span.tronque{display:block}
 .recherche{position:relative;min-width:0}
 .search{display:flex;align-items:center;gap:9px;background:var(--well);border-radius:10px;padding:8px 13px;width:290px;color:var(--faint);font-size:13px;min-width:0}
 .search input{border:none;background:none;outline:none;font:inherit;color:var(--ink);width:100%;min-width:0}
-.search kbd,.wcmd kbd{font-family:var(--mono);font-size:10px;color:var(--faint);border:1px solid var(--hair);border-radius:5px;padding:1px 5px}
+.search kbd,.wcmd kbd{white-space:nowrap;flex:none;font-family:var(--mono);font-size:10px;color:var(--faint);border:1px solid var(--hair);border-radius:5px;padding:1px 5px}
 .trouves{position:absolute;top:calc(100% + 6px);left:0;width:290px;max-width:calc(100vw - 28px);z-index:40;background:var(--surface);border-radius:12px;box-shadow:var(--lift-hi);overflow:hidden;padding:4px}
 .trouves .trow{height:30px}
 .wcentre{flex:1;display:flex;justify-content:center;position:relative;min-width:0}
@@ -129,6 +129,8 @@ button.secttl{display:flex;gap:6px;width:100%;text-align:left}
 .swap-haut{display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--paper);border-radius:10px;padding:0 13px;height:32px;box-shadow:var(--lift);font-size:12.5px;font-weight:500;white-space:nowrap;flex:none;margin-right:6px}
 .swap-haut:hover{opacity:.9}
 .wboutons .swap-haut{height:28px;padding:0 11px;border-radius:8px;margin-right:4px}
+html[data-gamme="console"] .swap-haut{background:var(--well);color:var(--ink);border:1px solid #2C2C2C;box-shadow:none;border-radius:8px;font-weight:400}
+html[data-gamme="console"] .swap-haut:hover{background:#1B1B1B;opacity:1}
 
 /* L'atelier n'existe que là où il y a la place de tout montrer : sous
    1100 px, la disposition de lecture reprend la main. */
@@ -1179,6 +1181,66 @@ textarea.ob-field{resize:vertical;font-size:11.5px;line-height:1.5}
   .set>header{flex-wrap:wrap}
   .set>header .extra{margin-left:48px}
   .histo-deux{gap:14px}
+}
+
+/* Gamme Console : la barre latérale de la maquette (tuile claire et
+   sélecteur, recherche ⌘K, plages balayées) et la palette de commandes. En
+   SOMA, ces éléments n'existent pas à l'écran. */
+.mark .tuile,.mark .chev,.rail-cherche,.plages-rail{display:none}
+/* Le rail défile quand il déborde : ses blocs gardent leur hauteur au lieu
+   de s'écraser les uns sur les autres. */
+.rail>*{flex-shrink:0}
+html[data-gamme="console"] .mark .marque,html[data-gamme="console"] .mark .pulse{display:none}
+html[data-gamme="console"] .mark .tuile{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:#F2F2F2;color:#000;flex:none}
+html[data-gamme="console"] .mark b{flex:1}
+html[data-gamme="console"] .mark .chev{display:flex;color:var(--faint);flex:none}
+html[data-gamme="console"] .rail-cherche{display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;background:var(--well);border:1px solid var(--hair);border-radius:9px;color:var(--faint);margin-bottom:8px;font-size:14px;min-width:0}
+html[data-gamme="console"] .rail-cherche span{flex:1;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-gamme="console"] .rail-cherche kbd{white-space:nowrap;font-family:var(--mono);font-size:11px;color:var(--faint);border:0;padding:0;background:none}
+html[data-gamme="console"] .rail-cherche:hover{color:var(--ink-soft);border-color:#2C2C2C}
+html[data-gamme="console"] .plages-rail{display:block;margin-bottom:12px}
+html[data-gamme="console"] .sec-rail{display:flex;justify-content:space-between;align-items:center;color:var(--faint);font-size:12px;padding:20px 10px 6px}
+html[data-gamme="console"] .sec-rail .plus{color:var(--faint);font-size:15px;line-height:1;width:22px;height:22px;border-radius:6px;display:grid;place-items:center}
+html[data-gamme="console"] .sec-rail .plus:hover{background:var(--well);color:var(--ink)}
+html[data-gamme="console"] .plage{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:8px;color:var(--ink-soft);text-align:left;min-width:0}
+html[data-gamme="console"] .plage:hover{background:var(--well);color:var(--ink)}
+html[data-gamme="console"] .plage svg{flex:none}
+html[data-gamme="console"] .plage .lib{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-gamme="console"] .plage .cidr{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint);white-space:nowrap;flex:none}
+@media (min-width:1101px){
+  html[data-gamme="console"] .top .recherche{display:none}
+}
+@media (min-width:761px) and (max-width:1100px){
+  html[data-gamme="console"] .mark .chev,html[data-gamme="console"] .rail-cherche,html[data-gamme="console"] .plages-rail{display:none}
+}
+
+.pal-voile{position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.6);backdrop-filter:blur(5px);display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px}
+.pal{width:min(660px,100%);background:#232323;border:1px solid #3A3A3A;border-radius:14px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6);color:var(--ink)}
+.pal-in{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid #333333;color:var(--faint)}
+.pal-in input{flex:1;min-width:0;background:none;border:0;color:var(--ink);font:15px var(--sans);outline:none;caret-color:var(--accent)}
+.pal-in kbd{font-family:var(--mono);font-size:11px;color:var(--faint);background:#2E2E2E;border-radius:5px;padding:2px 7px;border:0}
+.pal-liste{max-height:52vh;overflow:auto;padding-bottom:6px}
+.pal-grp{font-size:12px;color:var(--faint);padding:12px 18px 4px;display:flex;justify-content:space-between;gap:12px}
+.pal-it{display:flex;align-items:center;gap:12px;padding:9px 18px;width:100%;text-align:left;color:var(--ink);min-width:0}
+.pal-it.act{background:#2E2E2E}
+.pal-ic{display:flex;color:var(--ink-soft);flex:none}
+.pal-ic.g{color:var(--accent)}
+.pal-m{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;overflow:hidden}
+.pal-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pal-id{font-family:var(--mono);font-size:12px;color:var(--faint);white-space:nowrap;flex:none}
+.pal-r{color:var(--ink-soft);font-size:12px;white-space:nowrap;flex:none}
+.pal-r.g{color:var(--accent)}
+.pal-k{display:flex;gap:4px;flex:none}
+.pal-k span{font:11px var(--mono);background:#2E2E2E;border:1px solid #3A3A3A;border-radius:4px;min-width:20px;text-align:center;padding:1px 5px;color:var(--ink-soft)}
+.pal-vide{padding:22px 18px;color:var(--ink-soft);font-size:13px;overflow-wrap:anywhere}
+.pal-ft{display:flex;gap:10px 16px;align-items:center;padding:10px 18px;border-top:1px solid #333333;font-size:12px;color:var(--faint);flex-wrap:wrap}
+.pal-ft .pal-k+span{margin-left:-10px}
+.pal-ask{margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--ink-soft);font-size:12px}
+.pal-ask:hover{color:var(--ink)}
+@media (max-width:520px){
+  .pal-voile{padding:10px}
+  .pal-ask{margin-left:0}
+  .pal-id{display:none}
 }
 
 /* L'alarme se dit partout de la même couleur ; déclarée en dernier pour

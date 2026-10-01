@@ -159,6 +159,8 @@ export function pageAppareils(p) {
   const corps = h('tbody');
   const pied = h('div');
   const recherche = champ({ sans: true, placeholder: t('misc.search'), 'aria-label': t('misc.search'), oninput: () => { filtre = recherche.value; peindre(); } });
+  // Venu d'une plage du rail : le parc s'ouvre filtré sur elle.
+  if (E.filtreAppareils) { filtre = recherche.value = E.filtreAppareils; E.filtreAppareils = null; }
 
   const dire = texte => remplir(message, texte ? note('info', texte) : '');
   const rattachement = d => {

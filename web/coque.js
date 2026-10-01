@@ -13,9 +13,12 @@
 // Sous 760 px, l'atelier n'a plus la place de ses panneaux : la feuille
 // ramène alors la disposition de lecture, rail en tiroir.
 import { h, ic, pictoType, remplir } from './dom.js';
-import { E, api, choisirPage, choisirAppareil, changerDisposition } from './etat.js';
+import { E, api, choisirPage, choisirAppareil, changerDisposition, lancerBalayage, poser } from './etat.js';
 import { t, langue, changerLangue } from './i18n.js';
-import { boutonAssistant } from './assistant/panneau.js';
+import { boutonAssistant, basculer as basculerAssistant } from './assistant/panneau.js';
+
+// Le raccourci de la palette, tel que le clavier de la machine le nomme.
+const RACCOURCI = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K';
 
 // L'ordre est celui de la maquette. Les groupes portent un nom : un rail de
 // quinze entrées sans intertitre ne se lit plus.
@@ -94,7 +97,7 @@ function recherche({ atelier }) {
   };
   champ.addEventListener('input', peindre);
   return h('div', { class: atelier ? 'recherche atelier' : 'recherche' },
-    h('label', { class: atelier ? 'wcmd' : 'search' }, ic('search', 13), champ, h('kbd', { text: '⌘K' })),
+    h('label', { class: atelier ? 'wcmd' : 'search' }, ic('search', 13), champ, h('kbd', { text: RACCOURCI })),
     liste);
 }
 
@@ -152,15 +155,107 @@ function rail(p, b, navs) {
   return h('aside', { class: 'rail', 'aria-label': 'Navigation' },
     h('div', { class: 'mark' },
       // La marque porte sa propre transparence : ni fond ni arrondi, elle tient
-      // sur le clair comme sur le sombre.
+      // sur le clair comme sur le sombre. La gamme Console la pose dans une
+      // tuile claire, suivie du sélecteur.
       h('img', { class: 'marque', src: '/logo.png', alt: 'MapMyLAN' }),
-      h('b', { text: 'MapMyLAN' }), h('span', { class: 'pulse' })),
+      h('span', { class: 'tuile', 'aria-hidden': 'true' }, ic('map', 16, { trait: 2.2 })),
+      h('b', { text: 'MapMyLAN' }), h('span', { class: 'pulse' }), h('span', { class: 'chev', 'aria-hidden': 'true' }, ic('deplier', 14))),
+    h('button', { class: 'rail-cherche', type: 'button', onclick: () => ouvrirPalette() },
+      ic('search', 15), h('span', { text: t('top.search.short') }), h('kbd', { text: RACCOURCI })),
     groupes,
+    plagesRail(p),
     h('div', { class: 'railcard' },
       h('div', { class: 'row' }, ic('clock', 13), h('span', { text: t('rail.next') }), prochain),
       h('div', { class: 'row' }, ic('refresh', 13), h('span', { text: t('rail.every') }), frequence),
       h('div', { class: 'bar' }, barre)));
 }
+
+// Les plages balayées, dans le rail de la gamme Console : un clic ouvre le
+// parc filtré sur la plage. Lues une fois au montage, puis à chaque balayage.
+function plagesRail(p) {
+  const liste = h('div', { class: 'plages-rail' });
+  const peindre = plages => remplir(liste,
+    h('div', { class: 'sec-rail' }, h('span', { text: t('rail.ranges') }), h('button', { class: 'plus', type: 'button', title: t('rail.ranges.add'), 'aria-label': t('rail.ranges.add'), onclick: () => choisirPage('settings'), text: '+' })),
+    ...plages.map(x => h('button', { class: 'plage', type: 'button', onclick: () => { poser({ filtreAppareils: prefixe(x.cidr) }); choisirPage('devices'); } },
+      ic(E.scanRunning ? 'refresh' : 'wired', 15), h('span', { class: 'lib', text: x.label || x.cidr }), h('span', { class: 'cidr', text: x.cidr }))));
+  const lire = () => api.get('/api/devices/scan/ranges').then(r => peindre(Array.isArray(r) ? r : [])).catch(() => peindre([]));
+  p.suivre('scanRunning', lire);
+  lire();
+  return liste;
+}
+// Ce qu'une adresse de la plage a en commun avec les autres, pour le filtre du parc.
+const prefixe = cidr => {
+  const [ip, n] = String(cidr).split('/');
+  const octets = Math.max(1, Math.min(3, Math.floor(Number(n) / 8)));
+  return ip.split('.').slice(0, octets).join('.') + '.';
+};
+
+/* Palette de commandes (⌘K) : appareils, pages et actions, au clavier. En
+   gamme SOMA, ⌘K place le curseur dans la recherche de la barre du haut. */
+let paletteOuverte = null;
+export function ouvrirPalette() {
+  if (document.documentElement.dataset.gamme !== 'console') {
+    document.querySelector('.top .search input, .wcmd input')?.focus();
+    return;
+  }
+  if (paletteOuverte?.isConnected) return;
+  const champ = h('input', { placeholder: t('palette.placeholder'), 'aria-label': t('palette.placeholder'), autocomplete: 'off' });
+  const liste = h('div', { class: 'pal-liste', role: 'listbox' });
+  let rang = 0, elements = [];
+  const fermer = () => { voile.remove(); paletteOuverte = null; document.removeEventListener('keydown', clavier, true); };
+  const ACTIONS = [
+    { titre: t('act.scan'), icone: 'refresh', agir: () => lancerBalayage() },
+    { titre: t('shell.toWorkshop'), icone: 'overview', agir: () => changerDisposition('workshop') },
+    { titre: t('top.assistant'), icone: 'sparkle', agir: () => basculerAssistant() },
+  ];
+  const peindre = () => {
+    const q = champ.value.trim().toLowerCase();
+    const mots = q.split(/\s+/).filter(Boolean);
+    const vaut = texte => !mots.length || mots.every(m => texte.toLowerCase().includes(m));
+    const appareils = E.devices.filter(d => vaut([d.ip, d.mac, d.hostname, d.customName, d.vendor].filter(Boolean).join(' '))).slice(0, 6)
+      .map(d => ({ groupe: t('palette.devices'), titre: d.customName || d.hostname || d.ip, id: d.ip, icone: pictoType(d.customType || d.type),
+        droite: d.status === 'online' ? t('state.online') : t(`state.${d.status}`), attention: ['suspect', 'quarantined', 'banned'].includes(d.status), agir: () => choisirAppareil(d.id) }));
+    const pages = NAV.filter(n => (!n.admin || E.moi?.role === 'admin') && vaut(t(`nav.${n.id}`))).slice(0, q ? 5 : 4)
+      .map(n => ({ groupe: t('palette.pages'), titre: t(`nav.${n.id}`), icone: n.icon, agir: () => choisirPage(n.id) }));
+    const actions = ACTIONS.filter(a => vaut(a.titre)).map(a => ({ ...a, groupe: t('palette.actions') }));
+    elements = [...appareils, ...pages, ...actions];
+    rang = Math.min(rang, Math.max(0, elements.length - 1));
+    let groupe = '';
+    remplir(liste, elements.length ? elements.flatMap((x, i) => {
+      const tete = x.groupe !== groupe ? [h('div', { class: 'pal-grp' }, h('span', { text: x.groupe }),
+        x.groupe === t('palette.devices') ? h('span', { class: 'mono', text: t('palette.count', { n: appareils.length, total: E.devices.length }) }) : null)] : [];
+      groupe = x.groupe;
+      return [...tete, h('button', { class: i === rang ? 'pal-it act' : 'pal-it', type: 'button', role: 'option', 'aria-selected': String(i === rang),
+        onmousemove: () => { if (rang !== i) { rang = i; peindre(); } }, onclick: () => { fermer(); x.agir(); } },
+        h('span', { class: x.attention ? 'pal-ic g' : 'pal-ic' }, ic(x.icone, 15)),
+        h('span', { class: 'pal-m' }, h('span', { class: 'pal-t', text: x.titre }), x.id ? h('span', { class: 'pal-id', text: x.id }) : null),
+        x.touches ? h('span', { class: 'pal-k' }, ...x.touches.map(k => h('span', { text: k }))) : h('span', { class: x.attention ? 'pal-r g' : 'pal-r', text: x.droite || '' }))];
+    }) : [h('div', { class: 'pal-vide', text: t('palette.empty', { q: champ.value.trim() }) })]);
+  };
+  const clavier = e => {
+    if (e.key === 'Escape') { e.preventDefault(); fermer(); }
+    else if (e.key === 'ArrowDown' && elements.length) { e.preventDefault(); rang = (rang + 1) % elements.length; peindre(); }
+    else if (e.key === 'ArrowUp' && elements.length) { e.preventDefault(); rang = (rang - 1 + elements.length) % elements.length; peindre(); }
+    else if (e.key === 'Enter' && elements[rang]) { e.preventDefault(); const x = elements[rang]; fermer(); x.agir(); }
+  };
+  const voile = h('div', { class: 'pal-voile', onclick: e => { if (e.target === voile) fermer(); } },
+    h('div', { class: 'pal', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('palette.title') },
+      h('label', { class: 'pal-in' }, ic('search', 16), champ, h('kbd', { text: t('palette.esc') })),
+      liste,
+      h('div', { class: 'pal-ft' },
+        h('span', { class: 'pal-k' }, h('span', { text: '↑↓' })), h('span', { text: t('palette.navigate') }),
+        h('span', { class: 'pal-k' }, h('span', { text: '↵' })), h('span', { text: t('palette.open') }),
+        h('button', { class: 'pal-ask', type: 'button', onclick: () => { fermer(); basculerAssistant(); } }, ic('sparkle', 14), h('span', { text: t('palette.ask') })))));
+  champ.addEventListener('input', () => { rang = 0; peindre(); });
+  document.addEventListener('keydown', clavier, true);
+  document.body.append(voile);
+  paletteOuverte = voile;
+  peindre();
+  champ.focus();
+}
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) { e.preventDefault(); ouvrirPalette(); }
+});
 
 // Barre du haut, disposition lecture
 function barreHaut(app) {
