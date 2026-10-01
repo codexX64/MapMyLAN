@@ -152,6 +152,11 @@ Commits suivants, hors de la passe ; la suite et la surface publique ci-dessus s
 - `91b1adc carte : arborescence dessinée comme un contrôleur réseau, glyphes pleins, courbes, sans fil en pointillé`
 - `0690345 parcours : les deux gammes, le graphe, l'arborescence et la palette`
 - `1c8c53d docs : balayages d'une période dans la référence de l'API`
+- `1a3af5d conteneur : commande de l'image redite dans les deux Compose, un entrypoint posé effaçant le CMD (l'API bouclait sur setpriv sans programme)`
+- `e7de352 ligne de commande : l'entrée lue en flux, readFileSync(0) levant EAGAIN derrière ssh et docker run -i`
+- `afed56a socle c06919a : gamme Console claire (blanc et bleu) par la bascule clair ou sombre`
+- `c773f9f thème : Console claire, blanc et bleu, par la bascule ; Console sombre par défaut, couleurs propres en jetons ; parcours en variante claire`
+- `a044110 carte : liaisons de l'arborescence en épaisseur du dessin, sans vector-effect (bandes verticales sous Safari)`
 
 ## Verification (chapter 49)
 - [x] Full suite passes and matches the baseline — 107 essais, les mêmes avant et après la passe, relancés à la génération de ce fichier
