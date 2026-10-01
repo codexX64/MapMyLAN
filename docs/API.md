@@ -72,7 +72,7 @@ approfondi, ping, registres, logos, assistant, voix) : 429 au-delà.
 
 Aucune liste n'est rendue sans borne : les paramètres `limit`/`limite` sont
 bornés par leur schéma, et les listes sans paramètre ont un plafond fixe
-(appareils 10 000, liens de la carte 50 000, zones 5 000, commandes et
+(appareils 10 000, balayages d'une période 5 000, liens de la carte 50 000, zones 5 000, commandes et
 commandes du bot 1 000 chacune, consoles et équipements 1 000, jetons 1 000,
 boîtes mail 500, règles 500).
 
@@ -154,6 +154,7 @@ ouverts par session (429 au-delà) : un par onglet.
 | GET | `/api/devices` | lecture, jeton | — | `Device[]` trié par `lastSeen` décroissant |
 | GET | `/api/devices/health/score` | lecture, jeton | — | `{ score }` |
 | GET | `/api/devices/scans/latest` | lecture, jeton | — | `ScanRun` ou `null` |
+| GET | `/api/devices/scans?heures=24` | lecture | — | `ScanRun[]` terminés depuis `heures` (1 ≤ heures ≤ 720), du plus ancien au plus récent, 5 000 au plus |
 | GET | `/api/devices/scan/ranges` | lecture, jeton | — | `[{ cidr, label, enabled }]` |
 | POST | `/api/devices/scan` | membre, jeton | `{ subnet?: CIDR }` | `{ ok: true }` (balayage lancé ; suivre par le flux ; 3 par minute) |
 | POST | `/api/devices/manual` | membre | voir dessous | `Device` (409 si la MAC est déjà portée) |
