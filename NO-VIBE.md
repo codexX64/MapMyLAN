@@ -4,13 +4,15 @@ Method: Project Baseline Requirements & Security Manual, Part III (chapters 37-4
 Reviewed: 2026-09-30   ·   Owner: Codex64
 
 ## Behaviour freeze
-Point de départ de la passe : `aca60fe`, dernier commit de la phase de sécurité. Ensemble de référence : 107 essais (55 de MapMyLAN, 52 du socle embarqué), tous verts avant la passe ; relancés à la génération de ce fichier, les mêmes, un à un, tous verts.
+Point de départ de la passe : `aca60fe`, dernier commit de la phase de sécurité. Ensemble de référence : 107 essais, tous verts avant la passe ; relancés à la génération de ce fichier (60 essais de MapMyLAN et 55 du socle embarqué aujourd’hui), les 107 de la référence sont là, un à un, tous verts.
 
 Essais de caractérisation (chapitre 38.2), là où la couverture était mince, gardés hors du dépôt et joués sur `aca60fe` puis sur l’arbre de la passe : les mises à jour de colonnes choisies (règles, commandes, commandes du bot, VLAN, zones, interfaces, appareils, liaisons : 77 lignes de réponses et de lignes en base, effacements et booléens compris) et la disposition en arbre de la carte (quarante appareils, liaisons manuelles et mesurées) — sorties identiques des deux côtés. Rien n’en entre dans le dépôt.
 
 Diff de l’API publique sur la passe : vide. L’inventaire de la surface publique (`aca60fe` contre l’arbre final) est identique ligne à ligne : 112 routes avec leurs paramètres, rôles, renforts, portées et schémas, 14 réglages et leurs schémas, 50 déclencheurs, 5 actions et 16 actions du bot, la liste des types d’appareil, 29 variables de configuration, 10 événements du flux temps réel, 4 commandes de la ligne de commande.
 
-Démarrage et parcours de bout en bout, sur l’arbre de la passe : `outils/parcours-navigateur.mjs` (installation par clé d’accès virtuelle, mise en route, balayage, défense, fiches, consoles, réglages, notifications, carte, assistant, langues, petit écran, comptes, lecture seule) → 35 gestes aboutis ; 345 écrans×largeurs, défauts de mise en page : 0, erreurs de console : 0, requêtes refusées : 0.
+Démarrage et parcours de bout en bout, sur l’arbre final, gamme SOMA : `outils/parcours-navigateur.mjs` (installation par clé d’accès virtuelle, mise en route, balayage, défense, fiches, consoles, réglages, notifications, carte, assistant, langues, petit écran, comptes, lecture seule) → 35 gestes aboutis ; 372 écrans×largeurs, défauts de mise en page : 0, erreurs de console : 0, requêtes refusées : 0.
+
+Après la passe, des fonctions ont été ajoutées (commits listés en fin de fichier) ; elles étendent le comportement sans rien retirer. Les 107 essais de la référence sont toujours là, un à un, et verts ; 8 essais nouveaux les accompagnent, verts aussi : « SOCLE_THEME : soma par défaut, console admise, toute autre valeur arrête le démarrage », « arborescence : racine rendue, courbe horizontale aux deux bouts, du père vers le fils », « balayages d’une période : terminés seulement, dans la fenêtre demandée, fenêtre bornée », « créneaux : vus par plage puis additionnés, nouveaux à leur première apparition, créneau sans balayage vide », « gamme Console : chaque jeton de SOMA redéfini, polices servies par le socle », « la page est rendue avec sa gamme ; une gamme inconnue retombe sur SOMA », « plafond : rond, divisible en quatre, jamais sous 4 », « thème : la page porte celui de SOCLE_THEME, champ du Hub (Console par défaut) ; SOMA hors Hub ». Surface publique ajoutée depuis `984c44d`, rien de retiré : `route GET /^\/api\/devices\/scans$/ []`. La gamme se choisit par `SOCLE_THEME`, que le Hub pose depuis le champ « Thème de l’interface » de la configuration du service (Console par défaut) ; hors du Hub, SOMA reste la gamme par défaut. Le parcours de bout en bout, refait dans la gamme Console (`SOCLE_THEME=console`), donne 35 gestes aboutis ; 381 écrans×largeurs, défauts de mise en page : 0, erreurs de console : 0, requêtes refusées : 0.
 
 Changements de comportement voulus pendant la phase de sécurité, chacun étant le correctif (détail dans SECURITY.md, « Findings and resolutions ») :
 
@@ -32,14 +34,14 @@ Changements de comportement voulus pendant la phase de sécurité, chacun étant
 ## Layer status
 | Chapter | Subject | Status | What changed |
 |---|---|---|---|
-| 39 | Comment layer | DONE | étiquettes qui répétaient le nom de la fonction suivante retirées (sept : nœuds, zones, liaisons, appareils de la carte, boucle de rendu du globe, formulaire de l’équipement) ; étapes numérotées de l’arborescence rendues à leur explication ; renvoi à React (absent de la version 2) et transition de rédaction retirés ; densité moyenne 12.6 % sur le code livré, les fichiers au-dessus de 25 % relus un à un (`web/lib/modeles.js`, `web/lib/trafic.js`, `web/lib/geo-globe.js`, `web/composants/silhouettes.js`, `src/executeur.js`, `web/lib/topologie-arbre.js`, `src/demande-secret.js`, `src/certificat.js`, `web/communs.js`, `src/api/schemas.js`, `src/adaptateurs/index.js`) : des principes, des seuils justifiés, des invariants et des tables commentées par famille, aucune narration |
+| 39 | Comment layer | DONE | étiquettes qui répétaient le nom de la fonction suivante retirées (sept : nœuds, zones, liaisons, appareils de la carte, boucle de rendu du globe, formulaire de l’équipement) ; étapes numérotées de l’arborescence rendues à leur explication ; renvoi à React (absent de la version 2) et transition de rédaction retirés ; densité moyenne 12.5 % sur le code livré, les fichiers au-dessus de 25 % relus un à un (`web/lib/modeles.js`, `web/lib/trafic.js`, `web/lib/geo-globe.js`, `web/composants/silhouettes.js`, `src/executeur.js`, `web/lib/topologie-arbre.js`, `src/demande-secret.js`, `src/certificat.js`, `web/communs.js`, `src/api/schemas.js`, `src/adaptateurs/index.js`) : des principes, des seuils justifiés, des invariants et des tables commentées par famille, aucune narration |
 | 40 | Naming and vocabulary | DONE | aucun suffixe Manager/Handler/Provider, aucun module fourre-tout ; les noms génériques relevés sont des réponses HTTP (`res`) ou le champ `output` du contrat ; `executer`, `dedoublonner`, `dock` sont les mots du domaine |
 | 41 | Formatting, layout and whitespace | DONE | aucun formateur dans le dépôt, aucun introduit ; 2 espaces, apostrophes simples, points-virgules ; trois lignes vides de fin de fichier et une espace égarée retirées ; l’arborescence de la carte, seule écrite autrement (paramètres entre parenthèses, signature éclatée, commentaires alignés), ramenée au style du reste ; un caractère invisible d’un essai écrit en échappement |
 | 42 | Gratuitous abstraction | DONE | aucune interface à une seule implémentation (les adaptateurs d’équipement en ont plusieurs) ; code mort retiré : `rendreLisible`, `exigerCidr`, `exigerHote`, `VERSION_SCHEMA`, `CHAMPS_SECRETS`, un remplacement sans effet ; huit copies de la mise à jour de colonnes choisies repliées en `modifierLigne` (`src/db.js`), le seul endroit où le choix des colonnes écrites dépend d’une requête, les noms étant toujours pris dans la liste fermée de chaque table (la reprise 1.x et la rotation n’interpolent que des noms écrits en dur) |
-| 43 | Defensive noise | DONE | 316 `catch` relus, tous autour d’une opération précise, classés ci-dessous ; un relevé des VLAN qui levait sans trace pendant le cycle de balayage est journalisé ; aucun message vague, aucune journalisation d’entrée ou de sortie de fonction |
+| 43 | Defensive noise | DONE | 318 `catch` relus, tous autour d’une opération précise, classés ci-dessous ; un relevé des VLAN qui levait sans trace pendant le cycle de balayage est journalisé ; aucun message vague, aucune journalisation d’entrée ou de sortie de fonction |
 | 44 | Control flow and idiom | DONE | retours anticipés ; boucles indexées réservées aux pixels (détourage), aux géométries du globe et de la carte ; `for (;;)` de l’arborescence gardé : quatre passes qui recommencent tant que l’une avance |
 | 45 | Types, signatures and data shapes | DONE | JavaScript sans TypeScript ; un contrat d’erreur : `ErreurHttp` du socle (et `Refus`, sa sous-classe journalisée), levée au plus près, formatée une seule fois ; schémas de route déclaratifs, champ inconnu refusé ; formes de réponse écrites champ par champ (`src/formes.js`) |
-| 46 | Dependencies, configuration, fitting the repository | DONE | aucune dépendance ; chacune des 35 variables de `.env.example` a un lecteur ; aucun import inutilisé (liaisons importées de 143 fichiers relues ; un import mort retiré) ; le faux serveur reprend la politique des permissions du service au lieu d’une copie qui avait dérivé |
+| 46 | Dependencies, configuration, fitting the repository | DONE | aucune dépendance ; chacune des 36 variables de `.env.example` a un lecteur ; aucun import inutilisé (liaisons importées de 148 fichiers relues ; un import mort retiré) ; le faux serveur reprend la politique des permissions du service au lieu d’une copie qui avait dérivé |
 | 47 | Tests | DONE | 12 cassures volontaires, chacune détectée (ci-dessous) ; essais aux frontières sur de vrais serveurs locaux ; aucune assertion vide |
 | 48 | Documentation, furniture and version control | DONE | README : le parcours navigateur et le faux serveur dans « Vérifier » ; `.gitignore`, `.dockerignore`, `LICENSE`, `Dockerfile` et la vérification CI contrôlés ; aucun fichier de consignes d’outil ; historique de la 2.0, jamais poussé, refait sur une racine neuve : réécriture découpée par sujet (serveur en neuf commits, interface en huit), relevés commités seuls, un sujet par commit, sans mention d’outil |
 
@@ -48,7 +50,7 @@ Changements de comportement voulus pendant la phase de sécurité, chacun étant
 | Raison | Nombre | Où |
 |---|---|---|
 | valeur de repli explicite (donnée externe illisible, objet disparu, service absent) | 123 | `outils/`, `socle/`, `src/adaptateurs/pilotes-ssh.js`, `src/adaptateurs/session.js`, `src/api/reseau.js`, `src/assistant/liaisons.js`, `src/commandes-bot.js`, `src/commandes.js` et 37 autres |
-| montrée à l’écran ou rendue au demandeur, avec sa cause | 68 | `socle/`, `src/memoire.js`, `src/ticket.js`, `src/trafic.js`, `src/vlans.js`, `web/app.js`, `web/assistant/panneau.js`, `web/assistant/voix.js` et 12 autres |
+| montrée à l’écran ou rendue au demandeur, avec sa cause | 70 | `socle/`, `src/memoire.js`, `src/ticket.js`, `src/trafic.js`, `src/vlans.js`, `web/app.js`, `web/assistant/panneau.js`, `web/assistant/voix.js` et 14 autres |
 | relevée, traduite en erreur du domaine (ErreurHttp) ou transmise | 46 | `outils/`, `socle/`, `src/adaptateurs/session.js`, `src/api/assistant.js`, `src/api/automatisation.js`, `src/api/index.js`, `src/api/messagerie.js`, `src/api/reseau.js` et 15 autres |
 | journalisée, ou portée dans l’état du service | 30 | `outils/`, `socle/`, `src/api/appareils.js`, `src/api/systeme.js`, `src/commandes-bot.js`, `src/commandes.js`, `src/defense.js`, `src/enrichissement.js` et 9 autres |
 | sans effet voulu, la raison écrite dans le bloc | 25 | `socle/`, `src/poste.js`, `src/scanner.js`, `web/app.js`, `web/assistant/voix.js`, `web/composants/fiche.js`, `web/composants/monde.js`, `web/composants/topologie.js` et 4 autres |
@@ -99,8 +101,8 @@ Relancé à chaque génération de ce fichier (bash, LC_ALL=C.UTF-8) ; un résul
 | B.5.8 | `rg -o '\b\w+(Manager\|Service\|Handler\|Provider\|Factory\|Helper\|Util\|Wrapper\|Processor\|Engine)\b' . -g '!SECURITY.md' -g '!NO-VIBE.md' \| cut -d: -f2- \| sort -u` | `AudioWorkletProcessor
 registerProcessor` | l’API Web Audio du navigateur (capture du micro), pas un nom du dépôt |
 | B.5.9 | `find . -path ./node_modules -prune -o -type f -regextype posix-extended -regex '.*/(utils?\|helpers?\|common\|misc\|shared)\.(py\|ts\|js\|go\|rb\|java)' -print` | 0 ligne |  |
-| B.5.10 | `rg -n '\b(data\|result\|output\|temp\|tmp\|res\|ret\|val\|obj\|item)\b\s*=' . -g '!SECURITY.md' -g '!NO-VIBE.md' \| wc -l` | `11` | `res` : la réponse HTTP d’un rappel de Node, ou le paramètre `res =>` d’une promesse d’essai ; `output` : le champ du contrat de l’API (`{ output }` des actions de défense et des VLAN) |
-| B.5.11 | `rg -n 'catch\s*\(\s*(e\|err\|error)\s*\)\|catch\s*\{' . -g '!SECURITY.md' -g '!NO-VIBE.md' \| wc -l` | `223` | relus un à un avec les `.catch(` : 316 au total, par raison ci-dessous |
+| B.5.10 | `rg -n '\b(data\|result\|output\|temp\|tmp\|res\|ret\|val\|obj\|item)\b\s*=' . -g '!SECURITY.md' -g '!NO-VIBE.md' \| wc -l` | `12` | `res` : la réponse HTTP d’un rappel de Node, la réponse simulée d’un essai du socle, ou le paramètre `res =>` d’une promesse d’essai ; `output` : le champ du contrat de l’API (`{ output }` des actions de défense et des VLAN) |
+| B.5.11 | `rg -n 'catch\s*\(\s*(e\|err\|error)\s*\)\|catch\s*\{' . -g '!SECURITY.md' -g '!NO-VIBE.md' \| wc -l` | `223` | relus un à un avec les `.catch(` : 318 au total, par raison ci-dessous |
 | B.5.12 | `rg -n 'An error occurred\|Something went wrong\|Unexpected error\|Une erreur est survenue\|Quelque chose s.est mal passé' . -g '!SECURITY.md' -g '!NO-VIBE.md'` | 0 ligne |  |
 | B.5.13 | `git ls-files '*.py' \| wc -l` | `0` | aucun Python : la recherche des `except` muets n’a rien à lire |
 | B.5.14 | `rg -n 'logger\.(info\|debug)\(f?["\x27](Starting\|Entering\|Finished\|Exiting\|Called)' . -g '!SECURITY.md' -g '!NO-VIBE.md'` | 0 ligne |  |
@@ -112,7 +114,7 @@ registerProcessor` | l’API Web Audio du navigateur (capture du micro), pas un 
 | 48.3.2 | `rg -n -i 'placeholder' . -g '!SECURITY.md' -g '!NO-VIBE.md' \| cut -d: -f1 \| cut -d/ -f2 \| sort \| uniq -c` | `1 hub.json
       1 outils
       3 socle
-     59 web` | attributs `placeholder` des champs de l’interface (et du socle) et leur style, le champ `placeholder` du manifeste du Hub, un sélecteur du parcours navigateur |
+     62 web` | attributs `placeholder` des champs de l’interface (et du socle) et leur style, le champ `placeholder` du manifeste du Hub, un sélecteur du parcours navigateur |
 | 48.3.3 | `rg -n '\b(TODO\|FIXME\|XXX\|HACK)\b' . -g '!SECURITY.md' -g '!NO-VIBE.md'` | 0 ligne |  |
 | 48.3.4 | `find . -path ./.git -prune -o \( -name .ai -o -name .cursor -o -name '.aider*' -o -name .continue -o -name .windsurfrules -o -name CLAUDE.md -o -name 'AGENTS.md' -o -name 'PROMPTS.md' \) -print` | 0 ligne |  |
 | 48.4.1 | `git log --all --format='%B' \| rg -i 'co-authored-by\|generated with'` | 0 ligne | tout l’historique |
@@ -141,6 +143,15 @@ Commits de la passe :
 - `7c9f1d6 commentaires : l'arborescence de la carte ne renvoie plus à React, absent de la version 2`
 - `64836b6 mise en forme : l'arborescence de la carte écrite comme le reste du dépôt (paramètres nus, signature sur une ligne, sans commentaires alignés)`
 - `984c44d commentaires : l'en-tête de la reconnaissance des modèles sans transition de rédaction`
+
+Commits suivants, hors de la passe ; la suite et la surface publique ci-dessus sont remesurées après eux :
+- `f8c611b socle 061a2ae : gamme Console et ses composants, polices Geist servies sur place`
+- `3a694c9 thème : Console ou SOMA, champ de la configuration du service dans le Hub (Console par défaut), page rendue avec sa gamme`
+- `3e8d0cd Console : barre latérale de la maquette (recherche, plages balayées) et palette de commandes au clavier`
+- `bb74465 vue d'ensemble : graphe « Appareils vus » tiré des balayages terminés et des premières apparitions`
+- `91b1adc carte : arborescence dessinée comme un contrôleur réseau, glyphes pleins, courbes, sans fil en pointillé`
+- `0690345 parcours : les deux gammes, le graphe, l'arborescence et la palette`
+- `1c8c53d docs : balayages d'une période dans la référence de l'API`
 
 ## Verification (chapter 49)
 - [x] Full suite passes and matches the baseline — 107 essais, les mêmes avant et après la passe, relancés à la génération de ce fichier
