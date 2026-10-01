@@ -80,6 +80,8 @@ services:
       SOCLE_SMTP_DE: "{{config.SOCLE_SMTP_DE}}"
       # Reprise d'une 1.4.1 seulement (node src/cli.js importer-v1).
       MAPMYLAN_V1_MASTER_KEY: "{{config.MASTER_KEY}}"
+    # Un entrypoint posé ici efface le CMD de l'image : la commande est redite.
+    command: ["node", "--disable-warning=ExperimentalWarning", "src/main.js"]
 
   # Le relais : même image, sur le réseau du Hub, qui transmet chaque requête
   # à l'API (flux temps réel compris). Il ne décide rien.

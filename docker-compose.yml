@@ -55,6 +55,8 @@ services:
         max-size: "10m"
         max-file: "5"
     depends_on: [docker-socket-proxy]
+    # Un entrypoint posé ici efface le CMD de l'image : la commande est redite.
+    command: ["node", "--disable-warning=ExperimentalWarning", "src/main.js"]
 
   # Proxy en lecture seule devant le socket Docker : MapMyLAN liste les
   # conteneurs de la machine, rien d'autre. Monter le socket lui-même donnerait

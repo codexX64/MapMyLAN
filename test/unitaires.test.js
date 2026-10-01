@@ -397,6 +397,11 @@ test('conteneur : NET_RAW seule pour MapMyLAN, sans élévation possible, dans l
     const entree = JSON.parse(/^ {4}entrypoint: (\[.*\])$/m.exec(bloc)[1]);
     assert.deepEqual(entree.filter(a => /^--(reuid|regid|inh-caps|ambient-caps|bounding-set)=/.test(a)),
       ['--reuid=node', '--regid=node', '--inh-caps=-all,+net_raw', '--ambient-caps=-all,+net_raw', '--bounding-set=-all,+net_raw'], f);
+    // Compose efface le CMD de l'image dès qu'un entrypoint est posé : sans
+    // commande redite, setpriv part sans programme et le conteneur boucle.
+    const commande = /^ {4}command: (\[.*\])$/m.exec(bloc);
+    assert.ok(commande, `${f} : commande absente`);
+    assert.deepEqual(JSON.parse(commande[1]), JSON.parse(/^CMD (\[.*\])$/m.exec(lire('Dockerfile'))[1]), f);
   }
   assert.deepEqual(JSON.parse(lire('hub.json')).permissions.capAdd, ['NET_RAW', 'SETUID', 'SETGID', 'SETPCAP']);
   assert.doesNotMatch(lire('Dockerfile'), /setcap|NET_ADMIN/);
