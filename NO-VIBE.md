@@ -38,7 +38,7 @@ Changements de comportement voulus pendant la phase de sécurité, chacun étant
 | 40 | Naming and vocabulary | DONE | aucun suffixe Manager/Handler/Provider, aucun module fourre-tout ; les noms génériques relevés sont des réponses HTTP (`res`) ou le champ `output` du contrat ; `executer`, `dedoublonner`, `dock` sont les mots du domaine |
 | 41 | Formatting, layout and whitespace | DONE | aucun formateur dans le dépôt, aucun introduit ; 2 espaces, apostrophes simples, points-virgules ; trois lignes vides de fin de fichier et une espace égarée retirées ; l’arborescence de la carte, seule écrite autrement (paramètres entre parenthèses, signature éclatée, commentaires alignés), ramenée au style du reste ; un caractère invisible d’un essai écrit en échappement |
 | 42 | Gratuitous abstraction | DONE | aucune interface à une seule implémentation (les adaptateurs d’équipement en ont plusieurs) ; code mort retiré : `rendreLisible`, `exigerCidr`, `exigerHote`, `VERSION_SCHEMA`, `CHAMPS_SECRETS`, un remplacement sans effet ; huit copies de la mise à jour de colonnes choisies repliées en `modifierLigne` (`src/db.js`), le seul endroit où le choix des colonnes écrites dépend d’une requête, les noms étant toujours pris dans la liste fermée de chaque table (la reprise 1.x et la rotation n’interpolent que des noms écrits en dur) |
-| 43 | Defensive noise | DONE | 318 `catch` relus, tous autour d’une opération précise, classés ci-dessous ; un relevé des VLAN qui levait sans trace pendant le cycle de balayage est journalisé ; aucun message vague, aucune journalisation d’entrée ou de sortie de fonction |
+| 43 | Defensive noise | DONE | 317 `catch` relus, tous autour d’une opération précise, classés ci-dessous ; un relevé des VLAN qui levait sans trace pendant le cycle de balayage est journalisé ; aucun message vague, aucune journalisation d’entrée ou de sortie de fonction |
 | 44 | Control flow and idiom | DONE | retours anticipés ; boucles indexées réservées aux pixels (détourage), aux géométries du globe et de la carte ; `for (;;)` de l’arborescence gardé : quatre passes qui recommencent tant que l’une avance |
 | 45 | Types, signatures and data shapes | DONE | JavaScript sans TypeScript ; un contrat d’erreur : `ErreurHttp` du socle (et `Refus`, sa sous-classe journalisée), levée au plus près, formatée une seule fois ; schémas de route déclaratifs, champ inconnu refusé ; formes de réponse écrites champ par champ (`src/formes.js`) |
 | 46 | Dependencies, configuration, fitting the repository | DONE | aucune dépendance ; chacune des 36 variables de `.env.example` a un lecteur ; aucun import inutilisé (liaisons importées de 148 fichiers relues ; un import mort retiré) ; le faux serveur reprend la politique des permissions du service au lieu d’une copie qui avait dérivé |
@@ -50,7 +50,7 @@ Changements de comportement voulus pendant la phase de sécurité, chacun étant
 | Raison | Nombre | Où |
 |---|---|---|
 | valeur de repli explicite (donnée externe illisible, objet disparu, service absent) | 123 | `outils/`, `socle/`, `src/adaptateurs/pilotes-ssh.js`, `src/adaptateurs/session.js`, `src/api/reseau.js`, `src/assistant/liaisons.js`, `src/commandes-bot.js`, `src/commandes.js` et 37 autres |
-| montrée à l’écran ou rendue au demandeur, avec sa cause | 70 | `socle/`, `src/memoire.js`, `src/ticket.js`, `src/trafic.js`, `src/vlans.js`, `web/app.js`, `web/assistant/panneau.js`, `web/assistant/voix.js` et 14 autres |
+| montrée à l’écran ou rendue au demandeur, avec sa cause | 69 | `socle/`, `src/memoire.js`, `src/ticket.js`, `src/trafic.js`, `src/vlans.js`, `web/app.js`, `web/assistant/panneau.js`, `web/assistant/voix.js` et 14 autres |
 | relevée, traduite en erreur du domaine (ErreurHttp) ou transmise | 46 | `outils/`, `socle/`, `src/adaptateurs/session.js`, `src/api/assistant.js`, `src/api/automatisation.js`, `src/api/index.js`, `src/api/messagerie.js`, `src/api/reseau.js` et 15 autres |
 | journalisée, ou portée dans l’état du service | 30 | `outils/`, `socle/`, `src/api/appareils.js`, `src/api/systeme.js`, `src/commandes-bot.js`, `src/commandes.js`, `src/defense.js`, `src/enrichissement.js` et 9 autres |
 | sans effet voulu, la raison écrite dans le bloc | 25 | `socle/`, `src/poste.js`, `src/scanner.js`, `web/app.js`, `web/assistant/voix.js`, `web/composants/fiche.js`, `web/composants/monde.js`, `web/composants/topologie.js` et 4 autres |
@@ -102,7 +102,7 @@ Relancé à chaque génération de ce fichier (bash, LC_ALL=C.UTF-8) ; un résul
 registerProcessor` | l’API Web Audio du navigateur (capture du micro), pas un nom du dépôt |
 | B.5.9 | `find . -path ./node_modules -prune -o -type f -regextype posix-extended -regex '.*/(utils?\|helpers?\|common\|misc\|shared)\.(py\|ts\|js\|go\|rb\|java)' -print` | 0 ligne |  |
 | B.5.10 | `rg -n '\b(data\|result\|output\|temp\|tmp\|res\|ret\|val\|obj\|item)\b\s*=' . -g '!SECURITY.md' -g '!NO-VIBE.md' \| wc -l` | `12` | `res` : la réponse HTTP d’un rappel de Node, la réponse simulée d’un essai du socle, ou le paramètre `res =>` d’une promesse d’essai ; `output` : le champ du contrat de l’API (`{ output }` des actions de défense et des VLAN) |
-| B.5.11 | `rg -n 'catch\s*\(\s*(e\|err\|error)\s*\)\|catch\s*\{' . -g '!SECURITY.md' -g '!NO-VIBE.md' \| wc -l` | `223` | relus un à un avec les `.catch(` : 318 au total, par raison ci-dessous |
+| B.5.11 | `rg -n 'catch\s*\(\s*(e\|err\|error)\s*\)\|catch\s*\{' . -g '!SECURITY.md' -g '!NO-VIBE.md' \| wc -l` | `222` | relus un à un avec les `.catch(` : 317 au total, par raison ci-dessous |
 | B.5.12 | `rg -n 'An error occurred\|Something went wrong\|Unexpected error\|Une erreur est survenue\|Quelque chose s.est mal passé' . -g '!SECURITY.md' -g '!NO-VIBE.md'` | 0 ligne |  |
 | B.5.13 | `git ls-files '*.py' \| wc -l` | `0` | aucun Python : la recherche des `except` muets n’a rien à lire |
 | B.5.14 | `rg -n 'logger\.(info\|debug)\(f?["\x27](Starting\|Entering\|Finished\|Exiting\|Called)' . -g '!SECURITY.md' -g '!NO-VIBE.md'` | 0 ligne |  |
@@ -157,6 +157,9 @@ Commits suivants, hors de la passe ; la suite et la surface publique ci-dessus s
 - `afed56a socle c06919a : gamme Console claire (blanc et bleu) par la bascule clair ou sombre`
 - `c773f9f thème : Console claire, blanc et bleu, par la bascule ; Console sombre par défaut, couleurs propres en jetons ; parcours en variante claire`
 - `a044110 carte : liaisons de l'arborescence en épaisseur du dessin, sans vector-effect (bandes verticales sous Safari)`
+- `903d6c6 carte : dessin posé en absolu sur tout le cadre (Safari le dimensionnait d'après son viewBox, bandes verticales)`
+- `3e6d6a0 carte : libre ou arborescence dans la barre d'outils de la carte, un seul Reconstruire, l'en-tête tient sur une ligne`
+- `fee3481 carte : import devenu inutile retiré`
 
 ## Verification (chapter 49)
 - [x] Full suite passes and matches the baseline — 107 essais, les mêmes avant et après la passe, relancés à la génération de ce fichier
