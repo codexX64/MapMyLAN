@@ -92,7 +92,9 @@ const telegram = await serveurLocal((req, res) => {
   if (req.url.includes('/getUpdates')) setTimeout(() => res.end('{"ok":true,"result":[]}'), 300);
   else res.end('{"ok":true,"result":{}}');
 });
-const o = await lancer({ SCAN_SUBNET: '192.0.2.0/24' }, { executeur: reseau.executeur, telegramBase: telegram.url });
+// SOCLE_THEME=console refait tout le parcours dans la gamme Console.
+const GAMME = process.env.SOCLE_THEME || 'soma';
+const o = await lancer({ SCAN_SUBNET: '192.0.2.0/24', SOCLE_THEME: GAMME }, { executeur: reseau.executeur, telegramBase: telegram.url });
 // localhost et non 127.0.0.1 : une clé d'accès se lie à un nom de domaine.
 const base = `http://localhost:${o.port}`;
 
@@ -174,7 +176,7 @@ const apres = async (page, requete, faire) => (await Promise.all([page.waitForRe
 
 const aller = async (page, id) => { await page.evaluate(x => { location.hash = x; }, id); await page.waitForTimeout(800); };
 const fermerTout = page => page.evaluate(() => {
-  for (const el of document.querySelectorAll('.feuille,.gf-voile,.modale-voile,.voile')) el.remove();
+  for (const el of document.querySelectorAll('.feuille,.gf-voile,.modale-voile,.voile,.pal-voile')) el.remove();
   document.getElementById('aiaClose')?.click();
   document.querySelector('.app')?.classList.remove('menu-ouvert');
 });
@@ -300,6 +302,10 @@ const ETATS = [
   ['ssh-formulaire', 'ssh', async p => { await cliquerTexte(p, '.actions button', 'Ajouter un appareil'); await p.waitForTimeout(400); }],
   ['bot-editeur', 'botcommands', async p => { await cliquerTexte(p, '.actions button', 'Nouvelle commande'); await p.waitForTimeout(500); }],
   ['commande-editeur', 'notifications', async p => { await cliquerTexte(p, '.actions button', 'Nouvelle commande'); await p.waitForTimeout(500); }],
+  ['graphe-7j', 'dashboard', async p => { await p.locator('.vus .view', { hasText: '7j' }).click(); await p.locator('.vus .vus-b').nth(27).waitFor(); }],
+  ['graphe-bulle', 'dashboard', async p => { await p.locator('.vus .vus-b:not(.sans)').last().hover(); await p.locator('.vus-bulle.on').waitFor(); }],
+  ['carte-arbre', 'map', async p => { await cliquerTexte(p, '.actions .view', 'Arborescence'); await p.locator('.noeud-arbre').first().waitFor(); }],
+  ...(GAMME === 'console' ? [['palette', 'dashboard', async p => { await p.keyboard.press('Control+k'); await p.locator('.pal').waitFor(); await p.keyboard.type('serveur'); await p.waitForTimeout(200); }]] : []),
 ];
 
 async function tour(p, prefixe, { pages = PAGES, etats = ETATS, largeurs, captures } = {}) {
@@ -532,6 +538,10 @@ await geste('carte : zone créée', async () => {
 await geste('carte : plaque déplacée, position gardée', async () => {
   await fermerTout(page);
   await aller(page, 'map');
+  // L'arborescence a été ouverte pendant le tour : on revient au libre, le
+  // seul agencement où une plaque se déplace.
+  await cliquerTexte(page, '.actions .view', 'Libre');
+  await page.locator('rect.plate').first().waitFor();
   // Le dernier groupe qui contient le nom est la plaque elle-même, pas un calque.
   const plaque = page.locator('g', { has: page.locator('text.nm', { hasText: 'nas-b' }) }).last().locator('rect.plate');
   const b = await plaque.boundingBox();
