@@ -1,8 +1,9 @@
 // Calculs de l'interface qui se vérifient sans navigateur : les créneaux du
-// graphe « Appareils vus ».
+// graphe « Appareils vus » et le tracé des liaisons de l'arborescence.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { creneaux, plafond } from '../web/lib/creneaux.js';
+import { disposerEnArbre, courbeArbre } from '../web/lib/topologie-arbre.js';
 
 const H = 3_600_000;
 const iso = ms => new Date(ms).toISOString();
@@ -34,4 +35,19 @@ test('plafond : rond, divisible en quatre, jamais sous 4', () => {
   assert.equal(plafond(4), 4);
   assert.equal(plafond(11), 12);
   assert.equal(plafond(13), 16);
+});
+
+test('arborescence : racine rendue, courbe horizontale aux deux bouts, du père vers le fils', () => {
+  const appareils = [
+    { id: 'r', type: 'router', isMainRouter: true, ip: '192.0.2.1' },
+    { id: 'c', type: 'switch', ip: '192.0.2.2' },
+    { id: 'p', type: 'computer', ip: '192.0.2.10' },
+  ];
+  const { positions, rattachements, racine } = disposerEnArbre(appareils, []);
+  assert.equal(racine, 'r');
+  assert.equal(rattachements.c, 'r');
+  assert.ok(positions.c.x > positions.r.x);
+  assert.equal(courbeArbre({ x: 0, y: 0 }, { x: 100, y: 50 }, 10), 'M10 0C50 0 50 50 90 50');
+  assert.equal(courbeArbre({ x: 100, y: 50 }, { x: 0, y: 0 }, 10), 'M10 0C50 0 50 50 90 50', 'le tracé part toujours de la gauche');
+  assert.deepEqual(disposerEnArbre([]), { positions: {}, rattachements: {}, racine: null });
 });

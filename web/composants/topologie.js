@@ -17,8 +17,9 @@
 import { toast, confirmer, feuille } from '/socle/compte.js';
 import { h, s, ic, remplir } from '../dom.js';
 import { E, api, rafraichirAppareils, rafraichirTopologie, lancerBalayage, choisirAppareil } from '../etat.js';
-import { disposerEnArbre, coude } from '../lib/topologie-arbre.js';
+import { disposerEnArbre, courbeArbre, PAS_COLONNE } from '../lib/topologie-arbre.js';
 import { silhouette } from './silhouettes.js';
+import { glypheArbre, natureArbre, bandeRadio } from './glyphes-arbre.js';
 
 // Largeur du plan de travail. La HAUTEUR, elle, suit le cadre : voir plus bas.
 const W = 2400;
@@ -55,6 +56,14 @@ const TYPES_LIAISON = [['ethernet', 'filaire'], ['wifi', 'sans fil'], ['vpn', 't
 const AMONT = ['router', 'switch', 'firewall', 'ap', 'gateway'];
 
 const ZOOM_MIN = 0.25, ZOOM_MAX = 2;
+
+// L'arborescence se dessine comme un contrôleur de réseau : un glyphe plein,
+// le nom, l'adresse, la radio au-dessus pour un client sans fil, et des
+// courbes entre les nœuds — pleines en filaire, pointillées sans fil.
+const GLYPHE = 52;
+const MARGE_COURBE = (GLYPHE / 2 + 4) * ECHELLE_NOEUD;
+const INTERNET = 'internet:';
+const sansFil = (d, l) => l?.type === 'wifi' || String(d?.metadata?.medium || '').toLowerCase() === 'wireless';
 
 /** Métadonnées d'affichage d'une zone, rangées par le serveur dans « notes ». */
 function metaZone(z) {
@@ -153,6 +162,12 @@ export function carteTopologie(p, { agencement, surAgencement }) {
         apMac: d?.metadata?.apMac, medium: d?.metadata?.medium,
       })), E.topology.links)
       : null;
+    // Devant la passerelle, Internet : ce qu'elle relie, pas un appareil.
+    const racine = arbre?.racine && E.devices.find(d => d.id === arbre.racine);
+    if (racine && natureArbre(racine) === 'passerelle') {
+      const q = arbre.positions[racine.id];
+      arbre.positions[INTERNET] = { x: q.x - PAS_COLONNE * 0.8, y: q.y };
+    }
   }
   function changerMode(m) {
     if (surAgencement) { surAgencement(m); return; }
@@ -303,7 +318,7 @@ export function carteTopologie(p, { agencement, surAgencement }) {
   function mesurer() {
     const r = conteneur.getBoundingClientRect();
     if (r.width < 40 || r.height < 40) return;
-    const nh = Math.max(900, Math.min(2400, Math.round((W * r.height) / r.width)));
+    const nh = Math.max(900, Math.min(8000, Math.round((W * r.height) / r.width)));
     if (nh === H) return;
     H = nh;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -311,7 +326,29 @@ export function carteTopologie(p, { agencement, surAgencement }) {
     dessinerPlan();
     transformer();
   }
-  const ro = new ResizeObserver(() => { mesurer(); cadrerUneFois(); });
+  // L'arborescence a une rangée par appareil : le cadre grandit avec elle,
+  // pour qu'un nom reste lisible sans zoomer, comme dans un contrôleur. Le
+  // pas visé est d'environ 120 px par rangée, moins si la largeur manque.
+  let hauteurPosee = 0;
+  function cadrerArbre() {
+    const cadre = conteneur.closest('.planwrap');
+    if (!cadre) return;
+    // Le plan suit tout de suite la nouvelle hauteur : le cadrage qui suit
+    // doit compter avec elle, pas avec l'ancienne.
+    if (!arbre) { if (hauteurPosee) { cadre.style.height = ''; hauteurPosee = 0; mesurer(); } return; }
+    const pts = Object.values(arbre.positions);
+    const l = cadre.getBoundingClientRect().width;
+    if (!pts.length || l < 40) return;
+    const ys = pts.map(q => q.y), xs = pts.map(q => q.x);
+    const etendueY = Math.max(...ys) - Math.min(...ys) + 345, etendueX = Math.max(...xs) - Math.min(...xs) + 340;
+    const parUnite = Math.min(0.42, (l - 12) / etendueX);
+    const voulue = Math.round(etendueY * parUnite + outils.offsetHeight + 12);
+    if (hauteurPosee) cadre.style.height = '';
+    const naturelle = cadre.getBoundingClientRect().height;
+    if (voulue > naturelle) { cadre.style.height = `${voulue}px`; hauteurPosee = voulue; } else hauteurPosee = 0;
+    mesurer();
+  }
+  const ro = new ResizeObserver(() => { cadrerArbre(); mesurer(); cadrerUneFois(); if (arbre) ajusterVue(); });
   ro.observe(conteneur);
   p.au(() => ro.disconnect());
 
@@ -381,9 +418,10 @@ export function carteTopologie(p, { agencement, surAgencement }) {
       const deja = E.topology.links.some(l => (l.fromId === feuilleId && l.toId === pereId) || (l.toId === feuilleId && l.fromId === pereId));
       const a = pos[pereId], b = pos[feuilleId];
       if (deja || !a || !b) return null;
-      const tr = arbre.troncs.find(x => x.depuis === pereId);
-      return s('path', { d: coude(a, b, tr?.x), fill: 'none', stroke: 'var(--muted)', 'stroke-width': 1.5, 'stroke-dasharray': '5 6', opacity: 0.5, style: { pointerEvents: 'none' } });
-    }).filter(Boolean)));
+      const feuille = E.devices.find(d => d.id === feuilleId);
+      return s('path', { d: courbeArbre(a, b, MARGE_COURBE), class: sansFil(feuille) ? 'lien-arbre air deduit' : 'lien-arbre deduit', style: { pointerEvents: 'none' } });
+    }).filter(Boolean)),
+    ...(arbre && pos[INTERNET] ? [s('path', { d: courbeArbre(pos[INTERNET], pos[arbre.racine], MARGE_COURBE), class: 'lien-arbre', style: { pointerEvents: 'none' } })] : []));
   }
 
   function dessinerLiens() {
@@ -403,13 +441,11 @@ export function carteTopologie(p, { agencement, surAgencement }) {
       const versInfra = vers && AMONT.includes(vers.customType || vers.type);
       const inverse = l.manual ? false : (!deInfra && versInfra);
       const depart = inverse ? b : a, arrivee = inverse ? a : b;
-      // En arborescence, une liaison se lit en deux coudes à angle droit ; le
-      // coude tombe sur le tronc du père des deux bouts, pour que les liaisons
-      // d'un même équipement se superposent au lieu de se croiser.
-      const pere = arbre ? (arbre.rattachements[l.toId] === l.fromId ? l.fromId : arbre.rattachements[l.fromId] === l.toId ? l.toId : null) : null;
-      const tronc = pere ? arbre.troncs.find(x => x.depuis === pere) : undefined;
-      const mx = tronc ? tronc.x : (a.x + b.x) / 2;
-      const trace = arbre ? coude(a, b, mx) : null;
+      // En arborescence, une liaison est une courbe d'un glyphe à l'autre, sans
+      // flèche ni particule : la hiérarchie dit déjà le sens.
+      const fils = arbre ? (arbre.rattachements[l.toId] === l.fromId ? vers : arbre.rattachements[l.fromId] === l.toId ? de : (a.x <= b.x ? vers : de)) : null;
+      const mx = (a.x + b.x) / 2;
+      const trace = arbre ? courbeArbre(a, b, MARGE_COURBE) : null;
       const trait = extra => trace ? s('path', { d: trace, fill: 'none', ...extra }) : s('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, ...extra });
 
       const zoneClic = trait({ stroke: 'transparent', 'stroke-width': 14, style: { cursor: 'pointer' } });
@@ -423,24 +459,28 @@ export function carteTopologie(p, { agencement, surAgencement }) {
       });
       zoneClic.addEventListener('contextmenu', ev => { ev.preventDefault(); ev.stopPropagation(); ouvrirMenuLien(ev.clientX, ev.clientY, l); });
 
-      let fleche;
       if (trace) {
-        // En coude, la flèche se pose sur la dernière horizontale, celle qui
-        // arrive au nœud : ailleurs elle tomberait à côté du trait.
-        fleche = s('g', { transform: `translate(${(mx + arrivee.x) / 2} ${arrivee.y}) rotate(${arrivee.x >= mx ? 0 : 180})`, style: { pointerEvents: 'none' } },
-          s('polygon', { points: '-7,-5 7,0 -7,5', fill: couleur, opacity: 0.9 }));
-      } else {
+        return s('g', {},
+          suspect ? trait({ stroke: 'var(--alarm)', 'stroke-opacity': 0.25, 'stroke-width': 6 }) : null,
+          zoneClic,
+          trait({
+            class: ['lien-arbre', sansFil(fils, l) ? 'air' : '', suspect ? 'suspect' : '', choisi ? 'choisi' : ''].filter(Boolean).join(' '),
+            style: { pointerEvents: 'none' },
+          }),
+          choisi ? s('text', {
+            x: mx, y: (a.y + b.y) / 2 - 10, fill: couleur, 'font-size': 11, 'font-family': 'var(--mono)', 'font-weight': 700, 'text-anchor': 'middle',
+            style: { pointerEvents: 'none', userSelect: 'none' }, text: l.type,
+          }) : null);
+      }
+      let fleche;
+      {
         const ax = depart.x + (arrivee.x - depart.x) * 0.6, ay = depart.y + (arrivee.y - depart.y) * 0.6;
         const angle = Math.atan2(arrivee.y - depart.y, arrivee.x - depart.x) * 180 / Math.PI;
         fleche = s('g', { transform: `translate(${ax} ${ay}) rotate(${angle})`, style: { pointerEvents: 'none' } },
           s('polygon', { points: '-7,-5 7,0 -7,5', fill: couleur, opacity: 0.9 }));
       }
-      // Particule animée : elle longe le câble, coude compris.
-      const particule = trace
-        ? s('circle', { r: 3, fill: couleur, opacity: 0.9, style: { pointerEvents: 'none' } },
-          s('animateMotion', { path: trace, dur: '2.4s', repeatCount: 'indefinite', calcMode: 'linear', keyTimes: '0;1', keyPoints: inverse ? '1;0' : '0;1' }),
-          s('animate', { attributeName: 'opacity', values: '0;0.9;0.9;0', dur: '2.4s', repeatCount: 'indefinite' }))
-        : s('circle', { cx: depart.x, cy: depart.y, r: 3, fill: couleur, opacity: 0.9, style: { pointerEvents: 'none' } },
+      // Particule animée : elle longe le câble.
+      const particule = s('circle', { cx: depart.x, cy: depart.y, r: 3, fill: couleur, opacity: 0.9, style: { pointerEvents: 'none' } },
           s('animate', { attributeName: 'cx', from: depart.x, to: arrivee.x, dur: '2.4s', repeatCount: 'indefinite' }),
           s('animate', { attributeName: 'cy', from: depart.y, to: arrivee.y, dur: '2.4s', repeatCount: 'indefinite' }),
           s('animate', { attributeName: 'opacity', values: '0;0.9;0.9;0', dur: '2.4s', repeatCount: 'indefinite' }));
@@ -453,7 +493,7 @@ export function carteTopologie(p, { agencement, surAgencement }) {
         }),
         fleche, particule,
         s('text', {
-          x: trace ? mx : (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 10, fill: choisi ? couleur : 'var(--muted)',
+          x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 10, fill: choisi ? couleur : 'var(--muted)',
           'font-size': choisi ? 11 : 9, 'font-family': 'var(--mono)', 'font-weight': choisi ? 700 : 400, 'text-anchor': 'middle',
           style: { pointerEvents: 'none', userSelect: 'none' }, text: l.type !== 'ethernet' ? l.type : (choisi ? 'ethernet' : ''),
         }));
@@ -466,19 +506,44 @@ export function carteTopologie(p, { agencement, surAgencement }) {
   }
 
   const noeuds = new Map();
+  // Un nœud de l'arborescence : glyphe plein, nom, adresse ; la radio au-dessus
+  // pour un client sans fil. Pas de plaque : c'est le glyphe qu'on reconnaît.
+  function noeudArbre(d, q, inquiete) {
+    const G = GLYPHE, r = G / 2;
+    const radio = sansFil(d) ? [bandeRadio(d.metadata?.radio), d.metadata?.essid].filter(Boolean).join(' · ') : '';
+    const halo = s('circle', { r: r + 9, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 1.5, opacity: 0.45, class: 'halo' });
+    const classes = ['noeud-arbre', d.isMainRouter ? 'core' : '', inquiete ? 'flag' : '', d.status === 'offline' ? 'ded' : ''].filter(Boolean).join(' ');
+    const g = s('g', { class: classes, 'data-device-node': '1', transform: `translate(${q.x} ${q.y}) scale(${ECHELLE_NOEUD})`, style: { cursor: 'pointer' } },
+      s('rect', { x: -66, y: -r - 4, width: 132, height: G + 40, fill: 'transparent' }),
+      halo,
+      radio ? s('text', { class: 'ra', y: -r - 6, 'text-anchor': 'middle', text: radio.slice(0, 28) }) : null,
+      glypheArbre(natureArbre(d), G),
+      s('text', { class: 'nm', y: r + 15, 'text-anchor': 'middle', text: (d.customName || d.hostname || d.ip || '').slice(0, 22) }),
+      s('text', { class: 'ipx', y: r + 29, 'text-anchor': 'middle', text: d.ip || '' }),
+      d.dangerScore > 30 && !d.isMainRouter ? s('g', { transform: `translate(${r - 2} ${-r + 4})` },
+        s('circle', { cx: 0, cy: 0, r: 10, fill: d.dangerScore > 70 ? 'var(--alarm)' : 'var(--warn)', stroke: 'var(--surface)', 'stroke-width': 1.5 }),
+        s('text', { x: 0, y: 3.5, 'text-anchor': 'middle', fill: '#fff', 'font-size': 9.5, 'font-family': 'var(--mono)', 'font-weight': 500, text: String(Math.round(d.dangerScore)) })) : null);
+    return { g, halo };
+  }
+  function noeudInternet(q) {
+    return s('g', { class: 'noeud-arbre internet', transform: `translate(${q.x} ${q.y}) scale(${ECHELLE_NOEUD})`, style: { pointerEvents: 'none' } },
+      glypheArbre('internet', 44),
+      s('text', { class: 'nm', y: GLYPHE / 2 + 15, 'text-anchor': 'middle', text: 'Internet' }));
+  }
   function dessinerNoeuds() {
     const pos = positions();
     noeuds.clear();
-    remplir(couches.noeuds, ...E.devices.map(d => {
+    remplir(couches.noeuds, arbre && pos[INTERNET] ? noeudInternet(pos[INTERNET]) : null, ...E.devices.map(d => {
       const q = pos[d.id];
       if (!q) return null;
       const T = 74, r = T / 2;
       const inquiete = d.dangerScore > 70 || d.status === 'banned' || d.status === 'quarantined';
+      const enArbre = arbre ? noeudArbre(d, q, inquiete) : null;
       // Trois lectures d'un même nœud : core — l'équipement principal, plaque
       // pleine ; flag — ce qui inquiète ; ded — hors ligne, contour pointillé.
       const classes = ['unit', d.isMainRouter ? 'core' : '', inquiete ? 'flag' : '', d.status === 'offline' ? 'ded' : ''].filter(Boolean).join(' ');
-      const halo = s('rect', { x: -r - 5, y: -r - 5, width: T + 10, height: T + 10, rx: 23, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 1.5, opacity: 0.45, class: 'halo' });
-      const g = s('g', {
+      const halo = enArbre ? enArbre.halo : s('rect', { x: -r - 5, y: -r - 5, width: T + 10, height: T + 10, rx: 23, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 1.5, opacity: 0.45, class: 'halo' });
+      const g = enArbre ? enArbre.g : s('g', {
         class: classes, 'data-device-node': '1', transform: `translate(${q.x} ${q.y}) scale(${ECHELLE_NOEUD})`,
         style: { cursor: 'pointer', opacity: d.status === 'offline' ? 0.72 : 1 },
       },
@@ -553,6 +618,7 @@ export function carteTopologie(p, { agencement, surAgencement }) {
     vide.hidden = E.devices.length > 0;
     outils.hidden = E.devices.length === 0;
     svg.style.display = E.devices.length === 0 ? 'none' : '';
+    cadrerArbre();
   }
 
   // Gestes

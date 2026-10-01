@@ -5,10 +5,10 @@
 // Elle répond bien à « qu'est-ce que j'ai ? ».
 //
 // Celle-ci répond à une autre question — « qu'est-ce qui pend de quoi ? » — et
-// la dessine comme on câble vraiment : la passerelle à gauche, et à chaque
-// colonne vers la droite ce qui se branche dessus. Un père est centré en face
-// de ses fils, les liaisons se tracent en coudes à angle droit. C'est la
-// lecture d'un schéma de baie, pas celle d'un inventaire.
+// la dessine comme un contrôleur de réseau : la passerelle à gauche, et à
+// chaque colonne vers la droite ce qui se branche dessus. Un père est centré en
+// face de ses fils, les liaisons sont des courbes qui partent et arrivent à
+// l'horizontale.
 //
 // Le module ne dessine rien : il rend des coordonnées. Il n'a donc pas besoin
 // du DOM, et se vérifie tout seul.
@@ -23,10 +23,11 @@ export function estInfra(d) {
 
 /** Écartements, en unités du dessin.
  *
- *  Un nœud de la carte est dessiné à 2,2× : sa plaque de 74 fait 163 de large,
- *  et ses trois lignes de libellé descendent 180 sous son centre. Une rangée
- *  occupe donc près de 260 — d'où le pas vertical ci-dessous, sinon le nom
- *  d'un appareil s'écrit sur la plaque du suivant. */
+ *  Un nœud de l'arborescence est dessiné à 2,2× : la radio d'un client sans
+ *  fil monte à 80 au-dessus de son centre, son nom et son adresse descendent
+ *  à 130 en dessous. Une rangée occupe donc un peu plus de 210 — d'où le pas
+ *  vertical ci-dessous, sinon l'adresse d'un appareil touche la radio du
+ *  suivant. */
 export const PAS_COLONNE = 380;
 export const PAS_LIGNE = 290;
 export const DEPART_X = 200;
@@ -76,9 +77,8 @@ function dernierOctet(ip) {
  */
 export function disposerEnArbre(appareils, liens = []) {
   const positions = {};
-  const troncs = [];
   const rattachements = {};
-  if (!appareils.length) return { positions, troncs, rattachements };
+  if (!appareils.length) return { positions, rattachements, racine: null };
 
   const parId = new Map(appareils.map(d => [d.id, d]));
   const ordonner = (a, b) => rang(a) - rang(b) || dernierOctet(a.ip) - dernierOctet(b.ip);
@@ -223,29 +223,16 @@ export function disposerEnArbre(appareils, liens = []) {
     };
   }
 
-  // Les troncs : le trait vertical qui porte une fratrie. Un fils unique
-  // aligné sur son père n'en a pas besoin : la liaison est alors une simple
-  // horizontale.
-  for (const [idPere, fils] of enfants) {
-    const pp = positions[idPere];
-    if (!pp || !fils.length) continue;
-    const ys = fils.map(f => positions[f]?.y).filter(v => v !== undefined);
-    if (!ys.length) continue;
-    const y1 = Math.min(...ys), y2 = Math.max(...ys);
-    if (y1 === y2) continue;
-    troncs.push({ x: pp.x + PAS_COLONNE / 2, y1, y2, depuis: idPere });
-  }
-
-  return { positions, troncs, rattachements };
+  return { positions, rattachements, racine };
 }
 
 /**
- * Le tracé d'une liaison en arborescence : deux coudes à angle droit plutôt
- * qu'une courbe. C'est ce qui donne au schéma sa lisibilité — l'œil suit une
- * horizontale et une verticale, pas une diagonale parmi douze autres.
+ * Le tracé d'une liaison dans l'arborescence dessinée à la manière d'un
+ * contrôleur : une courbe qui quitte le père à l'horizontale et arrive au fils
+ * à l'horizontale. `marge` laisse le trait au bord des glyphes, pas dessous.
  */
-export function coude(a, b, xTronc) {
-  const mx = xTronc ?? (a.x + b.x) / 2;
-  if (Math.abs(a.y - b.y) < 0.5) return `M${a.x} ${a.y}H${b.x}`;
-  return `M${a.x} ${a.y}H${mx}V${b.y}H${b.x}`;
+export function courbeArbre(a, b, marge = 0) {
+  const [g, d] = a.x <= b.x ? [a, b] : [b, a];
+  const x1 = g.x + marge, x2 = d.x - marge, m = (x1 + x2) / 2;
+  return `M${x1} ${g.y}C${m} ${g.y} ${m} ${d.y} ${x2} ${d.y}`;
 }
