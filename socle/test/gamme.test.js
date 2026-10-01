@@ -43,5 +43,15 @@ test('gamme Console : chaque jeton de SOMA redéfini, polices servies par le soc
   assert.deepEqual(aRedefinir.filter(j => !consoleJ.has(j)), [], 'jeton de SOMA laissé à sa valeur claire');
   for (const [, f] of css.matchAll(/url\((polices\/[^)]+)\)/g)) assert.ok(fs.existsSync(path.join(WEB, f)), f);
   for (const f of ['OFL-geist-sans.txt', 'OFL-geist-mono.txt']) assert.match(fs.readFileSync(path.join(WEB, 'polices', f), 'utf8'), /SIL Open Font License/);
-  assert.match(css, /html\[data-gamme="console"\] \.bascule-theme\{display:none!important\}/);
+  // Console claire : la bascule clair ou sombre reste offerte, chaque jeton
+  // de couleur est redéfini, accent bleu.
+  assert.doesNotMatch(css, /\.bascule-theme\{display:none/);
+  const clair = jetons(bloc(/html:root\[data-gamme="console"\]\[data-theme="light"\]\{([^}]*)\}/));
+  const couleurs = [...consoleJ].filter(j => !['sans', 'mono', 'r-ctl', 'r-carte', 'grain'].includes(j));
+  assert.deepEqual(couleurs.filter(j => !clair.has(j)), [], 'jeton de la Console sombre sans valeur claire');
+  assert.match(bloc(/html:root\[data-gamme="console"\]\[data-theme="light"\]\{([^}]*)\}/), /--accent:#2563EB/);
+  // Les composants de la Console ne portent plus de couleur en dur : les deux
+  // variantes passent par les jetons.
+  const composants = css.slice(css.indexOf('/* Composants de la gamme Console')).split('\n').filter(l => l.startsWith('html[data-gamme="console"]'));
+  assert.deepEqual(composants.filter(l => /#[0-9A-Fa-f]{3,6}\b|rgba\(/.test(l)), []);
 });

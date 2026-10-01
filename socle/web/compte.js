@@ -279,24 +279,27 @@ function jauge(input) {
 
 export function basculeTheme() {
   const b = h('button', { class: 'ghost bascule-theme', type: 'button', title: 'Clair ou sombre', 'aria-label': 'Changer de thème' });
-  const peint = () => {
-    const sombre = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
-    b.replaceChildren(icone(sombre ? 'soleil' : 'lune'));
-  };
+  const peint = () => b.replaceChildren(icone(estSombre() ? 'soleil' : 'lune'));
   b.addEventListener('click', () => {
-    const sombre = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.dataset.theme = sombre ? 'light' : 'dark';
+    document.documentElement.dataset.theme = estSombre() ? 'light' : 'dark';
     try { localStorage.setItem('theme', document.documentElement.dataset.theme); } catch { /* stockage indisponible */ }
+    appliquerTheme();
     peint();
   });
   peint();
   return b;
 }
+// Sombre ou clair : le choix posé l'emporte ; sans choix, la gamme Console
+// est sombre et SOMA suit le système.
+export function estSombre() {
+  const d = document.documentElement.dataset;
+  return d.theme ? d.theme === 'dark' : d.gamme === 'console' || matchMedia('(prefers-color-scheme: dark)').matches;
+}
 export function appliquerTheme() {
   try { const t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* rien */ }
-  // La gamme Console est sombre seulement : la barre du navigateur mobile suit.
+  // En gamme Console, la barre du navigateur mobile suit le fond de la page.
   if (document.documentElement.dataset.gamme === 'console') {
-    for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = '#000000';
+    for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = estSombre() ? '#000000' : '#F7F7F8';
   }
 }
 
