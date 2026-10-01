@@ -8,7 +8,7 @@ import {
   h, ic, entete, page, figs, fig, courbe, carte, split, btn, chip, risque, whoCell, notice, vide, note,
   vues, champ, lbl, interrupteur, actionsPage, telecharger, remplir,
 } from '../dom.js';
-import { E, api, choisirPage, choisirAppareil, lancerBalayage, rafraichirAppareils, rafraichirTopologie, rafraichirVlans, ecrireLocal } from '../etat.js';
+import { E, api, choisirPage, choisirAppareil, lancerBalayage, rafraichirAppareils, rafraichirVlans, ecrireLocal } from '../etat.js';
 import { t } from '../i18n.js';
 import { depuis, nomAppareil, glyphe, ETATS, tonEtat, liaison, triParRisque } from '../communs.js';
 import { carteTopologie } from '../composants/topologie.js';
