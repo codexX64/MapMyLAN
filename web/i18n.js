@@ -467,7 +467,6 @@ const DICT = {
     // Actions
     'act.scan': 'Lancer un balayage',
     'act.scanning': 'Balayage en cours…',
-    'act.rebuild': 'Reconstruire',
     'act.newRule': 'Nouvelle règle',
     'act.newCommand': 'Nouvelle commande',
     'act.addVlan': 'Déclarer un VLAN',
@@ -970,7 +969,6 @@ const DICT = {
 
     'act.scan': 'Run a sweep',
     'act.scanning': 'Sweeping…',
-    'act.rebuild': 'Rebuild',
     'act.newRule': 'New rule',
     'act.newCommand': 'New command',
     'act.addVlan': 'Declare a VLAN',

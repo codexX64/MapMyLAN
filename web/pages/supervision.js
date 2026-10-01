@@ -98,9 +98,10 @@ export function pageCarte(p) {
   // même endroit. Le choix reste dans ce navigateur.
   let agencement = 'libre';
   try { agencement = localStorage.getItem('mapmylan_agencement') === 'arbre' ? 'arbre' : 'libre'; } catch { /* libre par défaut */ }
-  const message = h('div');
-  const carteTopo = carteTopologie(p, { agencement, surAgencement: m => choisir(m) });
-  const vuesAgencement = h('span', { class: 'contenu' });
+  // Libre ou arborescence, et Reconstruire, vivent dans la barre d'outils de
+  // la carte : l'en-tête ne garde que le choix de la vue.
+  const vuesAgencement = h('span', { class: 'contenu agencement' });
+  const carteTopo = carteTopologie(p, { agencement, surAgencement: m => choisir(m), choixAgencement: vuesAgencement });
   const peindreVues = () => remplir(vuesAgencement, vues([
     { libelle: t('agencement.free'), icone: 'libre', on: agencement === 'libre', onclick: () => choisir('libre') },
     { libelle: t('agencement.tree'), icone: 'arbre', on: agencement === 'arbre', onclick: () => choisir('arbre') },
@@ -112,25 +113,16 @@ export function pageCarte(p) {
     carteTopo.agencement(m);
   }
   peindreVues();
-  const reconstruire = btn({ icone: 'refresh', onclick: async () => {
-    reconstruire.disabled = true; remplir(message);
-    try { await api.post('/api/topology/auto-build'); await rafraichirTopologie(); }
-    catch (e) { remplir(message, note('warn', e.message)); }
-    finally { reconstruire.disabled = false; }
-  } }, t('act.rebuild'));
   return page({
     titre: t('page.map.title'), lede: t('page.map.lede'), id: 'carte',
     actions: [
-      vuesAgencement,
       h('span', { class: 'contenu cache-s' }, vues([
         { libelle: t('view.map'), icone: 'map', on: true },
         { libelle: t('view.table'), icone: 'devices', onclick: () => choisirPage('devices') },
         { libelle: t('page.world.title'), icone: 'globe', onclick: () => choisirPage('world') },
       ])),
-      reconstruire,
     ],
   },
-  message,
   h('div', { class: 'plan' },
     h('div', { class: 'planwrap' }, carteTopo.noeud),
     h('div', { class: 'planbar' },

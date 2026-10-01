@@ -304,7 +304,7 @@ const ETATS = [
   ['commande-editeur', 'notifications', async p => { await cliquerTexte(p, '.actions button', 'Nouvelle commande'); await p.waitForTimeout(500); }],
   ['graphe-7j', 'dashboard', async p => { await p.locator('.vus .view', { hasText: '7j' }).click(); await p.locator('.vus .vus-b').nth(27).waitFor(); }],
   ['graphe-bulle', 'dashboard', async p => { await p.locator('.vus .vus-b:not(.sans)').last().hover(); await p.locator('.vus-bulle.on').waitFor(); }],
-  ['carte-arbre', 'map', async p => { await cliquerTexte(p, '.actions .view', 'Arborescence'); await p.locator('.noeud-arbre').first().waitFor(); }],
+  ['carte-arbre', 'map', async p => { await cliquerTexte(p, '.planoutils .view', 'Arborescence'); await p.locator('.noeud-arbre').first().waitFor(); }],
   ...(GAMME === 'console' ? [['palette', 'dashboard', async p => { await p.keyboard.press('Control+k'); await p.locator('.pal').waitFor(); await p.keyboard.type('serveur'); await p.waitForTimeout(200); }]] : []),
 ];
 
@@ -542,7 +542,7 @@ await geste('carte : plaque déplacée, position gardée', async () => {
   await aller(page, 'map');
   // L'arborescence a été ouverte pendant le tour : on revient au libre, le
   // seul agencement où une plaque se déplace.
-  await cliquerTexte(page, '.actions .view', 'Libre');
+  await cliquerTexte(page, '.planoutils .view', 'Libre');
   await page.locator('rect.plate').first().waitFor();
   // Le dernier groupe qui contient le nom est la plaque elle-même, pas un calque.
   const plaque = page.locator('g', { has: page.locator('text.nm', { hasText: 'nas-b' }) }).last().locator('rect.plate');

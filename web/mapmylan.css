@@ -395,6 +395,8 @@ html[data-gamme="console"] .noeud-arbre .ipx,html[data-gamme="console"] .noeud-a
 .po{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);background:var(--well);border:none;border-radius:8px;padding:6px 11px;cursor:pointer}
 .po:hover{background:var(--hair-soft);color:var(--ink)}
 .po.fixe{cursor:default}
+.planoutils .agencement .views{box-shadow:none}
+.planoutils .agencement .view{padding:4px 10px;font-size:12px}
 .po.zoom{gap:4px}
 .po.opa{cursor:default;gap:9px}
 .po.opa input{width:82px;accent-color:var(--accent)}

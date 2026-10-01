@@ -76,7 +76,7 @@ const ecrireLocal = (cle, v) => {
   catch { /* image trop lourde pour le stockage : elle reste en mémoire */ }
 };
 
-export function carteTopologie(p, { agencement, surAgencement }) {
+export function carteTopologie(p, { agencement, surAgencement, choixAgencement }) {
   let libres = {};
   let pan = { x: 0, y: 0 }, zoom = 1, H = H_DEFAUT;
   let typeLiaison = 'ethernet';
@@ -116,8 +116,8 @@ export function carteTopologie(p, { agencement, surAgencement }) {
   const outils = h('div', { class: 'planoutils' },
     h('button', { class: 'po', type: 'button', onclick: arret(() => api.post('/api/topology/auto-build').then(rafraichirTopologie).catch(e => toast(e.message, true))) }, 'Reconstruire'),
     h('button', { class: 'po', type: 'button', onclick: arret(() => ajusterVue()) }, 'Recentrer'),
-    // Le sélecteur n'apparaît que si la page ne l'a pas pris en charge.
-    surAgencement ? null : h('span', { class: 'po fixe' }, 'Agencement', selAgencement),
+    // L'agencement : le choix fourni par la page, sinon le sélecteur d'ici.
+    surAgencement ? (choixAgencement || null) : h('span', { class: 'po fixe' }, 'Agencement', selAgencement),
     h('span', { class: 'po fixe cache-s' }, 'Liaison', selLiaison),
     h('button', { class: 'po cache-s', type: 'button', onclick: arret(() => ajouterAppareil()) }, '+ Appareil'),
     h('button', { class: 'po cache-s', type: 'button', onclick: arret(() => nouvelleZone()) }, '+ Zone'),
