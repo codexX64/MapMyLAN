@@ -27,9 +27,17 @@ async function socle() {
   return { db, ...s };
 }
 
+// L'entrée lue en flux : readFileSync(0) lève EAGAIN quand l'entrée est non
+// bloquante, ce qu'elle est derrière « ssh … docker run -i ».
+async function lireEntree() {
+  const morceaux = [];
+  for await (const m of process.stdin) morceaux.push(m);
+  return Buffer.concat(morceaux);
+}
+
 async function importer() {
   if (process.stdin.isTTY) stop('donne l’export sur l’entrée : node src/cli.js importer-v1 < export.json');
-  const e = lireExport(fs.readFileSync(0, 'utf8'));
+  const e = lireExport((await lireEntree()).toString('utf8'));
   const { cleV1 } = lireConfig({ cleV1: { env: 'MAPMYLAN_V1_MASTER_KEY', type: 'chaine' } });
   const s = await socle();
   try {
@@ -70,16 +78,16 @@ async function sauvegarde() {
   const cfg = lireConfigMapmylan();
   const db = ouvrirBase(cfg.donnees);
   try {
-    const sortie = await sauvegarder(db, fs.readFileSync(0, 'utf8'), { service: 'mapmylan', version: VERSION });
+    const sortie = await sauvegarder(db, (await lireEntree()).toString('utf8'), { service: 'mapmylan', version: VERSION });
     new Journal(db).ecrire({ action: 'sauvegarde.faite', details: { octets: sortie.length, par: 'ligne de commande' } });
     process.stdout.write(sortie);
   } finally { db.close(); }
 }
 
-function restaurer(prive, cible) {
+async function restaurer(prive, cible) {
   if (!prive || !cible) stop('usage : node src/cli.js restaurer <cle-privee.pem> <cible.db> < mapmylan.sauv');
   if (fs.existsSync(cible)) stop(`${cible} existe déjà : la restauration écrit un fichier neuf`);
-  const { entete, base } = dechiffrer(fs.readFileSync(0), fs.readFileSync(prive, 'utf8'));
+  const { entete, base } = dechiffrer(await lireEntree(), fs.readFileSync(prive, 'utf8'));
   if (entete.service !== 'mapmylan') stop(`sauvegarde de ${entete.service}, pas de MapMyLAN`);
   fs.writeFileSync(cible, base, { mode: 0o600, flag: 'wx' });
   console.error(`Base de MapMyLAN ${entete.version} du ${entete.date} restaurée dans ${cible}.`);
@@ -98,6 +106,6 @@ try {
   if (commande === 'importer-v1') await importer();
   else if (commande === 'lien-reinit') await lienReinit(args[0]);
   else if (commande === 'sauvegarde') await sauvegarde();
-  else if (commande === 'restaurer') restaurer(args[0], args[1]);
+  else if (commande === 'restaurer') await restaurer(args[0], args[1]);
   else console.log(AIDE);
 } catch (e) { stop(e.message); }
