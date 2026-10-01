@@ -1,50 +1,71 @@
+# MapMyLAN seul, sans le Hub : docker compose up -d --build
+# Les réglages viennent de .env (voir .env.example) ; la clé maîtresse, d'un
+# fichier hors du volume de données (secrets/socle_cle, voir le README).
 services:
-  postgres:
-    image: postgres:16-alpine
+  mapmylan:
+    build: .
+    image: mapmylan:local
+    container_name: mapmylan
     restart: unless-stopped
+    # Réseau de la machine : arp-scan et nmap doivent voir le vrai réseau
+    # local, qu'un pont Docker masquerait.
+    network_mode: host
+    env_file: .env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "127.0.0.1:5432:5432"
+      DATA_DIR: /app/data
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      DOCKER_HOST: tcp://127.0.0.1:2375
+      EXTENSIONS_DIR: /app/extensions
+      SOCLE_CLE_FILE: /run/secrets/socle_cle
+      SOCLE_CLE_ANCIENNE_FILE: /run/secrets/socle_cle_ancienne
+    secrets: [socle_cle, socle_cle_ancienne]
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - mapmylan-data:/app/data
+      # Supervision de l'hôte, en lecture seule.
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # Extensions facultatives, en lecture seule ; le dossier peut rester vide.
+      - ./extensions:/app/extensions:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    # nmap, arp-scan et ping ont besoin des sockets bruts (NET_RAW : ARP, ICMP,
+    # SYN), et rien d'autre. Docker ne donne aucune capacité à un processus
+    # lancé sous un autre compte que root, et no-new-privileges écarte les
+    # capacités de fichier : le conteneur part donc en root, avec NET_RAW plus
+    # les trois capacités qu'il faut pour en sortir, et setpriv passe aussitôt
+    # au compte node en ne gardant que NET_RAW, transmise aux outils (capacité
+    # ambiante) ; SETUID, SETGID et SETPCAP quittent l'ensemble limite avant
+    # que MapMyLAN ne démarre. Une commande lancée dans le conteneur prend
+    # « -u node » (docker compose exec -u node …).
+    user: "0:0"
+    entrypoint: ["setpriv", "--reuid=node", "--regid=node", "--clear-groups", "--inh-caps=-all,+net_raw", "--ambient-caps=-all,+net_raw", "--bounding-set=-all,+net_raw", "--"]
+    cap_drop: [ALL]
+    cap_add: [NET_RAW, SETUID, SETGID, SETPCAP]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 256
+    # Journaux du conteneur, où part aussi le journal de sécurité : gardés par
+    # le démon Docker, hors de portée du service, cinq fichiers de 10 Mo.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    depends_on: [docker-socket-proxy]
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: redis-server --save "" --appendonly no
-    ports:
-      - "127.0.0.1:6379:6379"
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  # Proxy en lecture seule devant le socket Docker.
-  #
-  # Le backend a besoin de lister les conteneurs (stats d'hôte), mais lui monter
-  # /var/run/docker.sock directement lui donnerait le contrôle total du démon
-  # Docker — donc de la machine — au premier pépin. On interpose donc ce proxy
-  # minimaliste : seul lui touche le socket, et il n'autorise que la lecture des
-  # conteneurs. Tout le reste (création, exec, images, secrets…) est refusé.
+  # Proxy en lecture seule devant le socket Docker : MapMyLAN liste les
+  # conteneurs de la machine, rien d'autre. Monter le socket lui-même donnerait
+  # le contrôle du démon — donc de la machine — au premier défaut.
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.2.0
+    image: tecnativa/docker-socket-proxy@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    container_name: mapmylan-docker-proxy
     restart: unless-stopped
     environment:
-      CONTAINERS: 1        # GET /containers (lecture) — le seul besoin réel
-      POST: 0              # aucune écriture
+      CONTAINERS: 1   # GET /containers : le seul besoin
+      POST: 0         # aucune écriture
       IMAGES: 0
       NETWORKS: 0
       VOLUMES: 0
@@ -54,115 +75,26 @@ services:
       INFO: 0
       SYSTEM: 0
     ports:
-      # Exposé sur la boucle locale uniquement : le backend (réseau hôte) l'atteint
-      # via 127.0.0.1, personne d'autre.
+      # La boucle locale seulement : MapMyLAN (réseau hôte) l'atteint, personne d'autre.
       - "127.0.0.1:2375:2375"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    # Pas de `read_only` ici, contrairement aux autres services : l'image ecrit
-    # sa configuration HAProxy sous /tmp et /usr/local/etc/haproxy au demarrage.
-    # Avec un systeme de fichiers en lecture seule, elle echoue et le conteneur
-    # redemarre en boucle — les statistiques de conteneurs restent muettes sans
-    # que rien ne le dise. Le reste du durcissement tient : socket monte en
-    # lecture seule, aucune capacite, aucune elevation de privilege, et une
-    # liste d'autorisations qui n'ouvre que la lecture des conteneurs.
+    # Pas de read_only : l'image écrit sa configuration HAProxy au démarrage.
+    # Le reste tient : socket en lecture seule, aucune capacité, aucune élévation.
     tmpfs:
       - /run
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
 
-  backend:
-    build: ./backend
-    restart: unless-stopped
-    # Réseau hôte : indispensable pour qu'arp-scan et nmap voient le vrai LAN.
-    # C'est un choix de conception d'un scanner réseau, encadré ici par le
-    # principe du moindre privilège : on retire TOUTES les capacités, puis on
-    # rend uniquement les deux nécessaires aux sockets bruts (arp-scan/nmap), et
-    # on interdit l'escalade de privilèges.
-    network_mode: host
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      # /proc et /sys en lecture seule pour la supervision de l'hôte.
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      # Extensions facultatives, montées en lecture seule. Le dossier est vide
-      # par defaut et rien ne se charge ; y deposer un fichier suffit, sans
-      # reconstruire l'image — c'est tout l'interet du mecanisme.
-      - ./extensions:/app/extensions:ro
-      # Plus de montage du socket Docker : on passe par le proxy en lecture seule.
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      MASTER_KEY: ${MASTER_KEY}
-      JWT_SECRET: ${JWT_SECRET}
-      DEFAULT_ADMIN_USER: ${DEFAULT_ADMIN_USER}
-      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD}
-      SCAN_SUBNET: ${SCAN_SUBNET}
-      SCAN_INTERVAL: ${SCAN_INTERVAL}
-      SCAN_INTERFACE: ${SCAN_INTERFACE}
-      INTEGRATION_TOKEN_SEED: ${INTEGRATION_TOKEN_SEED}
-      ADMIN_TOKEN_SEED: ${ADMIN_TOKEN_SEED}
-      PORT: ${PORT}
-      NODE_ENV: ${NODE_ENV}
-      CORS_ORIGIN: ${CORS_ORIGIN}
-      HOST_PROC: /host/proc
-      HOST_SYS: /host/sys
-      # Assistant (facultatif) : Ollama pour répondre, VOX pour le mode vocal.
-      IA_URL: ${IA_URL:-}
-      IA_MODELE: ${IA_MODELE:-}
-      VOX_URL: ${VOX_URL:-}
-      VOX_JETON: ${VOX_JETON:-}
-      SYNAPSE_URL: ${SYNAPSE_URL:-}
-      SYNAPSE_JETON: ${SYNAPSE_JETON:-}
-      SERVICE_UI: ${SERVICE_UI:-}
-      # Stats conteneurs via le proxy en lecture seule (jamais le socket brut).
-      DOCKER_HOST: tcp://127.0.0.1:2375
-      # Adresse d'ecoute de l'API. Le backend tourne en reseau hote : sans
-      # cette variable il ecoute sur toutes les interfaces, donc sur le LAN.
-      # Attention : nginx joint l'API par la passerelle du pont Docker, pas par
-      # la boucle locale. Poser 127.0.0.1 ici couperait l'interface. La valeur
-      # qui referme sans rien casser est l'adresse du pont — voir .env.example.
-      BIND_ADDRESS: ${BIND_ADDRESS:-0.0.0.0}
-      # Relais de courrier sortant. Vides = envoi desactive, le reste tourne.
-      POSTE_URL: ${POSTE_URL:-}
-      POSTE_FROM: ${POSTE_FROM:-}
-      POSTE_ALIAS: ${POSTE_ALIAS:-}
-      POSTE_SEND_KEY: ${POSTE_SEND_KEY:-}
-      # Prefixe du plan d'adressage, pour le regroupement des interfaces.
-      # Vide = aucun regroupement propose.
-      GROUPING_PREFIX: ${GROUPING_PREFIX:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      docker-socket-proxy:
-        condition: service_started
-
-  frontend:
-    build: ./frontend
-    restart: unless-stopped
-    ports:
-      - "8090:80"
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - NET_BIND_SERVICE
-    depends_on:
-      - backend
+secrets:
+  socle_cle:
+    file: ./secrets/socle_cle
+  # Vide, sauf pendant une rotation (README, « Tourner la clé maîtresse »).
+  socle_cle_ancienne:
+    file: ./secrets/socle_cle_ancienne
 
 volumes:
-  pgdata:
+  mapmylan-data:

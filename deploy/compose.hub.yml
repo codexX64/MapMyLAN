@@ -1,105 +1,105 @@
 # MapMyLAN installé par le Hub.
-# Les {{...}} sont remplacés à l'installation : secrets générés, ports d'hôte,
-# volumes nommés et réseau partagé du Hub.
+# Les {{...}} sont remplacés à l'installation : secrets générés, port d'hôte,
+# volume nommé et réseau partagé du Hub.
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: {{service.host}}-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: mapmylan
-      POSTGRES_PASSWORD: {{config.POSTGRES_PASSWORD}}
-      POSTGRES_DB: mapmylan
-    ports:
-      - "{{hostport.db}}:5432"
-    volumes:
-      - {{volume.pgdata}}:/var/lib/postgresql/data
-    networks: [hub]
-    security_opt: ["no-new-privileges:true"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mapmylan"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  cache:
-    image: redis:7-alpine
-    container_name: {{service.host}}-cache
-    restart: unless-stopped
-    command: redis-server --save "" --appendonly no
-    ports:
-      - "{{hostport.cache}}:6379"
-    networks: [hub]
-    security_opt: ["no-new-privileges:true"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
   # Réseau de la machine : le balayage ARP ne traverse pas un pont Docker.
   # Déclaré dans permissions.hostNetwork du manifeste, validé à l'installation.
+  # L'API n'écoute que sur l'adresse du pont (BIND_ADDRESS) : le réseau local
+  # ne l'atteint pas, le relais ci-dessous si.
   api:
-    image: ghcr.io/codexx64/mapmylan-backend:{{config.IMAGE_TAG}}
+    image: ghcr.io/codexx64/mapmylan:{{config.IMAGE_TAG}}
     container_name: {{service.host}}-api
     restart: unless-stopped
     network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    # NET_RAW seule pour le balayage, passée à nmap, arp-scan et ping ; root le
+    # temps que setpriv passe au compte node (voir docker-compose.yml).
+    user: "0:0"
+    entrypoint: ["setpriv", "--reuid=node", "--regid=node", "--clear-groups", "--inh-caps=-all,+net_raw", "--ambient-caps=-all,+net_raw", "--bounding-set=-all,+net_raw", "--"]
     cap_drop: [ALL]
-    cap_add: [NET_ADMIN, NET_RAW]
+    cap_add: [NET_RAW, SETUID, SETGID, SETPCAP]
     security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     volumes:
+      - {{volume.data}}:/app/data
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
     environment:
-      DATABASE_URL: postgresql://mapmylan:{{config.POSTGRES_PASSWORD}}@{{hostport.db}}/mapmylan?schema=public
-      REDIS_URL: redis://{{hostport.cache}}
-      JWT_SECRET: {{config.JWT_SECRET}}
-      MASTER_KEY: {{config.MASTER_KEY}}
-      PASSWORD_PEPPER: {{config.PASSWORD_PEPPER}}
-      INTEGRATION_TOKEN_SEED: {{config.HUB_TOKEN}}
-      ADMIN_TOKEN_SEED: {{config.ADMIN_TOKEN}}
-      SCAN_INTERFACE: {{config.SCAN_INTERFACE}}
-      SCAN_SUBNET: {{config.SCAN_SUBNET}}
-      SCAN_INTERVAL: {{config.SCAN_INTERVAL}}
-      PORT: "4000"
-      BIND_ADDRESS: {{config.BIND_ADDRESS}}
-      NODE_ENV: production
-      CORS_ORIGIN: "*"
+      DATA_DIR: /app/data
+      HOTE: "{{config.BIND_ADDRESS}}"
+      PORT: "8090"
       HOST_PROC: /host/proc
       HOST_SYS: /host/sys
+      SCAN_INTERFACE: "{{config.SCAN_INTERFACE}}"
+      SCAN_SUBNET: "{{config.SCAN_SUBNET}}"
+      SCAN_INTERVAL: "{{config.SCAN_INTERVAL}}"
+      INTEGRATION_TOKEN_SEED: "{{config.HUB_TOKEN}}"
+      MAPMYLAN_IA_JOUR: "{{config.MAPMYLAN_IA_JOUR}}"
+      MAPMYLAN_IA_JOUR_TOTAL: "{{config.MAPMYLAN_IA_JOUR_TOTAL}}"
+      MAPMYLAN_VOIX_JOUR: "{{config.MAPMYLAN_VOIX_JOUR}}"
+      MAPMYLAN_VOIX_JOUR_TOTAL: "{{config.MAPMYLAN_VOIX_JOUR_TOTAL}}"
       # L'assistant. Le Hub pose ces adresses quand Ollama et VOX existent, et
-      # redéploie MapMyLAN quand l'un d'eux arrive : vides, l'assistant répond
-      # sans modèle aux questions directes et le mode vocal dit ce qui manque.
-      # Adresses « vues de la machine » (hostUrl) : ce conteneur est en réseau
-      # hôte et ne résout pas les noms des conteneurs du Hub.
+      # redéploie MapMyLAN quand l'un d'eux arrive. Adresses « vues de la
+      # machine » (hostUrl) : ce conteneur est en réseau hôte.
       IA_URL: "{{provider.llm.chat.hostUrl}}"
-      # Le modèle choisi dans les réglages de MapMyLAN ; à défaut, celui d'Ollama.
       IA_MODELE: "{{config.IA_MODELE}}"
       IA_MODELE_DEFAUT: "{{provider.llm.chat.config.DEFAULT_MODEL}}"
       VOX_URL: "{{provider.voice.stt.hostUrl}}"
       VOX_JETON: "{{provider.voice.stt.config.HUB_TOKEN}}"
-      # SYNAPSE, le cerveau du homelab : l'assistant y pose sa fiche et son
-      # état, y lit ce que le homelab sait, y remonte ses échanges. Le jeton
-      # est un jeton de cerveau dérivé par le Hub, valable pour ce seul service.
+      # SYNAPSE, la mémoire partagée des services : l'assistant y pose sa fiche
+      # et son état, y lit ce que les services voisins savent, y remonte ses
+      # échanges. Jeton de cerveau dérivé par le Hub, pour ce seul service.
       SYNAPSE_URL: "{{provider.memory.brief.hostUrl}}"
       SYNAPSE_JETON: "{{provider.memory.brief.jetonCerveau}}"
-      # L'adresse de MapMyLAN pour un humain : les autres IA la donnent pour « continuer ici ».
       SERVICE_UI: "{{service.ui}}"
-    depends_on:
-      db: { condition: service_healthy }
-      cache: { condition: service_healthy }
+      # Comptes : clé maîtresse gardée par le Hub (jamais sur le volume),
+      # poivre des mots de passe (celui de la 1.4.1 si elle est reprise).
+      SOCLE_CLE: "{{config.SOCLE_CLE}}"
+      SOCLE_CLE_ANCIENNE: "{{config.SOCLE_CLE_ANCIENNE}}"
+      SOCLE_POIVRE: "{{config.PASSWORD_PEPPER}}"
+      SOCLE_HTTP: "{{config.SOCLE_HTTP}}"
+      SOCLE_JETON_INSTALLATION: "{{config.SOCLE_JETON_INSTALLATION}}"
+      SOCLE_PROXYS: "{{config.SOCLE_PROXYS}}"
+      SOCLE_ORIGINES: "{{config.SOCLE_ORIGINES}}"
+      SOCLE_URL_PUBLIQUE: "{{config.SOCLE_URL_PUBLIQUE}}"
+      SOCLE_THEME: "{{config.SOCLE_THEME}}"
+      SOCLE_SMTP_HOTE: "{{config.SOCLE_SMTP_HOTE}}"
+      SOCLE_SMTP_PORT: "{{config.SOCLE_SMTP_PORT}}"
+      SOCLE_SMTP_SECURITE: "{{config.SOCLE_SMTP_SECURITE}}"
+      SOCLE_SMTP_UTILISATEUR: "{{config.SOCLE_SMTP_UTILISATEUR}}"
+      SOCLE_SMTP_MOTDEPASSE: "{{config.SOCLE_SMTP_MOTDEPASSE}}"
+      SOCLE_SMTP_DE: "{{config.SOCLE_SMTP_DE}}"
+      # Reprise d'une 1.4.1 seulement (node src/cli.js importer-v1).
+      MAPMYLAN_V1_MASTER_KEY: "{{config.MASTER_KEY}}"
 
-  web:
-    image: ghcr.io/codexx64/mapmylan-frontend:{{config.IMAGE_TAG}}
+  # Le relais : même image, sur le réseau du Hub, qui transmet chaque requête
+  # à l'API (flux temps réel compris). Il ne décide rien.
+  relais:
+    image: ghcr.io/codexx64/mapmylan:{{config.IMAGE_TAG}}
     container_name: {{service.host}}
     restart: unless-stopped
+    command: ["node", "src/relais.js"]
     networks: [hub]
     ports:
-      - "{{hostport.web}}:80"
+      - "{{hostport.http}}:8090"
     environment:
-      # nginx relaie /api vers l'API, qui écoute sur l'adresse du pont Docker.
-      API_UPSTREAM: "{{config.BIND_ADDRESS}}:4000"
+      RELAIS_CIBLE: "http://{{config.BIND_ADDRESS}}:8090"
+      RELAIS_PORT: "8090"
+    read_only: true
+    cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
     depends_on: [api]
 
 networks:
@@ -108,5 +108,5 @@ networks:
     external: true
 
 volumes:
-  {{volume.pgdata}}:
-    name: {{volume.pgdata}}
+  {{volume.data}}:
+    name: {{volume.data}}

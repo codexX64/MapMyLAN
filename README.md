@@ -1,228 +1,236 @@
-<div align="center">
-
-<img src="docs/logo.png" alt="MapMyLAN" height="120">
-
 # MapMyLAN
 
-**Cartographie, surveille et défend ton réseau local.**
+**Cartographie, surveille et défend le réseau local.** Découverte des
+appareils, topologie mesurée, vulnérabilités, blocage sur l'équipement réseau,
+alertes en direct, et un assistant qui répond au clavier ou à voix haute.
 
-Découverte automatique des appareils · Topologie mesurée · Détection de vulnérabilités
-Blocage sur ton propre routeur · Alertes en direct
+Projet [CodexX64](https://github.com/CodexX64). Licence MIT.
 
-[**Essayer la démonstration →**](https://demo.codex64.fr/mapmylan)
-
-</div>
-
----
-
-## Éditions
-
-**MapMyLAN Codex64** est l'édition publique, celle de ce dépôt. C'est le seul
-code : il fonctionne seul et n'a besoin d'aucun service annexe.
-
-Une installation qui veut greffer un comportement qui lui est propre — base de
-connaissances, entrepôt de métriques, billetterie interne — dépose un module
-dans `extensions/` plutôt que de forker le projet. Rien à déclarer, rien à
-recompiler. Voir [extensions/README.md](extensions/README.md).
+La version 2 est une réécriture du serveur : Node 24 seul, aucune dépendance
+npm, base SQLite (`node:sqlite`), interface statique sans construction, et le
+socle commun des services pour les comptes et la sécurité. Le contrat entre
+serveur et interface est dans [docs/API.md](docs/API.md).
 
 ## Ce que fait MapMyLAN
 
-MapMyLAN parcourt les plages que tu lui déclares, identifie chaque appareil,
-surveille ses ports ouverts et te prévient quand quelque chose sort de
-l'ordinaire. Quand une règle se déclenche, l'action est exécutée **sur ton
-équipement réseau** — le blocage est réel, pas symbolique.
-
-Trois sources de découverte sont interrogées en parallèle et fusionnées :
-
-| Source | Ce qu'elle apporte |
-|---|---|
-| Balayage ARP | Ce qui a communiqué récemment sur le segment |
-| Balayage ping | Ce qui répond aux sollicitations |
-| Équipement réseau | Ce qu'il porte réellement, y compris les appareils muets |
-
-L'équipement fournit en outre le **port de commutation** et la **borne
-d'association** de chaque client, ce qui permet de construire une topologie
-mesurée plutôt que déduite. Quand plusieurs adresses MAC apparaissent derrière
-un même port, un commutateur non géré est inséré automatiquement à cet endroit.
-
-## Les segments viennent de l'équipement
-
-Les VLAN ne se saisissent pas : ils sont **relevés** sur la passerelle. Le nom et
-le sous-réseau viennent d'elle, l'ordre est numérique — trié comme du texte,
-« VLAN 10 » passerait devant « VLAN 2 » — et un segment disparu est signalé dans
-le compte-rendu du relevé, jamais effacé en silence. Les adresses de passerelle
-sont écartées de l'inventaire : ce ne sont pas des appareils.
-
-Réserver une adresse suit la même logique. Le préfixe est figé par le segment
-choisi, seule la partie hôte se saisit, et elle est vérifiée en direct contre
-les bornes réelles du sous-réseau. MapMyLAN ne réécrit pas la configuration de
-la machine — personne ne peut faire ça à distance : il demande à la passerelle
-de toujours servir cette adresse à cette carte réseau.
-
-## Le trafic, dans les deux sens
-
-Les connexions relevées sur la passerelle sont lues dans les **deux tuples** de
-conntrack : quand la traduction d'adresses masque le tuple aller, c'est le tuple
-retour qui porte la vraie source. Sans cela, les connexions **entrantes** —
-celles qui comptent le plus — restent invisibles.
-
-Trois règles, et trois seulement, font passer un flux en rouge : un service
-sensible atteint depuis l'extérieur, un appareil déjà mis à l'écart qui
-communique encore, une note de risque déjà haute. Chaque flux signalé porte la
-raison qui l'a signalé — aucun score global, aucune appréciation.
+- **Découverte** par trois sources fusionnées : balayage ARP (ce qui a parlé),
+  balayage ping (ce qui répond) et l'équipement réseau (ce qu'il porte, muets
+  compris). Chaque appareil est identifié par un classement pondéré (fabricant,
+  services mDNS, ports, bannières, système, nom) qui donne une confiance.
+- **Scores** de confiance, d'activité, de vulnérabilité et de danger, avec
+  leurs raisons ; **CVE** rapprochées des services vus ; **historique** par
+  appareil.
+- **Topologie mesurée** : port de commutation et borne de chaque client quand
+  l'équipement les donne, commutateur non géré déduit quand plusieurs MAC
+  partagent un port. Les liens tracés à la main ne sont jamais touchés.
+- **VLAN relevés** sur la passerelle (jamais effacés en silence), poussés vers
+  elle pour les constructeurs qui le permettent ; **réservations** d'adresse.
+- **Défense** : bloquer, isoler, lever un blocage, à la main ou par règle
+  (seuil de danger), exécuté sur l'équipement.
+- **Trafic** vers et depuis l'extérieur, lu dans la table conntrack de la
+  passerelle (les deux sens), titulaires des destinations par RDAP.
+- **Alertes** par Telegram (avec des commandes du bot), courriel, billetterie
+  (ticket structuré) et le relais « Poste » ; **commandes** « quand X, faire Y ».
+- **Supervision de la machine** : processeur, mémoire, disque, température,
+  débit, conteneurs Docker (lecture seule, par proxy).
+- **Assistant** : réponses directes sans modèle, ou par l'Ollama du Hub ; voix
+  par VOX ; mémoire partagée par SYNAPSE. Plafond d'appels par compte et par jour.
+- **Jetons d'intégration** (rôle lecture ou membre) pour le Hub et les scripts.
 
 ## Équipements pris en charge
 
-| Constructeur | Transport | Blocage | Clients | Ports |
-|---|---|:-:|:-:|:-:|
-| Ubiquiti UniFi | API locale HTTPS | ✅ | ✅ | ✅ |
-| Asus / Merlin | SSH | ✅ | ✅ | — |
-| OpenWrt | SSH | ✅ | ✅ | — |
-| MikroTik RouterOS | SSH | ✅ | ✅ | ✅ |
-| pfSense / OPNsense | SSH | ✅ | ✅ | — |
-| Cisco IOS | SSH | ✅ | ✅ | ✅ |
-| Ubiquiti EdgeOS | SSH | ✅ | ✅ | — |
-| Zyxel | SSH | ✅ | — | — |
-| Générique | SSH | commandes libres | — | — |
+| Constructeur | Transport | Blocage | Clients |
+|---|---|:-:|:-:|
+| Ubiquiti UniFi | API locale HTTPS | oui | oui |
+| Asus / Merlin, OpenWrt, Ubiquiti EdgeOS | SSH | oui | oui |
+| MikroTik RouterOS, Cisco IOS | SSH | oui | oui |
+| pfSense / OPNsense | SSH | oui | oui |
+| Zyxel | SSH | oui | — |
+| Générique (Linux, iptables) | SSH | oui | oui |
 
-> **UniFi** exige un compte **local**, créé dans *Settings → Admins & Users*
-> avec l'option d'accès local. Les identifiants du compte Ubiquiti en ligne
-> sont refusés par l'API locale.
+UniFi exige un compte **local** du contrôleur. Une clé d'hôte SSH ou un
+certificat auto-signé est montré à l'administrateur à l'enregistrement : il en
+confirme l'empreinte, et seule cette clé (ce certificat) est ensuite admise.
 
----
+## Comptes et sécurité
 
-## Installation
+MapMyLAN repose sur le socle commun des services : comptes nominatifs, rôles
+`admin`, `membre` (piloter le réseau) et `lecture`, au moins deux facteurs
+(clé d'accès exigée pour un administrateur en HTTPS, application TOTP, mot de
+passe Argon2id selon la politique, codes de secours), sessions côté serveur,
+en-tête anti-CSRF, politique de contenu à nonce, journal de sécurité chaîné.
+Les actions sensibles (secrets d'équipement, commandes à distance,
+suppressions, réglages de sécurité, jetons) demandent une confirmation
+d'identité de moins de cinq minutes.
 
-### Prérequis
+Les secrets (équipements, boîtes mail, canaux de notification) sont scellés
+par le coffre du socle et ne redescendent jamais vers le navigateur. Toute
+connexion vers une adresse fournie par un utilisateur passe par une garde :
+http(s) seulement, métadonnées de nuage et plages réservées toujours refusées,
+adresses internes seulement pour l'équipement déclaré ou la liste
+`sortie.autorisees` (Réglages). Les outils réseau sont lancés sans shell,
+arguments en tableau et cibles validées.
 
-- Docker et Docker Compose
-- Une machine sur le réseau à surveiller, reliée en filaire de préférence
-- Un accès administrateur à ton routeur
+Chaque compte peut exporter ses données (page Sécurité) ; supprimer un compte
+efface son fil de l'assistant et ses compteurs. Voir `web/confidentialite.txt`.
 
-### Mise en route
+## Installation par le Hub
+
+Extensions → MapMyLAN → Installer. Le Hub génère la clé maîtresse, le poivre
+et le jeton d'intégration, branche Ollama, VOX et SYNAPSE s'ils sont installés.
+L'API tourne dans le réseau de la machine (le balayage ARP ne traverse pas un
+pont Docker) et n'écoute que sur l'adresse du pont (`BIND_ADDRESS`) ; un relais
+lancé depuis la même image, sur le réseau du Hub, lui transmet les requêtes.
+
+Au premier démarrage, MapMyLAN écrit son **jeton d'installation** dans ses
+journaux : il sert une fois, à créer le premier compte administrateur.
+
+## Installation seule
 
 ```bash
-git clone https://github.com/codexX64/MapMyLAN.git
-cd MapMyLAN
 cp .env.example .env
-```
-
-Ouvre le `.env` et renseigne au minimum les trois secrets. Ils se génèrent
-ainsi :
-
-```bash
-echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)"
-echo "JWT_SECRET=$(openssl rand -base64 48)"
-echo "MASTER_KEY=$(openssl rand -base64 32)"
-```
-
-Puis :
-
-```bash
+mkdir -p secrets extensions && openssl rand -base64 32 > secrets/socle_cle && : > secrets/socle_cle_ancienne && chmod 600 secrets/socle_cle secrets/socle_cle_ancienne
 docker compose up -d --build
+docker compose logs mapmylan | grep "Jeton d'installation"
 ```
 
-L'interface écoute sur `http://localhost:8090`. Au premier lancement, un
-assistant te guide : création du compte, choix de l'authentification, connexion
-à l'équipement, déclaration des plages, premier balayage.
+La clé maîtresse vit hors du volume de données (secret Docker). Renseigner
+`SCAN_INTERFACE` (`ip -o link show`) et `SCAN_SUBNET`, puis ouvrir
+`http://<hôte>:8090` (ou l'adresse du relais inverse), coller le jeton, créer
+le compte et ses facteurs.
 
-### Interface réseau
+**Pourquoi ces capacités.** `nmap`, `arp-scan` et `ping` ont besoin des
+sockets bruts (`NET_RAW`) et de rien d'autre. Docker ne donne aucune capacité
+à un processus lancé sous un autre compte que root, et `no-new-privileges`
+(posé) écarte les capacités de fichier : le conteneur part donc en root avec
+`NET_RAW`, `SETUID`, `SETGID` et `SETPCAP`, et `setpriv` passe aussitôt au
+compte `node` en ne gardant que `NET_RAW`, transmise aux outils. MapMyLAN
+tourne sous `node`, les trois autres capacités retirées de l'ensemble limite.
+L'image ne contient ni programme setuid ni capacité de fichier. Une commande
+lancée dans le conteneur prend `-u node` (voir « Sauvegardes »).
 
-Le balayage ARP a besoin d'être sur le même segment que les appareils. Le
-conteneur backend tourne donc en réseau hôte. Précise l'interface à utiliser :
+Sans Docker : Node 24.7 ou plus récent, les outils `nmap arp-scan iputils-ping
+openssh-client avahi-utils samba-common-bin snmp iproute2`, puis `npm start`.
+
+## Mise à jour depuis la 1.4.1
+
+La 2.0 part d'une base neuve, remplie par la reprise de l'ancienne, en une
+transaction (tout ou rien) :
 
 ```bash
-ip -o link show | awk -F': ' '{print $2}'
+# 1. Export, dans le conteneur PostgreSQL de la 1.4.1 :
+docker exec -i <conteneur-db-1.4.1> sh -s < outils/exporter-v1.sh > export.json
+chmod 600 export.json
+# 2. Reprise, avant le premier démarrage de la 2.0 :
+docker compose run --rm -T mapmylan node src/cli.js importer-v1 < export.json
+# 3. Une fois vérifié :
+shred -u export.json
 ```
 
-Reporte le nom dans `SCAN_INTERFACE`.
-
----
+- **Mots de passe** : les empreintes Argon2id de la 1.4.1 sont reprises telles
+  quelles, à condition de garder le même poivre : `SOCLE_POIVRE` = l'ancien
+  `PASSWORD_PEPPER` (le Hub le fait tout seul), ou, pour en changer,
+  `SOCLE_POIVRE_ANCIEN` = l'ancien (`aucun` s'il n'y en avait pas). Elles
+  passent aux paramètres actuels à la première connexion.
+- **Comptes sans mot de passe réutilisable** (empreinte bcrypt, antérieure à
+  Argon2id) : ils sont repris sans mot de passe. Un administrateur leur remet
+  un lien de réinitialisation (page Comptes → Réinitialiser) ; si c'est le seul
+  administrateur, `node src/cli.js lien-reinit <identifiant>` en donne un,
+  valable vingt minutes. La reprise les liste.
+- **TOTP** : les secrets actifs sont scellés ; **clés d'accès** non reprises
+  (chacun en recrée une, obligatoire pour un administrateur).
+- **Secrets** d'équipements, de boîtes mail et de canaux : rouverts avec
+  `MAPMYLAN_V1_MASTER_KEY` (l'ancien `MASTER_KEY`), puis scellés. Sans elle,
+  ils sont laissés de côté et se ressaisissent.
+- **Équipements** : la 1.4.1 n'épinglait ni clé d'hôte ni certificat ; chaque
+  équipement repris se réenregistre une fois pour en confirmer l'empreinte.
+- **Rôles** : `operator` → `membre`, `viewer` → `lecture`. Les jetons de portée
+  « comptes » ne sont pas repris (un jeton ne gère plus les comptes), le SMS non
+  plus (canal retiré), et une boîte mail sans chiffrement passe en STARTTLS exigé.
+- Tout le reste est repris : inventaire, ports, CVE, historique, carte, zones,
+  VLAN, alertes, journal, réglages valides, commandes, règles, balayages,
+  mesures, trafic, fil de l'assistant de chaque compte.
 
 ## Configuration
 
-Tout se règle depuis l'interface, sauf ce qui doit exister avant le premier
-démarrage. Le fichier `.env` ne contient que cela.
+Chaque secret peut venir d'un fichier : `NOM_FILE=/chemin`. Une valeur
+invalide arrête MapMyLAN au démarrage avec la liste des erreurs.
 
-| Variable | Rôle |
-|---|---|
-| `POSTGRES_PASSWORD` | Mot de passe de la base |
-| `JWT_SECRET` | Signature des jetons de session |
-| `MASTER_KEY` | Chiffrement des identifiants d'équipement au repos |
-| `PASSWORD_PEPPER` | Facultatif — poivre ajouté au hachage des mots de passe |
-| `SCAN_INTERFACE` | Interface réseau du balayage |
-| `SCAN_SUBNET` | Plage initiale, remplacée ensuite par celles de l'interface |
-| `DEFAULT_ADMIN_USER` | Reprise en main après oubli — laisser vide en usage normal |
-| `DEFAULT_ADMIN_PASSWORD` | Idem. **Vide par défaut**, sinon réappliqué à chaque démarrage |
+| Variable | Rôle | Défaut |
+|---|---|---|
+| `PORT` / `HOTE` | écoute | `8090` / `0.0.0.0` |
+| `DATA_DIR` | base et clés | `/app/data` |
+| `SCAN_SUBNET` / `SCAN_INTERVAL` / `SCAN_INTERFACE` | plage de départ, intervalle (s, `0` : à la main), interface | — / `300` / auto |
+| `HOST_PROC` / `HOST_SYS` | `/proc` et `/sys` de la machine, montés en lecture | `/proc` / `/sys` |
+| `DOCKER_HOST` | proxy du socket Docker en lecture seule (`tcp://…` ou `unix:///…`) | — |
+| `INTEGRATION_TOKEN_SEED` | jeton du Hub (`hub_…` ou `mml_…`), rôle membre | — |
+| `IA_URL` / `IA_MODELE` / `IA_MODELE_DEFAUT` | Ollama et modèle de l'assistant | — |
+| `VOX_URL` / `VOX_JETON` | voix | — |
+| `SYNAPSE_URL` / `SYNAPSE_JETON` | mémoire partagée | — |
+| `MAPMYLAN_IA_JOUR` / `_JOUR_TOTAL` / `_MINUTE` | plafonds d'appels au modèle : par compte et par jour, instance par jour, par compte et par minute | `200` / `1000` / `10` |
+| `MAPMYLAN_VOIX_JOUR` / `_JOUR_TOTAL` | plafonds de transcriptions et de lectures par VOX : par compte et par jour, instance par jour | `400` / `2000` |
+| `POSTE_URL` / `POSTE_FROM` / `POSTE_SEND_KEY` / `POSTE_ALIAS` | relais d'envoi « Poste » (https) | — |
+| `SERVICE_UI` | adresse de MapMyLAN pour un humain | — |
+| `EXTENSIONS_DIR` | dossier des extensions (lecture seule) | — |
+| `MAPMYLAN_V1_MASTER_KEY` | reprise de la 1.4.1 seulement | — |
+| `SOCLE_THEME` | thème de l'interface : `console` (noir, accent vert, sombre seulement) ou `soma` (clair ou sombre) ; dans le Hub, champ « Thème de l'interface » du service, `console` par défaut | `soma` |
+| `SOCLE_*` | comptes, clé maîtresse, poivre, relais SMTP des alertes, relais de confiance : voir le socle | — |
 
-> `DEFAULT_ADMIN_PASSWORD` doit rester **vide** en fonctionnement normal.
-> Renseigné, il réécrit le mot de passe du compte à chaque redémarrage du
-> conteneur, ce qui annule tout changement fait depuis l'interface.
+Réglages de l'interface, validés un par un (toute autre clé est refusée) :
+plages de balayage (préfixe /16 ou plus étroit), intervalle, construction
+automatique de la carte, regroupement, registres RDAP, logos (éteints par
+défaut), rétention du trafic, destinations internes autorisées en sortie.
 
-### Plages balayées
+## Extensions
 
-Un réseau tient rarement dans un seul sous-réseau. Déclare-en autant que
-nécessaire depuis *Réglages → Plages balayées* : le DHCP sur l'une,
-l'infrastructure sur une autre, un équipement resté sur son adressage d'usine
-sur une troisième.
+Un module déposé dans `EXTENSIONS_DIR` est chargé au démarrage : ESM
+(`export default { nom, surAppareil, surBalayage, surAlerte }`), ou CommonJS en
+`.cjs` (celles de la 1.4.1, renommées). Toutes les méthodes sont facultatives ;
+une extension qui lève n'interrompt rien. Un fichier lien symbolique,
+inscriptible par le groupe ou par tous, ou d'un autre propriétaire, est refusé.
 
-Elles sont parcourues **l'une après l'autre**, jamais simultanément : deux
-balayages ARP en parallèle saturent la carte réseau et faussent les résultats.
+## Sauvegardes
 
----
+```bash
+docker compose exec -u node -T mapmylan node src/cli.js sauvegarde < cle-publique.pem > mapmylan.sauv
+node src/cli.js restaurer cle-privee.pem mapmylan.db < mapmylan.sauv   # sur une autre machine
+```
 
-## Sécurité
+La sauvegarde est chiffrée pour une clé publique RSA (3072 bits au moins) : la
+clé privée qui la relit ne vit pas sur la machine de MapMyLAN.
 
-MapMyLAN manipule des identifiants d'équipement réseau et peut couper l'accès à
-des appareils. Les choix suivants en découlent.
+## Tourner la clé maîtresse
 
-**Mots de passe.** Hachés en Argon2id — 32 Mio de mémoire, trois passes — ce qui
-rend les attaques par matériel dédié inintéressantes. Les empreintes bcrypt
-héritées d'une version antérieure sont vérifiées puis réencodées silencieusement
-à la première connexion réussie. Un poivre facultatif, tiré de l'environnement,
-rend une base exfiltrée seule inexploitable.
+Dans le Hub (réglages avancés de MapMyLAN) ou dans `secrets/` installé seul :
+la clé actuelle dans `SOCLE_CLE_ANCIENNE` (`socle_cle_ancienne`), une neuve
+(`openssl rand -base64 32`) dans `SOCLE_CLE` (`socle_cle`), puis redémarrer.
+Au démarrage, les secrets TOTP, ceux des équipements, des boîtes mail et des
+canaux de notification passent sous la clé neuve (journal : `coffre.rescelle`) ;
+personne ne ressaisit rien. Vider ensuite `SOCLE_CLE_ANCIENNE` et redémarrer.
+Une clé que la base ne connaît pas arrête le démarrage.
 
-**Authentification.** Trois preuves peuvent se combiner : mot de passe, clé
-d'accès et second facteur. La clé d'accès s'appuie sur WebAuthn — la partie
-privée ne quitte jamais l'appareil, et la clé est liée à l'origine, donc
-inutilisable sur un site qui imiterait le tien.
+## Derrière un relais inverse
 
-**Identifiants d'équipement.** Chiffrés au repos en AES-256-GCM avec `MASTER_KEY`.
-Ils ne redescendent jamais vers le navigateur.
+Déclarer l'adresse du relais dans `SOCLE_PROXYS` ; sans cela, MapMyLAN ignore
+`X-Forwarded-For` et `X-Forwarded-Proto`, et compte les débits par l'adresse
+du relais. `SOCLE_ORIGINES` accepte une origine de plus quand le relais
+réécrit l'hôte. MapMyLAN n'est pas fait pour être exposé nu sur Internet.
 
-**Exposition publique.** Si tu ouvres MapMyLAN sur un domaine, place-le derrière
-un accès authentifié — tunnel avec contrôle d'accès, ou VPN. L'application n'est
-pas conçue pour être exposée nue sur Internet.
+## Vérifier
 
-Une faille à signaler ? Voir [SECURITY.md](SECURITY.md).
+```bash
+npm test                                   # tests du service
+(cd socle && node --test)                  # tests du socle embarqué
+node outils/parcours-navigateur.mjs        # parcours de l'interface dans Chromium (Playwright requis)
+node outils/faux-api.mjs                   # l'interface devant des données inventées, sans réseau
+```
 
----
-
-## Démonstration
-
-Une démonstration complète est disponible sur
-**[demo.codex64.fr/mapmylan](https://demo.codex64.fr/mapmylan)** — assistant
-de première configuration, carte, trafic mondial, inventaire, réglages. Toutes
-les données y sont fictives et les adresses appartiennent aux plages réservées à
-la documentation.
-
-Elle est aussi dans ce dépôt : `demo/index.html`, à ouvrir directement dans un
-navigateur.
-
----
+Les essais démarrent de vrais serveurs locaux : droits de chaque route par
+rôle, objets d'autrui, corps invalides, sorties vers l'interne et les
+métadonnées, injections dans les arguments des outils, clé d'hôte SSH changée,
+certificat épinglé changé, flux temps réel, reprise de la 1.4.1, export et
+effacement d'un compte.
 
 ## Licence
 
 MIT — voir [LICENSE](LICENSE).
-
-La mention de copyright doit être conservée dans toute redistribution, y compris
-dans les travaux dérivés. C'est une obligation de la licence, pas une
-convention.
-
----
-
-<div align="center">
-
-**MapMyLAN Codex64** — [CodexX64](https://github.com/CodexX64) · [codex64.fr](https://codex64.fr)
-
-</div>

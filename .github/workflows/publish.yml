@@ -1,15 +1,11 @@
 name: publish
 
-# Images publiées, parce qu'un installeur ne construit pas.
-#
-# Un programme qui installe MapMyLAN ne télécharge qu'un fichier Compose : il
-# n'a ni le dépôt, ni de quoi bâtir. Les deux images doivent donc exister
-# ailleurs, prêtes à tirer, pour deux architectures — les machines qui tiennent
-# un scanner de réseau local sont autant des cartes ARM que des serveurs x86.
+# Image publiée, parce qu'un installeur ne construit pas : le Hub ne télécharge
+# qu'un fichier Compose. L'image est d'abord construite pour amd64 et passée
+# au crible ; elle n'est poussée, pour amd64 et arm64, que si le crible passe.
 #
 # Rien ici ne nomme personne : le jeton est celui que GitHub fournit à
-# l'exécution, les étiquettes OCI sont posées explicitement, et aucune commande
-# n'affiche d'identité dans le journal.
+# l'exécution et les étiquettes OCI sont posées explicitement.
 
 on:
   push:
@@ -18,79 +14,75 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 env:
   REGISTRE: ghcr.io
 
 jobs:
-  images:
-    name: ${{ matrix.composant }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - composant: backend
-            contexte: backend
-            image: mapmylan-backend
-          - composant: frontend
-            contexte: frontend
-            image: mapmylan-frontend
+  image:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      # arm64 est bâti en émulation sur un coureur x86 : c'est lent — comptez
-      # une dizaine de minutes de plus — mais cela évite d'entretenir un parc
-      # de coureurs ARM pour deux images.
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # Le jeton vient de l'exécution : aucun secret à créer, aucun à faire
-      # tourner. `github.actor` est l'auteur du push, pas une identité posée
-      # dans le dépôt.
-      - uses: docker/login-action@v3
+      - name: Construction locale, pour le crible
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: mapmylan:crible
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Crible des vulnérabilités de l'image
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: mapmylan:crible
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+          output-format: table
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRE }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Étiquettes : `latest` suit main, et un tag `v1.2.3` pose aussi 1.2.3 et
-      # 1.2 — de quoi épingler une version mineure sans se figer sur un correctif.
       - id: etiquettes
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ${{ env.REGISTRE }}/codexx64/${{ matrix.image }}
+          images: ${{ env.REGISTRE }}/codexx64/mapmylan
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short,enable={{is_default_branch}}
-          # Étiquettes OCI posées à la main plutôt que déduites : ce qui est
-          # publié ne doit décrire que le projet.
           labels: |
-            org.opencontainers.image.title=MapMyLAN ${{ matrix.composant }}
-            org.opencontainers.image.description=Supervision reseau auto-hebergee — ${{ matrix.composant }}
+            org.opencontainers.image.title=MapMyLAN
+            org.opencontainers.image.description=Cartographie, surveillance et defense du reseau local
             org.opencontainers.image.vendor=CodexX64
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.url=https://codex64.fr
-          annotations: |
-            org.opencontainers.image.vendor=CodexX64
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: ${{ matrix.contexte }}
+          context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.etiquettes.outputs.tags }}
           labels: ${{ steps.etiquettes.outputs.labels }}
-          # Le cache du coureur évite de reconstruire les couches npm à chaque
-          # passage ; sans lui, chaque publication repart de zéro deux fois.
-          cache-from: type=gha,scope=${{ matrix.composant }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.composant }}
-          provenance: false
-          sbom: false
+          cache-from: type=gha
+          provenance: mode=min
+          sbom: true

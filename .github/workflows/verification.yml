@@ -1,0 +1,114 @@
+name: verification
+
+# Chaque poussée, chaque demande de fusion et chaque lundi : les essais, les
+# empreintes du socle embarqué, la syntaxe du script d'export, l'analyse
+# statique, les secrets, l'identité des nouveaux commits et la liste
+# d'anonymat. Aucune action tierce n'est suivie par
+# étiquette : chacune est épinglée sur son commit.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  essais:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+      - name: Essais
+        run: npm test
+      - name: Essais du socle embarqué
+        working-directory: socle
+        run: node --disable-warning=ExperimentalWarning --test test/*.test.js
+      - name: Socle embarqué conforme à ses empreintes
+        working-directory: socle
+        run: sha256sum --check --strict EMPREINTES
+      - name: Script d'export de la 1.4.1, POSIX
+        run: sh -n outils/exporter-v1.sh
+      - name: Aucune dépendance npm
+        run: node -e "const p = require('./package.json'); for (const k of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) if (p[k] && Object.keys(p[k]).length) { console.error(k); process.exit(1); }"
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  identite:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Nouveaux commits, un seul auteur, en UTC, sans mention d'outil
+        env:
+          AVANT: ${{ github.event.pull_request.base.sha || github.event.before }}
+          APRES: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if ! git cat-file -e "$AVANT^{commit}" 2>/dev/null; then AVANT=$(git rev-list --max-parents=0 "$APRES" | tail -n 1); fi
+          plage="$AVANT..$APRES"
+          auteurs=$(git log --format='%an <%ae>%n%cn <%ce>' "$plage" | sort -u)
+          echo "$auteurs"
+          if [ -n "$auteurs" ] && [ "$(printf '%s\n' "$auteurs" | wc -l)" -ne 1 ]; then echo "plusieurs identités"; exit 1; fi
+          if git log --format='%aI%n%cI' "$plage" | grep -v '+00:00$'; then echo "fuseau autre que UTC"; exit 1; fi
+          if git log --format='%B' "$plage" | grep -inE 'co-authored-by|generated (by|with)|as an ai|🤖|claude\.ai/code|session_[0-9A-Za-z]{10,}'; then echo "mention d'outil"; exit 1; fi
+
+  # Les motifs viennent d'un secret du dépôt, jamais du dépôt lui-même : la
+  # liste de ce qui identifie l'auteur serait son meilleur index. Rien n'est
+  # affiché d'une correspondance, seulement son existence.
+  anonymat:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Aucun terme de la liste d'anonymat, dans l'arbre ni dans les nouveaux commits
+        env:
+          LISTE: ${{ secrets.LISTE_ANONYMAT }}
+          AVANT: ${{ github.event.pull_request.base.sha || github.event.before }}
+          APRES: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -z "$LISTE" ]; then echo "Secret LISTE_ANONYMAT absent : contrôle impossible, refusé."; exit 1; fi
+          sans_casse=$(mktemp); casse=$(mktemp)
+          printf '%s\n' "$LISTE" | sed '/^[[:space:]]*$/d' | grep -v '^=' > "$sans_casse" || true
+          printf '%s\n' "$LISTE" | sed -n 's/^=//p' | sed '/^[[:space:]]*$/d' > "$casse" || true
+          cherche() { t=$(mktemp); cat > "$t"; { [ -s "$sans_casse" ] && grep -qiF -f "$sans_casse" "$t"; } || { [ -s "$casse" ] && grep -qF -f "$casse" "$t"; }; }
+          if git grep -hI -e '' -- . | cherche; then echo "Un terme de la liste figure dans l'arbre."; exit 1; fi
+          if ! git cat-file -e "$AVANT^{commit}" 2>/dev/null; then AVANT=$(git rev-list --max-parents=0 "$APRES" | tail -n 1); fi
+          # Les lignes ajoutées et les métadonnées seulement : retirer un terme ne doit pas faire échouer le contrôle.
+          if { git log --format='%an%n%ae%n%cn%n%ce%n%B' "$AVANT..$APRES"; git log -p --format= "$AVANT..$APRES" | grep '^+'; } | cherche; then echo "Un terme de la liste figure dans les nouveaux commits."; exit 1; fi
+          echo "Aucune correspondance."
+
+  analyse:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1

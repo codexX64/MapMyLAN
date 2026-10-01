@@ -3,12 +3,12 @@
   "manifestVersion": 1,
   "id": "mapmylan",
   "name": "MapMyLAN",
-  "version": "1.4.1",
-  "description": "Cartographie du réseau local : appareils, scans, scores de risque, alertes, quarantaine — et un assistant qui répond, au clavier ou à voix haute avec VOX.",
+  "version": "2.0.0",
+  "description": "Cartographie du réseau local : appareils, balayages, scores de risque, alertes, quarantaine — et un assistant qui répond, au clavier ou à voix haute avec VOX.",
   "icon": "map",
   "repository": "https://github.com/codexX64/MapMyLAN",
   "license": "MIT",
-  "minHubVersion": "0.1.0",
+  "minHubVersion": "0.5.64",
   "install": {
     "type": "compose",
     "compose": "deploy/compose.hub.yml",
@@ -17,41 +17,29 @@
       "label": "Adresse de MapMyLAN",
       "placeholder": "http://192.0.2.20:8090",
       "defaultPort": 8090,
-      "setupHelp": "Pour surveiller un autre segment que celui du Hub : installer MapMyLAN sur une machine de ce segment (docs/INSTALL.md), puis dans Réglages → Intégrations créer un jeton de rôle opérateur et le coller ici. N'autoriser l'accès que depuis l'adresse du Hub."
+      "setupHelp": "Pour surveiller un autre segment que celui du Hub : installer MapMyLAN sur une machine de ce segment (README), puis dans Réglages → Intégrations créer un jeton de rôle « membre » et le coller ici. N'autoriser l'accès que depuis l'adresse du Hub."
     },
     "arch": [
       "amd64",
       "arm64"
     ],
     "resources": {
-      "ramMb": 1024,
+      "ramMb": 512,
       "cpu": 1.0,
       "diskMb": 2048
     },
     "ports": [
       {
-        "name": "web",
-        "container": 80,
+        "name": "http",
+        "container": 8090,
         "protocol": "http",
         "expose": "proxy"
-      },
-      {
-        "name": "db",
-        "container": 5432,
-        "protocol": "tcp",
-        "expose": "host"
-      },
-      {
-        "name": "cache",
-        "container": 6379,
-        "protocol": "tcp",
-        "expose": "host"
       }
     ],
     "volumes": [
       {
-        "name": "pgdata",
-        "path": "/var/lib/postgresql/data"
+        "name": "data",
+        "path": "/app/data"
       }
     ],
     "healthcheck": {
@@ -83,7 +71,7 @@
       "label": "Plage initiale (CIDR)",
       "type": "string",
       "required": true,
-      "default": "192.168.1.0/24",
+      "default": "198.51.100.0/24",
       "help": "D'autres plages s'ajoutent ensuite depuis MapMyLAN."
     },
     {
@@ -93,6 +81,24 @@
       "default": 900,
       "min": 60,
       "advanced": true
+    },
+    {
+      "key": "SOCLE_THEME",
+      "label": "Thème de l'interface",
+      "type": "select",
+      "default": "console",
+      "required": true,
+      "options": [
+        {
+          "value": "console",
+          "label": "Console — noir, gris neutres, accent vert"
+        },
+        {
+          "value": "soma",
+          "label": "SOMA — clair ou sombre, accent bleu"
+        }
+      ],
+      "help": "Modifiable à tout moment : le service est redéployé avec le thème choisi, comptes et données intacts."
     },
     {
       "key": "IA_MODELE",
@@ -118,46 +124,179 @@
       "type": "string",
       "default": "172.17.0.1",
       "advanced": true,
-      "help": "Adresse du pont Docker : l'interface web y accède, le réseau local non."
-    },
-    {
-      "key": "POSTGRES_PASSWORD",
-      "type": "secret",
-      "label": "Mot de passe PostgreSQL",
-      "generate": "random:32"
-    },
-    {
-      "key": "JWT_SECRET",
-      "type": "secret",
-      "label": "Signature des sessions",
-      "generate": "random:48"
-    },
-    {
-      "key": "MASTER_KEY",
-      "type": "secret",
-      "label": "Chiffrement des identifiants d'équipement",
-      "generate": "random:32"
-    },
-    {
-      "key": "PASSWORD_PEPPER",
-      "type": "secret",
-      "label": "Poivre des mots de passe",
-      "generate": "random:32"
+      "help": "Adresse du pont Docker : le relais du Hub y joint l'API, le réseau local non. Jamais 0.0.0.0."
     },
     {
       "key": "HUB_TOKEN",
       "label": "Jeton d'intégration",
       "type": "secret",
       "required": true,
-      "help": "Installé ici : généré par le Hub et semé dans MapMyLAN au démarrage (INTEGRATION_TOKEN_SEED). À distance : à créer dans Réglages → Intégrations et à coller ici.",
+      "help": "Installé ici : généré par le Hub et semé dans MapMyLAN au démarrage (INTEGRATION_TOKEN_SEED, rôle membre). À distance : à créer dans Réglages → Intégrations et à coller ici.",
       "generate": "hub-token"
     },
     {
-      "key": "ADMIN_TOKEN",
-      "label": "Jeton d'administration des comptes",
+      "key": "PASSWORD_PEPPER",
       "type": "secret",
-      "generate": "hub-token",
-      "help": "Installé ici : généré par le Hub et semé (ADMIN_TOKEN_SEED). À distance : jeton de portée « comptes » créé dans Réglages → Intégrations. Sans lui, la page Utilisateurs reste en lecture.",
+      "label": "Poivre des mots de passe",
+      "generate": "random:48",
+      "advanced": true,
+      "help": "Mêlé à chaque mot de passe avant hachage, gardé hors de la base. Venant de la 1.4.1, c'est le même : les mots de passe repris restent valables."
+    },
+    {
+      "key": "MASTER_KEY",
+      "type": "secret",
+      "label": "Clé de la 1.4.1",
+      "advanced": true,
+      "help": "Seulement pour reprendre une installation 1.4.1 (node src/cli.js importer-v1) : elle rouvre les secrets d'équipement, de boîtes mail et de canaux, qui sont rescellés sous la clé maîtresse. Inutile ensuite."
+    },
+    {
+      "key": "SOCLE_HTTP",
+      "label": "Accès sans HTTPS",
+      "type": "select",
+      "default": "0",
+      "required": true,
+      "options": [
+        {
+          "value": "0",
+          "label": "Non — MapMyLAN est servi en HTTPS (Relay ou certificat du Hub)"
+        },
+        {
+          "value": "1",
+          "label": "Oui — réseau de confiance, mode dégradé"
+        }
+      ],
+      "help": "Les clés d'accès n'existent qu'en HTTPS. En mode dégradé, l'administrateur se connecte avec mot de passe et application d'authentification, et MapMyLAN l'affiche partout."
+    },
+    {
+      "key": "SOCLE_CLE",
+      "label": "Clé maîtresse",
+      "type": "secret",
+      "generate": "random:32",
+      "help": "Scelle les secrets des applications d'authentification. Créée par le Hub, gardée dans son coffre, jamais sur le volume de MapMyLAN."
+    },
+    {
+      "key": "SOCLE_CLE_ANCIENNE",
+      "label": "Clé maîtresse remplacée",
+      "type": "secret",
+      "advanced": true,
+      "help": "Pendant une rotation seulement : colle ici la clé maîtresse actuelle, pose une clé neuve (openssl rand -base64 32) dans « Clé maîtresse », redéploie. MapMyLAN rescelle les secrets au démarrage, personne ne réinscrit son application. Vide ensuite ce champ et redéploie."
+    },
+    {
+      "key": "SOCLE_JETON_INSTALLATION",
+      "label": "Jeton d'installation",
+      "type": "secret",
+      "advanced": true,
+      "help": "Vide : MapMyLAN en tire un au premier démarrage et l'écrit dans ses journaux (bouton Journaux). Il ne sert qu'à créer le premier compte."
+    },
+    {
+      "key": "SOCLE_PROXYS",
+      "label": "Relais de confiance",
+      "type": "string",
+      "default": "172.16.0.0/12",
+      "advanced": true,
+      "help": "Plages (CIDR, séparées par des virgules) des relais autorisés à transmettre l'adresse du client : au moins celle du réseau du Hub, où tourne le relais de MapMyLAN. Vide : chaque requête semble venir du relais, et les débits se comptent pour tous à la fois."
+    },
+    {
+      "key": "SOCLE_ORIGINES",
+      "label": "Origines supplémentaires",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Adresses complètes (https://mapmylan.exemple.org) acceptées en plus de celle de la page, quand un relais réécrit l'hôte."
+    },
+    {
+      "key": "SOCLE_URL_PUBLIQUE",
+      "label": "Adresse publique de MapMyLAN",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Ex. https://mapmylan.exemple.org. Les liens des courriels d'alerte en partent. Obligatoire avec un relais SMTP."
+    },
+    {
+      "key": "SOCLE_SMTP_HOTE",
+      "label": "Relais SMTP",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Vide : les alertes de sécurité restent visibles dans MapMyLAN, sans courriel."
+    },
+    {
+      "key": "SOCLE_SMTP_PORT",
+      "label": "Port SMTP",
+      "type": "number",
+      "min": 1,
+      "advanced": true,
+      "help": "Vide : 465 en TLS, 587 en STARTTLS."
+    },
+    {
+      "key": "SOCLE_SMTP_SECURITE",
+      "label": "Chiffrement SMTP",
+      "type": "select",
+      "default": "tls",
+      "advanced": true,
+      "options": [
+        {
+          "value": "tls",
+          "label": "TLS dès la connexion (465)"
+        },
+        {
+          "value": "starttls",
+          "label": "STARTTLS exigé (587)"
+        }
+      ]
+    },
+    {
+      "key": "SOCLE_SMTP_UTILISATEUR",
+      "label": "Identifiant SMTP",
+      "type": "string",
+      "default": "",
+      "advanced": true
+    },
+    {
+      "key": "SOCLE_SMTP_MOTDEPASSE",
+      "label": "Mot de passe SMTP",
+      "type": "secret",
+      "advanced": true
+    },
+    {
+      "key": "SOCLE_SMTP_DE",
+      "label": "Adresse d'expédition",
+      "type": "string",
+      "default": "",
+      "advanced": true
+    },
+    {
+      "key": "MAPMYLAN_IA_JOUR",
+      "label": "Questions à l'assistant par compte et par jour",
+      "type": "number",
+      "default": 200,
+      "min": 1,
+      "advanced": true,
+      "help": "Plafond d'appels au modèle de langage par compte et par jour ; les administrateurs sont prévenus quand il est atteint."
+    },
+    {
+      "key": "MAPMYLAN_IA_JOUR_TOTAL",
+      "label": "Questions à l'assistant par jour, pour toute l'instance",
+      "type": "number",
+      "default": 1000,
+      "min": 1,
+      "advanced": true
+    },
+    {
+      "key": "MAPMYLAN_VOIX_JOUR",
+      "label": "Transcriptions et lectures de la voix par compte et par jour",
+      "type": "number",
+      "default": 400,
+      "min": 1,
+      "advanced": true,
+      "help": "Plafond d'appels à VOX (dictée et lecture des réponses) par compte et par jour ; les administrateurs sont prévenus quand il est atteint."
+    },
+    {
+      "key": "MAPMYLAN_VOIX_JOUR_TOTAL",
+      "label": "Transcriptions et lectures de la voix par jour, pour toute l'instance",
+      "type": "number",
+      "default": 2000,
+      "min": 1,
       "advanced": true
     }
   ],
@@ -838,9 +977,11 @@
         "method": "GET",
         "path": "/api/health"
       },
-      "value": "$.status",
+      "value": "$.ok",
       "states": {
         "ok": [
+          true,
+          "true",
           "ok"
         ]
       },
@@ -948,71 +1089,28 @@
     "privileged": false,
     "hostNetwork": true,
     "capAdd": [
-      "NET_ADMIN",
-      "NET_RAW"
+      "NET_RAW",
+      "SETUID",
+      "SETGID",
+      "SETPCAP"
     ],
-    "egress": []
+    "egress": [
+      "rdap.org",
+      "rdap.db.ripe.net",
+      "rdap.arin.net",
+      "rdap.apnic.net",
+      "rdap.lacnic.net",
+      "rdap.afrinic.net",
+      "api.telegram.org",
+      "icons.duckduckgo.com",
+      "www.google.com",
+      "unavatar.io",
+      "logo.clearbit.com"
+    ]
   },
   "ai": {
     "exposeActions": true,
     "hints": "MapMyLAN partage le réseau de sa machine : il ne voit que le segment de celle-ci. Quarantaine et bannissement coupent un appareil du réseau : toujours demander validation, ne jamais cibler la passerelle ni la machine du Hub. Un scan complet peut durer plusieurs minutes."
-  },
-  "accounts": {
-    "tokenKey": "ADMIN_TOKEN",
-    "roles": [
-      "admin",
-      "operator",
-      "viewer"
-    ],
-    "adminRole": "admin",
-    "fields": {
-      "id": "$.id",
-      "name": "$.username",
-      "role": "$.role",
-      "mfa": "$.totpEnabled",
-      "created": "$.createdAt",
-      "lastSeen": "$.lastLogin",
-      "protected": "$.fondateur"
-    },
-    "list": {
-      "method": "GET",
-      "path": "/api/users",
-      "select": "$.comptes"
-    },
-    "create": {
-      "method": "POST",
-      "path": "/api/users",
-      "body": {
-        "username": "{{params.username}}",
-        "password": "{{params.password}}",
-        "role": "{{params.role}}"
-      }
-    },
-    "update": {
-      "method": "PATCH",
-      "path": "/api/users/{{params.id}}",
-      "body": {
-        "role": "{{params.role}}"
-      }
-    },
-    "password": {
-      "method": "POST",
-      "path": "/api/users/{{params.id}}/password",
-      "body": {
-        "password": "{{params.password}}"
-      }
-    },
-    "requireMfa": {
-      "method": "POST",
-      "path": "/api/users/{{params.id}}/mfa/exiger",
-      "body": {
-        "valeur": true
-      }
-    },
-    "remove": {
-      "method": "DELETE",
-      "path": "/api/users/{{params.id}}"
-    }
   },
   "autoWorkflows": [
     {
