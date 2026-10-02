@@ -46,7 +46,7 @@ test('relais devant MapMyLAN : connexion, anti-CSRF et flux temps réel traverse
   const relais = await relaisVers(`http://127.0.0.1:${o.port}`);
   try {
     const admin = await administrateur({ port: relais.port });
-    assert.equal((await admin.get('/api/health')).json.version, '2.0.0');
+    assert.equal((await admin.get('/api/health')).json.version, '2.0.1');
     assert.equal((await admin.post('/api/devices/manual', { customName: 'serveur-a' })).status, 200);
     const f = await ouvrirFlux(admin);
     assert.equal(f.status, 200);
