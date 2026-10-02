@@ -330,7 +330,7 @@ section.page>.card+.card,section.page>.card+.set,section.page>.split+.card,secti
 
 /* Carte du réseau. */
 .plan{background:var(--surface);border-radius:14px;box-shadow:var(--lift);overflow:hidden}
-.planwrap{background:var(--well);background-image:radial-gradient(circle at 1px 1px,var(--hair) 1px,transparent 0);background-size:22px 22px;padding:6px}
+.planwrap{background:var(--well);background-image:radial-gradient(circle at 1px 1px,var(--hair) 1px,transparent 0);background-size:22px 22px;padding:0}
 #carte .planwrap{height:calc(100vh - 260px);min-height:420px}
 .plan svg.map{display:block;width:100%;height:auto}
 /* Dans la carte, le dessin couvre exactement le cadre, posé en absolu : Safari
