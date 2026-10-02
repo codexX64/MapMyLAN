@@ -8,7 +8,7 @@
   "icon": "map",
   "repository": "https://github.com/codexX64/MapMyLAN",
   "license": "MIT",
-  "minHubVersion": "0.5.64",
+  "minHubVersion": "0.7.0",
   "install": {
     "type": "compose",
     "compose": "deploy/compose.hub.yml",
@@ -81,24 +81,6 @@
       "default": 900,
       "min": 60,
       "advanced": true
-    },
-    {
-      "key": "SOCLE_THEME",
-      "label": "Thème de l'interface",
-      "type": "select",
-      "default": "console",
-      "required": true,
-      "options": [
-        {
-          "value": "console",
-          "label": "Console — noir et vert, ou blanc et bleu (bascule dans MapMyLAN)"
-        },
-        {
-          "value": "soma",
-          "label": "SOMA — clair ou sombre, accent bleu"
-        }
-      ],
-      "help": "Modifiable à tout moment : le service est redéployé avec le thème choisi, comptes et données intacts."
     },
     {
       "key": "IA_MODELE",

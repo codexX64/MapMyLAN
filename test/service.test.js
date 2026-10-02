@@ -721,7 +721,7 @@ test('rotation de SOCLE_CLE : les secrets des équipements, des boîtes et des c
   } finally { await x.arreter(); }
 });
 
-test('thème : la page porte celui de SOCLE_THEME, champ du Hub (Console par défaut) ; SOMA hors Hub', async () => {
+test('thème : la page porte celui de SOCLE_THEME, posé par la page Thème du Hub ; SOMA hors Hub', async () => {
   assert.match((await new Client(o.port).get('/')).texte, /<html lang="fr" data-shell="reading" data-gamme="soma">/);
   const x = await lancer({ SOCLE_THEME: 'console' });
   try {
@@ -729,11 +729,8 @@ test('thème : la page porte celui de SOCLE_THEME, champ du Hub (Console par dé
   } finally { await x.arreter(); }
   await assert.rejects(() => lancer({ SOCLE_THEME: 'clair' }), /SOCLE_THEME/);
   const lire = f => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
-  assert.match(lire('deploy/compose.hub.yml'), /^ {6}SOCLE_THEME: "\{\{config\.SOCLE_THEME\}\}"$/m);
+  assert.match(lire('deploy/compose.hub.yml'), /^ {6}SOCLE_THEME: "\{\{hub\.theme\}\}"$/m);
   const manifeste = JSON.parse(lire('hub.json'));
-  const champ = manifeste.config.find(c => c.key === 'SOCLE_THEME');
-  assert.equal(champ.type, 'select');
-  assert.equal(champ.default, 'console');
-  assert.deepEqual(champ.options.map(o => o.value).sort(), ['console', 'soma']);
-  assert.equal(manifeste.minHubVersion, '0.5.64', 'un champ de configuration ne demande pas de Hub plus récent');
+  assert.equal(manifeste.config.find(c => c.key === 'SOCLE_THEME'), undefined, 'le thème ne se règle plus dans la configuration du service');
+  assert.equal(manifeste.minHubVersion, '0.7.0', '{{hub.theme}} vient avec le Hub 0.7.0');
 });

@@ -173,7 +173,7 @@ invalide arrête MapMyLAN au démarrage avec la liste des erreurs.
 | `SERVICE_UI` | adresse de MapMyLAN pour un humain | — |
 | `EXTENSIONS_DIR` | dossier des extensions (lecture seule) | — |
 | `MAPMYLAN_V1_MASTER_KEY` | reprise de la 1.4.1 seulement | — |
-| `SOCLE_THEME` | thème de l'interface : `console` (noir et vert, ou blanc et bleu par la bascule clair ou sombre) ou `soma` (clair ou sombre) ; dans le Hub, champ « Thème de l'interface » du service, `console` par défaut | `soma` |
+| `SOCLE_THEME` | thème de l'interface : `console` (noir et vert, ou blanc et bleu par la bascule clair ou sombre) ou `soma` (clair ou sombre) ; dans le Hub, choisi dans la page Thème du Hub (une gamme pour tout, ou une par service) | `soma` |
 | `SOCLE_*` | comptes, clé maîtresse, poivre, relais SMTP des alertes, relais de confiance : voir le socle | — |
 
 Réglages de l'interface, validés un par un (toute autre clé est refusée) :
