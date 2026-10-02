@@ -121,6 +121,9 @@ html[data-gamme="console"] .mark{padding:6px 8px 14px;margin-bottom:4px}
 html[data-gamme="console"] .mark b{font-size:14px;font-weight:500;letter-spacing:0}
 html[data-gamme="console"] .grp{margin-bottom:0}
 html[data-gamme="console"] .grp>span{font-size:12px;letter-spacing:0;text-transform:none;color:var(--faint);padding:20px 10px 6px;margin:0}
+/* Dans le tiroir du rail (760 px et moins), SOMA rend l'intertitre à son
+   affichage par défaut, en ligne : son retrait déborderait sur la recherche. */
+@media (max-width:760px){html[data-gamme="console"] .grp>span{display:block}}
 html[data-gamme="console"] .nav{padding:8px 10px;border-radius:8px;color:var(--ink-soft);font-size:14px;gap:10px}
 html[data-gamme="console"] .nav:hover{background:var(--well);color:var(--ink)}
 html[data-gamme="console"] .nav.on{background:var(--k-raise);box-shadow:none;color:var(--ink);font-weight:400}
