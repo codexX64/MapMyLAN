@@ -1328,3 +1328,18 @@ html[data-gamme="console"] .vus-bulle{background:var(--k-bulle);border-color:var
 /* L'alarme se dit partout de la même couleur ; déclarée en dernier pour
    passer devant la teinte ordinaire d'un élément. */
 .alarme,.row .n.alarme,.idev.alarme,.ph .alarme,.fcompte b.alarme,.ff-tete b.alarme,.chain .alarme{color:var(--alarm)}
+
+/* Mise en page sur petit écran : un groupe de boutons se replie entier, en
+   colonne pleine largeur ; une tuile garde son libellé sur une ligne. */
+.fadresse-boutons{display:grid;grid-template-columns:minmax(0,1fr)}
+.fadresse-boutons .btn{justify-content:center}
+@media (max-width:480px){
+  .roles-mail{flex-direction:column}
+  .boutons-debut{display:grid;grid-template-columns:minmax(0,1fr)}
+  .boutons-fin{flex-direction:column-reverse;align-items:stretch}
+  .boutons-debut .btn,.boutons-fin .btn{justify-content:center}
+  .gf-constructeurs{grid-template-columns:minmax(0,1fr)}
+  .modale-types{grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}
+}
+/* Une cellule de données longue se coupe en « … » plutôt que de se replier. */
+td.coupe-cellule{max-width:0;width:40%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

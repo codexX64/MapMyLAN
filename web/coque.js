@@ -89,7 +89,7 @@ function recherche({ atelier }) {
         .filter(Boolean).some(v => String(v).toLowerCase().includes(q))).slice(0, atelier ? 8 : 7);
     liste.hidden = !trouves.length;
     remplir(liste, ...trouves.map(d => h('button', {
-      class: 'trow', type: 'button', onclick: () => { choisirAppareil(d.id); champ.value = ''; peindre(); },
+      class: 'trow', type: 'button', 'data-donnee': '', onclick: () => { choisirAppareil(d.id); champ.value = ''; peindre(); },
     }, h('span', { class: 'ic' }, ic(atelier ? pictoType(d.customType || d.type) : 'devices', 13)),
       h('span', { class: 'nm2', text: d.customName || d.hostname || d.ip }),
       h('span', { class: 'ipx2', text: d.ip }))));
@@ -348,7 +348,7 @@ function explorateur(p, b) {
         h('button', { class: 'secttl', type: 'button', onclick: () => { replies[g.nom] = !replies[g.nom]; peindre(); } },
           h('span', { class: 'pli', text: replies[g.nom] ? '▸' : '▾' }), g.nom),
         replies[g.nom] ? null : g.liste.map(d => h('button', {
-          class: E.selectedDeviceId === d.id ? 'trow ind2 sel' : 'trow ind2', type: 'button', onclick: () => choisirAppareil(d.id),
+          class: E.selectedDeviceId === d.id ? 'trow ind2 sel' : 'trow ind2', type: 'button', 'data-donnee': '', onclick: () => choisirAppareil(d.id),
         }, h('span', { class: 'ic' }, ic(pictoType(d.customType || d.type), 13)),
           h('span', { class: 'nm2', text: d.customName || d.hostname || d.ip }),
           h('span', { class: 'ipx2', text: d.ip }),

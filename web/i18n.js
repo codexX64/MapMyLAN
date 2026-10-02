@@ -145,7 +145,7 @@ const DICT = {
     'top.logout': 'Se déconnecter',
 
     // Carte du rail
-    'rail.next': 'Prochain balayage',
+    'rail.next': 'Balayage dans',
     'rail.every': 'Fréquence',
     'rail.minutes': '{n} min',
 
@@ -657,7 +657,7 @@ const DICT = {
     'top.language': 'Switch language',
     'top.logout': 'Sign out',
 
-    'rail.next': 'Next sweep',
+    'rail.next': 'Next sweep in',
     'rail.every': 'Every',
     'rail.minutes': '{n} min',
 

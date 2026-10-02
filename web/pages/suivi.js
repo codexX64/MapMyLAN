@@ -187,7 +187,7 @@ function editeurCommande(commande, declencheurs, actifs, apres) {
         (groupes[cat] ||= []).push(d);
       }
       remplir(liste, ...Object.keys(groupes).map(cat => h('div', {}, h('div', { class: 'secttl', text: cat }),
-        groupes[cat].map(d => h('button', { class: v.decl === d.id ? 'trow sel' : 'trow', type: 'button', onclick: () => { v.decl = d.id; peindreDecl(); } },
+        groupes[cat].map(d => h('button', { class: v.decl === d.id ? 'trow sel' : 'trow', type: 'button', title: d.label || d.nom || undefined, 'data-donnee': '', onclick: () => { v.decl = d.id; peindreDecl(); } },
           h('span', { class: 'nm2', text: d.label }), h('span', { class: 'ipx2', text: d.id }))))));
       const choisi = declencheurs.find(d => d.id === v.decl);
       remplir(variables, choisi?.vars?.length ? h('div', { class: 'variables', text: `variables : ${choisi.vars.map(x => `{{${x}}}`).join(' · ')}` }) : '');

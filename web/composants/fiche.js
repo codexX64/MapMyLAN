@@ -240,7 +240,7 @@ function fiche(id, fermer) {
           h('td', { class: 'mono' }, h('b', { class: 'moyen', text: String(q.port) })),
           h('td', { class: 'dim mono', text: q.protocol || q.proto || 'tcp' }),
           h('td', { text: q.service || '—' }),
-          h('td', { class: 'dim cache-s', text: [q.product, q.version].filter(Boolean).join(' ') || '—' })))))] : null,
+          h('td', { class: 'dim cache-s coupe-cellule', title: [q.product, q.version].filter(Boolean).join(' ') || undefined, text: [q.product, q.version].filter(Boolean).join(' ') || '—' })))))] : null,
       failles.length ? [titre(`Failles · ${failles.length}`), failles.map(c => h('div', { class: 'ffaille' },
         h('div', { class: 'ffaille-t' }, h('b', { class: 'mono', text: c.cveId }), h('span', { class: 'chip w pousse', text: `CVSS ${c.cvss}` })),
         h('div', { class: 'ffaille-d', text: c.description || '' }),
