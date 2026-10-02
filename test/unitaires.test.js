@@ -407,3 +407,18 @@ test('conteneur : NET_RAW seule pour MapMyLAN, sans élévation possible, dans l
   assert.doesNotMatch(lire('Dockerfile'), /setcap|NET_ADMIN/);
   assert.match(lire('Dockerfile'), /^USER node$/m);
 });
+
+test('poste : la clé d’envoi part en Authorization (jeton d’envoi de CODMAIL) et en x-poste-key, objet sur une ligne', async () => {
+  const { Poste } = await import('../src/poste.js');
+  const vus = [];
+  const p = new Poste({
+    cfg: { posteUrl: 'https://courrier.exemple/api/send', posteDe: 'alertes@exemple.fr', posteCle: 'cmd_' + 'k'.repeat(40) },
+    evts: { journaliser() {} },
+    fetch: async (url, o) => { vus.push({ url, o }); return new Response(JSON.stringify({ ok: true, messageId: '<a@b>' }), { status: 200 }); },
+  });
+  const r = await p.envoyer({ objet: 'Hôte\r\nBcc: x@y.fr', corps: 'texte', machine: 'srv01' });
+  assert.equal(r.ok, true);
+  assert.equal(vus[0].o.headers.authorization, 'Bearer cmd_' + 'k'.repeat(40));
+  assert.equal(vus[0].o.headers['x-poste-key'], 'cmd_' + 'k'.repeat(40));
+  assert.doesNotMatch(JSON.parse(vus[0].o.body).subject, /[\r\n]/);
+});

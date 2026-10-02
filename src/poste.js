@@ -33,7 +33,8 @@ export class Poste {
     let derniere = '';
     for (let essai = 1; essai <= TENTATIVES; essai++) {
       try {
-        const rep = await this.fetch(this.url, { method: 'POST', headers: { 'x-poste-key': this.cle, 'content-type': 'application/json' }, body: charge, redirect: 'error', signal: AbortSignal.timeout(DELAI_MS) });
+        // Authorization pour CODMAIL (jeton d'envoi), x-poste-key pour un relais plus ancien.
+        const rep = await this.fetch(this.url, { method: 'POST', headers: { authorization: `Bearer ${this.cle}`, 'x-poste-key': this.cle, 'content-type': 'application/json' }, body: charge, redirect: 'error', signal: AbortSignal.timeout(DELAI_MS) });
         const brut = (await rep.text()).slice(0, 2000);
         let j = null;
         try { j = JSON.parse(brut); } catch { /* réponse non JSON : rapportée telle quelle ci-dessous */ }
