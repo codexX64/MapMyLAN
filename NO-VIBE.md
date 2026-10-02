@@ -160,6 +160,8 @@ Commits suivants, hors de la passe ; la suite et la surface publique ci-dessus s
 - `903d6c6 carte : dessin posé en absolu sur tout le cadre (Safari le dimensionnait d'après son viewBox, bandes verticales)`
 - `3e6d6a0 carte : libre ou arborescence dans la barre d'outils de la carte, un seul Reconstruire, l'en-tête tient sur une ligne`
 - `fee3481 carte : import devenu inutile retiré`
+- `e9117c4 carte : barre d'outils au ras du cadre, plus de marge aux coins`
+- `89c92c3 socle c2ec10f : intertitres du rail en bloc dans le tiroir de la gamme Console`
 
 ## Verification (chapter 49)
 - [x] Full suite passes and matches the baseline — 107 essais, les mêmes avant et après la passe, relancés à la génération de ce fichier
