@@ -68,6 +68,8 @@ services:
       SOCLE_POIVRE: "{{config.PASSWORD_PEPPER}}"
       SOCLE_HTTP: "{{config.SOCLE_HTTP}}"
       SOCLE_JETON_INSTALLATION: "{{config.SOCLE_JETON_INSTALLATION}}"
+      # Gestion des comptes depuis le Hub (Comptes des services) : jeton à lui seul.
+      SOCLE_JETON_ADMIN_HUB: "{{config.HUB_ADMIN_TOKEN}}"
       SOCLE_PROXYS: "{{config.SOCLE_PROXYS}}"
       SOCLE_ORIGINES: "{{config.SOCLE_ORIGINES}}"
       SOCLE_URL_PUBLIQUE: "{{config.SOCLE_URL_PUBLIQUE}}"

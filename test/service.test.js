@@ -721,6 +721,25 @@ test('rotation de SOCLE_CLE : les secrets des équipements, des boîtes et des c
   } finally { await x.arreter(); }
 });
 
+test('comptes depuis le Hub : manifeste et Compose relient le jeton d’administration, la délégation répond', async () => {
+  const lire = f => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  const manifeste = JSON.parse(lire('hub.json'));
+  assert.equal(manifeste.accounts.tokenKey, 'HUB_ADMIN_TOKEN');
+  assert.equal(manifeste.accounts.invitation, true);
+  assert.equal(manifeste.config.find(c => c.key === 'HUB_ADMIN_TOKEN').type, 'secret');
+  assert.match(lire('deploy/compose.hub.yml'), /^ {6}SOCLE_JETON_ADMIN_HUB: "\{\{config\.HUB_ADMIN_TOKEN\}\}"$/m);
+  const jeton = 'jeton-admin-hub-' + 'a'.repeat(40);
+  const x = await lancer({ SOCLE_JETON_ADMIN_HUB: jeton });
+  try {
+    const c = new Client(x.port);
+    const r = await c.get('/api/compte/hub/comptes', { entetes: { authorization: `Bearer ${jeton}` }, sansCsrf: true, origine: null });
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.json));
+    // Le jeton d'administration n'ouvre pas l'API de MapMyLAN : il n'est pas un jeton d'intégration.
+    assert.equal((await c.get('/api/devices', { entetes: { authorization: `Bearer ${jeton}` }, sansCsrf: true, origine: null })).status, 401);
+  } finally { await x.arreter(); }
+});
+
 test('thème : la page porte celui de SOCLE_THEME, posé par la page Thème du Hub ; SOMA hors Hub', async () => {
   assert.match((await new Client(o.port).get('/')).texte, /<html lang="fr" data-shell="reading" data-gamme="soma">/);
   const x = await lancer({ SOCLE_THEME: 'console' });
