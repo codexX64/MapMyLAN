@@ -60,6 +60,9 @@ export const SPEC_SOCLE = {
   smtpAutorite: { env: 'SOCLE_SMTP_AUTORITE', type: 'chaine' },
   // Gamme de l'interface (SOMA ou Console) : posée par le Hub pour tous les services qui l'acceptent.
   gamme: { env: 'SOCLE_THEME', type: 'choix', parmi: GAMMES, defaut: 'soma' },
+  // Administration des comptes déléguée au Hub : jeton à lui seul, généré par
+  // le Hub, distinct du jeton de service. Absent : aucune délégation.
+  jetonAdminHub: { env: 'SOCLE_JETON_ADMIN_HUB', type: 'secret', min: 32 },
   // Où signaler une faille (security.txt) : adresse https: ou mailto:.
   contactSecurite: { env: 'SOCLE_CONTACT_SECURITE', type: 'chaine', motif: /^(https:\/\/|mailto:)\S{3,300}$/ },
 };
@@ -111,6 +114,7 @@ export async function demarrerSocle({ service, db, dossier, env = process.env, l
   const portail = new Portail({
     comptes, service, proxys: cfg.proxys.length ? listeConfiance(cfg.proxys) : null, origines: cfg.origines, jetonInstallation: cfg.jetonInstallation, journal: log,
     courriel: postier ? { postier } : null, urlPublique: cfg.urlPublique, contactSecurite: cfg.contactSecurite || service.contactSecurite || null,
+    jetonAdminHub: cfg.jetonAdminHub || null,
   });
   const vigie = new Vigie({ journal, comptes, ...(maintenant ? { maintenant } : {}) });
   migrer?.({ comptes, coffre, journal });

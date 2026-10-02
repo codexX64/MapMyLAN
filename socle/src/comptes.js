@@ -319,6 +319,9 @@ export class Comptes {
 
   estRenforcee(session) { return session.renfort && this.maintenant() - session.renfort < RENFORT_MS; }
   exigerRenfort(session) {
+    // Le Hub, délégué par son jeton d'administration, a exigé le renfort de
+    // son opérateur avant d'entrer (Portail.delegue).
+    if (session?.delegue === true && session.compte === 'hub') return;
     if (!this.estRenforcee(session)) throw erreur(403, 'Confirme ton identité pour continuer.', { renfort: true, methodes: this.methodesRenfort(session.compteLigne) });
   }
 
