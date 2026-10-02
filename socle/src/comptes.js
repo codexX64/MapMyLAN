@@ -93,6 +93,9 @@ export class Comptes {
     const colonne = this.db.prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?');
     if (!colonne.get('socle_comptes', 'courriel')) this.db.exec('ALTER TABLE socle_comptes ADD COLUMN courriel TEXT');
     if (!colonne.get('socle_comptes', 'courriel_verifie')) this.db.exec('ALTER TABLE socle_comptes ADD COLUMN courriel_verifie INTEGER');
+    // Clé d'accès exigée pour ce compte en particulier (un administrateur la
+    // tient toujours en HTTPS ; c'est pour les autres que ce réglage compte).
+    if (!colonne.get('socle_comptes', 'cle_exigee')) this.db.exec('ALTER TABLE socle_comptes ADD COLUMN cle_exigee INTEGER');
   }
 
   // Rotation de la clé maîtresse, au démarrage. L'empreinte de contrôle dit
@@ -159,7 +162,7 @@ export class Comptes {
     const p = this.politique();
     const detenus = this.facteursDe(compte);
     const admin = compte.role === 'admin';
-    const exige = f => p[f] === 'requis' || (p[f] === 'requis_admin' && admin);
+    const exige = f => p[f] === 'requis' || (p[f] === 'requis_admin' && admin) || (f === 'cle' && compte.cle_exigee && !this.modeHttp);
     const out = FACTEURS.filter(f => exige(f) && !detenus[f]);
     const seconds = (detenus.totp ? 1 : 0) + (detenus.cle ? 1 : 0);
     // Règle 1 : un mot de passe seul ne suffit jamais.
@@ -191,7 +194,18 @@ export class Comptes {
       facteurs: { motdepasse: f.motdepasse, totp: f.totp, cles: f.nCles, secours: f.secours },
       manquants: this.manquants(c), cree: c.cree, derniere: c.derniere,
       courriel: c.courriel_verifie ? c.courriel : null,
+      cle: this.regleCle(c),
     };
+  }
+
+  // Ce que ce compte doit à la clé d'accès : « http » (aucune clé possible),
+  // « toujours » (administrateur ou politique du service), « exigee » (réglée
+  // pour ce compte) ou « facultative ».
+  regleCle(c) {
+    if (this.modeHttp) return 'http';
+    const p = this.politique();
+    if (c.role === 'admin' || p.cle === 'requis') return 'toujours';
+    return c.cle_exigee ? 'exigee' : 'facultative';
   }
 
   lister() { return this.db.prepare('SELECT * FROM socle_comptes ORDER BY identifiant').all().map(c => this.publicDe(c)); }
@@ -627,7 +641,7 @@ export class Comptes {
     const f = apres(this.facteursDe(c));
     const p = this.politique();
     const admin = c.role === 'admin';
-    const exige = x => p[x] === 'requis' || (p[x] === 'requis_admin' && admin);
+    const exige = x => p[x] === 'requis' || (p[x] === 'requis_admin' && admin) || (x === 'cle' && c.cle_exigee && !this.modeHttp);
     const detient = { motdepasse: f.motdepasse, totp: f.totp, cle: f.cle };
     for (const x of FACTEURS) if (exige(x) && !detient[x]) throw erreur(409, 'Refusé : la politique du service exige ce facteur.');
     const peutSeConnecter = f.cle || (f.motdepasse && f.totp);
@@ -731,6 +745,49 @@ export class Comptes {
     const jeton = this.emettreJeton('invitation', c.id, INVITATION_MS);
     this.trace({ acteur: admin.compte, action: 'compte.invite', objet: c.id, ip, details: { role } });
     return { compte: this.publicDe(c), jeton, expire: this.maintenant() + INVITATION_MS };
+  }
+
+  // Premier compte par le Hub : un service encore vide reçoit son
+  // administrateur par invitation, sans jeton d'installation à recopier. Une
+  // fois un compte créé, la route ne crée plus d'administrateur.
+  premierAdmin(hub, { identifiant, affichage }, { ip }) {
+    if (this.estInstalle()) throw erreur(409, 'Ce service a déjà ses comptes : invite en membre, puis promeus une fois les facteurs inscrits.');
+    const c = this.creerCompte({ identifiant, affichage, role: 'admin' });
+    const jeton = this.emettreJeton('invitation', c.id, INVITATION_MS);
+    this.trace({ acteur: hub.compte, action: 'compte.premier_admin', objet: c.id, ip });
+    return { compte: this.publicDe(c), jeton, expire: this.maintenant() + INVITATION_MS };
+  }
+
+  // Adresse d'un compte posée par un administrateur (ou le Hub) : tenue pour
+  // vérifiée, comme le rôle qu'il donne. L'ancienne adresse est prévenue.
+  definirCourriel(admin, id, adresse, { ip }) {
+    this.exigerRenfort(admin);
+    const c = this.compte(id);
+    if (!c) throw erreur(404, 'Compte inconnu.');
+    const ancien = c.courriel_verifie ? c.courriel : null;
+    if (!adresse) {
+      this.db.prepare('UPDATE socle_comptes SET courriel = NULL, courriel_verifie = NULL, maj = ? WHERE id = ?').run(this.maintenant(), c.id);
+      if (ancien) this.alerter(this.compte(c.id), 'courriel.retire', { ip, ancien });
+    } else {
+      if (!adresseValide(adresse)) throw erreur(400, 'Adresse de courriel invalide.');
+      if (adresse === ancien) return;
+      const t = this.maintenant();
+      this.db.prepare('UPDATE socle_comptes SET courriel = ?, courriel_verifie = ?, maj = ? WHERE id = ?').run(adresse, t, t, c.id);
+      // Une première adresse n'alerte personne ; un changement prévient les deux.
+      if (ancien) this.alerter(this.compte(c.id), 'courriel.change', { ip, ancien });
+    }
+    this.trace({ acteur: admin.compte, action: 'courriel.defini', objet: c.id, ip, details: { retire: !adresse } });
+  }
+
+  // Exiger, ou ne plus exiger, une clé d'accès de ce compte. Un administrateur
+  // la garde toujours en HTTPS (REQ-AUTH-013) : rien ne la lui retire ici.
+  exigerCle(admin, id, exigee, { ip }) {
+    this.exigerRenfort(admin);
+    const c = this.compte(id);
+    if (!c) throw erreur(404, 'Compte inconnu.');
+    if (!exigee && c.role === 'admin' && !this.modeHttp) throw erreur(409, 'Un administrateur garde toujours sa clé d’accès en HTTPS.');
+    this.db.prepare('UPDATE socle_comptes SET cle_exigee = ?, maj = ? WHERE id = ?').run(exigee ? 1 : null, this.maintenant(), c.id);
+    this.trace({ acteur: admin.compte, action: exigee ? 'compte.cle_exigee' : 'compte.cle_facultative', objet: c.id, ip });
   }
 
   // Réinitialisation (REQ-AUTH-006) : le jeton ne rend que le mot de passe. Les

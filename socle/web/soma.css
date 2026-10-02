@@ -239,7 +239,10 @@ svg.i{display:block;flex:none;stroke:currentColor;fill:none;stroke-linecap:round
 .railcard .row>*{min-width:0}
 .railcard .tag{overflow:hidden;text-overflow:ellipsis;display:block}
 .railcard .row:last-child{margin-bottom:0}
-.railcard b{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);font-weight:400}
+.railcard b{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);font-weight:400;white-space:nowrap;flex:0 1 auto;min-width:4ch;overflow:hidden;text-overflow:ellipsis;text-align:right}
+.railcard .row>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
+/* Une valeur courte ne se coupe pas : « 1 / 1 », « mot de passe · 1 clé ». */
+.une-ligne{white-space:nowrap}
 .bar{height:3px;border-radius:3px;background:var(--well);margin-top:11px;overflow:hidden}
 .bar i{display:block;width:0;height:100%;background:var(--accent);border-radius:3px;transition:width .4s}
 
@@ -258,6 +261,13 @@ svg.i{display:block;flex:none;stroke:currentColor;fill:none;stroke-linecap:round
 .title{font-size:32px;line-height:1.05;letter-spacing:-.035em;overflow-wrap:anywhere}
 .lede{color:var(--muted);font-size:13.5px;max-width:58ch;margin-top:5px}
 .actions{margin-left:auto;display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+/* Les actions d'un en-tête de page restent ensemble : elles passent sous le
+   titre plutôt que de se couper ; sur téléphone, empilées pleine largeur. */
+.headrow .actions{flex-wrap:nowrap}
+@media (max-width:560px){
+  .headrow .actions{flex-wrap:wrap;width:100%;margin-left:0}
+  .headrow .actions>*{flex:1 1 100%;justify-content:center}
+}
 .voile-rail{display:none}
 
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 15px;border-radius:var(--r-ctl);font-size:13px;font-weight:500;
@@ -390,6 +400,15 @@ textarea.field{min-height:90px;resize:vertical;line-height:1.5}
 .dialogue.liste .pied{flex-direction:column;align-items:stretch;gap:2px;margin-top:12px}
 .dialogue.liste .pied .btn{justify-content:flex-start;padding:11px 12px}
 .dialogue.liste .pied .btn:last-child{justify-content:center;margin-top:10px}
+/* Pied étroit : deux boutons à parts égales ; trois ou plus, empilés pleine
+   largeur, l'action principale en haut. Jamais un bouton seul à la ligne. */
+.dialogue{container:dialogue/inline-size}
+.dialogue:not(.liste) .pied .btn.danger:first-child{margin-right:auto}
+@container dialogue (max-width:440px){
+  .dialogue:not(.liste) .pied:has(.btn:nth-of-type(3)){flex-direction:column-reverse;align-items:stretch}
+  .dialogue:not(.liste) .pied:has(.btn:nth-of-type(3)) .btn{justify-content:center;margin:0}
+  .dialogue:not(.liste) .pied:not(:has(.btn:nth-of-type(3))) .btn{flex:1 1 0;justify-content:center}
+}
 .toasts{position:fixed;right:16px;bottom:16px;z-index:600;display:flex;flex-direction:column;gap:8px;max-width:min(380px,calc(100vw - 32px))}
 .toast{background:var(--ink);color:var(--paper);border-radius:11px;padding:11px 14px;font-size:13px;box-shadow:var(--lift-hi);animation:rise .2s var(--courbe);overflow-wrap:anywhere}
 .toast.bad{background:var(--alarm);color:#fff}
@@ -549,3 +568,10 @@ textarea.field{min-height:90px;resize:vertical;line-height:1.5}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
 @media (hover:none){.fig:hover,.btn:hover{transform:none}}
+
+/* Premier compte d'un service installé par le Hub : les deux gestes, puis le
+   repli sans Hub, replié. */
+.porte .etapes-hub{margin:18px 0 0;padding-left:20px;display:grid;gap:10px;color:var(--ink-soft);font-size:14px;line-height:1.55}
+.porte .sans-hub{margin-top:18px;border-top:1px solid var(--hair-soft);padding-top:12px}
+.porte .sans-hub summary{cursor:pointer;color:var(--muted);font-size:12.5px}
+.porte .sans-hub .wfoot{padding:16px 0 0;border-top:none;margin-top:8px}

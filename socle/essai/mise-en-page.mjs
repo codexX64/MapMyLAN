@@ -92,6 +92,63 @@ export function chevauchements() {
     for (let e = el; e && e !== c; e = e.parentElement) if (getComputedStyle(e).textOverflow === 'ellipsis') propre = true;
     if (!propre) defauts.push({ type: sc.overflowX === 'visible' ? 'sort-du-cadre' : 'coupe-par-le-cadre', detail: `${nom(el)} dépasse de ${nom(c).slice(0, 60)} (${Math.round(Math.max(r.right - q.right, q.left - r.left))} px)` });
   }
+  // Boutons : un libellé replié sur deux lignes, ou un groupe de boutons
+  // côte à côte dont un seul est parti à la ligne (« Installer » en haut,
+  // « Connecter » seul en dessous). Un groupe se replie entier ou pas du tout.
+  const boutons = [...document.querySelectorAll('button,.btn,a.btn')].filter(b => visible(b) && b.textContent.trim());
+  // Libellé replié : un texte du bouton lui-même (pas une ligne de
+  // description posée en bloc dessous) qui passe sur deux lignes.
+  for (const b of boutons) {
+    // Un libellé de bouton ou d'entrée de menu coupé en « … » cache ce qu'il
+    // fait : la coupure propre vaut pour une donnée, pas pour une commande.
+    const coupe = [b, ...b.querySelectorAll('*')].find(e => getComputedStyle(e).textOverflow === 'ellipsis' && e.scrollWidth > e.clientWidth + 1 && e.textContent.trim());
+    // Une ligne de données (data-donnee : un appareil, un fichier) coupe son
+    // nom comme une cellule de tableau : ce n'est pas une commande.
+    if (coupe && !b.matches('.field,.csel-btn,.vpick-btn,[data-donnee]')) defauts.push({ type: 'bouton-tronque', detail: `${nom(b)} ${coupe.scrollWidth} > ${coupe.clientWidth}` });
+    const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      if (!n.textContent.trim()) continue;
+      let enLigne = true;
+      for (let e = n.parentElement; e && e !== b; e = e.parentElement) if (!/^inline/.test(getComputedStyle(e).display)) enLigne = false;
+      if (!enLigne) continue;
+      const rg = document.createRange();
+      rg.selectNodeContents(n);
+      const lignes = new Set([...rg.getClientRects()].filter(r => r.width > 1).map(r => Math.round(r.top / 3)));
+      if (lignes.size > 1) { defauts.push({ type: 'bouton-replie', detail: `${nom(b)} sur ${lignes.size} lignes` }); break; }
+    }
+  }
+  // Une valeur ou un libellé court (24 caractères au plus, hors paragraphe)
+  // replié sur deux lignes : « 1 / » puis « 1 », « Ubuntu 24.04 » puis « LTS ».
+  const marcheur = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = marcheur.nextNode(); n; n = marcheur.nextNode()) {
+    const t = n.textContent.trim();
+    if (!t || t.length > 24 || !/\s|\//.test(t)) continue;
+    const el = n.parentElement;
+    if (!el || el.closest('p,li,dd,blockquote,pre,code,textarea,svg,math,.hint,.lede,.note,.toast') || !visible(el)) continue;
+    const rg = document.createRange();
+    rg.selectNodeContents(n);
+    const lignes = new Set([...rg.getClientRects()].filter(r => r.width > 1).map(r => Math.round(r.top / 3)));
+    if (lignes.size > 1) defauts.push({ type: 'libelle-replie', detail: `${nom(el).slice(0, 50)} « ${t} » sur ${lignes.size} lignes` });
+  }
+  const parents = new Set(boutons.map(b => b.parentElement));
+  for (const p of parents) {
+    const s = getComputedStyle(p);
+    if (!/flex/.test(s.display) || !s.flexDirection.startsWith('row') || s.flexWrap === 'nowrap') continue;
+    // Les commandes (.btn) seulement : une liste de puces ou de tuiles se
+    // replie naturellement. Au-delà de trois, seule une barre d'outils ou un
+    // pied de carte ou de dialogue doit tenir ensemble.
+    const groupe = [...p.children].filter(e => boutons.includes(e) && e.matches('.btn'));
+    if (groupe.length < 2) continue;
+    if (groupe.length > 3 && !p.matches('footer,.pied,.actions,[role=toolbar]')) continue;
+    const rangs = new Map();
+    for (const b of groupe) { const t = Math.round(b.getBoundingClientRect().top / 4); rangs.set(t, (rangs.get(t) || 0) + 1); }
+    if (rangs.size < 2) continue;
+    // Empilés pleine largeur exprès : c'est une colonne, pas une coupure.
+    const large = p.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
+    if (groupe.every(b => b.getBoundingClientRect().width >= large * 0.9)) continue;
+    const tailles = [...rangs.values()];
+    defauts.push({ type: 'groupe-de-boutons-coupe', detail: `${nom(p).slice(0, 60)} : ${tailles.join(' + ')} par ligne` });
+  }
   for (const { el } of boites) {
     if (!texteDirect(el)) continue;
     const s = getComputedStyle(el);

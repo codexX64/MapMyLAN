@@ -71,6 +71,25 @@ export function messageVerification({ service, compte, lien }) {
   };
 }
 
+// Liens envoyés par un administrateur (ou le Hub) à l'adresse du compte :
+// invitation et réinitialisation. Le lien sert une fois ; personne d'autre que
+// le destinataire ne choisit le mot de passe.
+export function messageLien({ service, compte, usage, lien, heures }) {
+  const invitation = usage === 'invitation';
+  return {
+    sujet: invitation ? `${service.nom} : ton compte t’attend` : `${service.nom} : réinitialise ton mot de passe`,
+    texte: [
+      invitation
+        ? `Un compte « ${compte.identifiant} » a été créé pour toi sur ${service.nom}. Ouvre ce lien pour choisir ton mot de passe, puis tes facteurs de connexion :`
+        : `Une réinitialisation du mot de passe du compte « ${compte.identifiant} » (${service.nom}) a été demandée par un administrateur. Ouvre ce lien pour en choisir un nouveau :`,
+      lien,
+      '',
+      `Le lien sert une seule fois et expire dans ${heures} heure${heures > 1 ? 's' : ''}.`,
+      invitation ? 'Si tu ne t’attendais pas à ce message, ignore-le.' : 'Tes autres facteurs de connexion restent exigés. Si tu n’es pas à l’origine de cette demande, préviens l’administrateur.',
+    ].join('\n'),
+  };
+}
+
 // Canal branché sur Comptes.alerter : seules les adresses vérifiées reçoivent,
 // et l'ancienne adresse est prévenue quand elle est remplacée ou retirée. Au
 // plus trente messages par compte et par heure : une alerte ne devient pas un
