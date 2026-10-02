@@ -3,7 +3,7 @@
 // Une valeur fausse arrête le processus avec la liste complète des erreurs.
 import { lireConfig } from '../socle/src/index.js';
 
-export const VERSION = '2.0.2';
+export const VERSION = '2.0.3';
 
 const CIDR = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(?:[0-9]|[12]\d|3[0-2])$/;
 // Un nom d'interface Linux : quinze caractères au plus, jamais d'espace.

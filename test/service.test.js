@@ -2,6 +2,7 @@
 // objets d'autrui, corps invalides, sorties gardées, arguments d'outils,
 // clés d'hôte épinglées, flux temps réel, assistant plafonné, export et
 // effacement d'un compte.
+import { VERSION } from '../src/config.js';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -51,7 +52,7 @@ test('santé : l’anonyme apprend seulement que le service répond', async () =
   assert.equal(r.status, 200);
   assert.deepEqual(r.json, { ok: true });
   const connu = await admin.get('/api/health');
-  assert.equal(connu.json.version, '2.0.2');
+  assert.equal(connu.json.version, VERSION);
   assert.equal((await anonyme.get('/api/health', porteur(GRAINE_HUB))).json.status, 'ok');
   assert.deepEqual((await anonyme.get('/api/health', porteur('mml_' + 'z'.repeat(40)))).json, { ok: true });
   assert.equal(r.entetes['cache-control'], 'no-store');
