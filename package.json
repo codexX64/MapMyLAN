@@ -1,6 +1,6 @@
 {
   "name": "mapmylan",
-  "version": "2.0.3",
+  "version": "2.1.0",
   "description": "Cartographie du réseau local : appareils, balayages, scores de risque, alertes, quarantaine, et un assistant qui répond.",
   "type": "module",
   "private": true,

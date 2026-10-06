@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "mapmylan",
   "name": "MapMyLAN",
-  "version": "2.0.3",
+  "version": "2.1.0",
   "description": "Cartographie du réseau local : appareils, balayages, scores de risque, alertes, quarantaine — et un assistant qui répond, au clavier ou à voix haute avec VOX.",
   "icon": "map",
   "repository": "https://github.com/codexX64/MapMyLAN",
@@ -54,7 +54,7 @@
       "key": "IMAGE_TAG",
       "label": "Version de l'image",
       "type": "string",
-      "default": "2.0.3",
+      "default": "2.1.0",
       "help": "Étiquette des images publiées sur ghcr.io."
     },
     {
