@@ -12,6 +12,7 @@ import { t } from '../i18n.js';
 import { ETATS, nomAppareil } from '../communs.js';
 import { composer, partieHote, verifier } from '../lib/adresses.js';
 import { photoAppareil } from './photo.js';
+import { ecartsAppareil, LIB_GRAVITE, TON_GRAVITE } from '../pages/vigie.js';
 
 // Catalogue des types proposés à la main. La valeur est ce qui est enregistré
 // dans customType ; c'est elle qui choisit le picto partout ailleurs. Chacun
@@ -73,7 +74,7 @@ export function brancherFiche(p) {
 
 function fiche(id, fermer) {
   const p = portee();
-  let appareil = null, histo = [], edition = false, occupe = false, message = '';
+  let appareil = null, histo = [], edition = false, occupe = false, message = '', vigie = null;
   let photo = lirePhoto(id);
   const tete = h('div', { class: 'fhead' });
   const corps = h('div', { class: 'fcorps' }, h('div', { class: 'fchargement', text: t('misc.loading') }));
@@ -86,6 +87,8 @@ function fiche(id, fermer) {
   Promise.all([api.get(`/api/devices/${id}`), api.get(`/api/devices/${id}/history`)])
     .then(([d, hh]) => { appareil = d; histo = hh || []; peindre(); })
     .catch(e => { remplir(corps, h('div', { class: 'fchargement', text: e.message })); });
+  // Ce que le dernier audit de VIGIE dit de cet appareil, si VIGIE est reliée.
+  ecartsAppareil(id).then(v => { vigie = v; if (appareil) peindre(); });
 
   const agir = async (libelle, fn) => {
     occupe = true; message = ''; peindre();
@@ -245,6 +248,14 @@ function fiche(id, fermer) {
         h('div', { class: 'ffaille-t' }, h('b', { class: 'mono', text: c.cveId }), h('span', { class: 'chip w pousse', text: `CVSS ${c.cvss}` })),
         h('div', { class: 'ffaille-d', text: c.description || '' }),
         c.service ? h('div', { class: 'mono ffaille-s', text: c.service }) : null))] : null,
+      vigie?.audit ? (() => {
+        const ecarts = vigie.constats.filter(c => c.gravite !== 'safe');
+        return [titre(`Vigie · ${ecarts.length ? `${ecarts.length} écart${ecarts.length > 1 ? 's' : ''}` : 'conforme'}`),
+          ecarts.length ? ecarts.map(c => h('div', { class: 'ffaille' },
+            h('div', { class: 'ffaille-t' }, h('b', { text: c.titre }), h('span', { class: `chip ${TON_GRAVITE[c.gravite]} pousse`, text: LIB_GRAVITE[c.gravite] })),
+            c.correction ? h('div', { class: 'ffaille-d', text: c.correction }) : null,
+            h('div', { class: 'mono ffaille-s', text: c.ref }))) : h('div', { class: 'fvide', text: `Aucun écart au dernier audit (${new Date(vigie.audit.debut).toLocaleString()}).` })];
+      })() : null,
       titre('Historique'),
       histo.length === 0 ? h('div', { class: 'fvide', text: "Rien d'enregistré pour l'instant." }) : null,
       histo.map(x => h('div', { class: 'fl' }, h('span', { class: 'mono fl-date', text: new Date(x.createdAt).toLocaleString() }), h('b', { class: 'fl-hist', text: `${x.event} — ${resume(x.data)}` }))),

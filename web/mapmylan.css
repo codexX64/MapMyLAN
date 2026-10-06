@@ -1343,3 +1343,32 @@ html[data-gamme="console"] .vus-bulle{background:var(--k-bulle);border-color:var
 }
 /* Une cellule de données longue se coupe en « … » plutôt que de se replier. */
 td.coupe-cellule{max-width:0;width:40%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Vigie : l'audit de sécurité de VIGIE, relu ici. */
+.vg-score{display:flex;gap:20px;align-items:center;padding:4px 18px 14px;flex-wrap:wrap}
+.vg-anneau{width:132px;height:132px;flex:none;position:relative}
+.vg-anneau svg{width:100%;height:100%;display:block}
+.vg-anneau .fond{stroke:var(--well)}
+.vg-anneau .val.bon{stroke:var(--ok)}.vg-anneau .val.moyen{stroke:var(--warn)}.vg-anneau .val.faible,.vg-anneau .val.mauvais{stroke:var(--alarm)}
+.vg-chiffre{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.vg-chiffre b{font-size:34px;font-weight:500;letter-spacing:-.04em;line-height:1}
+.vg-chiffre span{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:4px}
+.vg-domaines{flex:1;min-width:min(100%,220px);display:grid;gap:10px}
+.vg-domaine{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;font-size:13px}
+.vg-domaine span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft)}
+.vg-domaine b{font-family:var(--mono);font-size:12px;font-weight:500}
+.vg-domaine b.ne{color:var(--faint);font-family:inherit;font-weight:400}
+.vg-domaine .bar{grid-column:1/-1;margin-top:0;height:5px}
+.vg-domaine .bar i.bon{background:var(--ok)}.vg-domaine .bar i.moyen{background:var(--warn)}.vg-domaine .bar i.faible,.vg-domaine .bar i.mauvais{background:var(--alarm)}
+.vg-distribution{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--well);margin:0 18px}
+.vg-distribution i{display:block;height:100%}
+.vg-distribution .g-safe,.vg-pastille.g-safe{background:var(--ok)}
+.vg-distribution .g-info,.vg-pastille.g-info{background:var(--accent)}
+.vg-distribution .g-faible,.vg-pastille.g-faible{background:var(--warn)}
+.vg-distribution .g-eleve,.vg-pastille.g-eleve{background:var(--alarm);opacity:.7}
+.vg-distribution .g-critique,.vg-pastille.g-critique{background:var(--alarm)}
+.vg-legende{display:flex;flex-wrap:wrap;gap:8px 16px;padding:12px 18px 16px;font-size:12.5px;color:var(--ink-soft)}
+.vg-legende span{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.vg-legende b{font-weight:600;color:var(--ink)}
+.vg-pastille{width:9px;height:9px;border-radius:3px;display:inline-block}
+.vg-synthese{padding:12px 18px 16px;font-size:13px;color:var(--ink-soft);line-height:1.55;white-space:pre-line;overflow-wrap:anywhere;border-top:1px solid var(--hair-soft)}

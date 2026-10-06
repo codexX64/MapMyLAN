@@ -14,6 +14,7 @@ import { brancherBord } from './assistant/panneau.js';
 import { premierReglage } from './pages/premier-reglage.js';
 import { tableauDeBord, pageCarte, pageMonde, pageAppareils, pageVlans } from './pages/supervision.js';
 import { pageSecuriteReseau, pageVulns } from './pages/defense.js';
+import { pageVigie } from './pages/vigie.js';
 import { pageRouteur } from './pages/routeur.js';
 import { pageSsh, pageHote, pageInventaire, pageBot } from './pages/controle.js';
 import { pageNotifications, pageJournal, pageRapports } from './pages/suivi.js';
@@ -55,6 +56,7 @@ const PAGES = {
   vlans: pageVlans,
   security: pageSecuriteReseau,
   vulns: pageVulns,
+  vigie: pageVigie,
   router: pageRouteur,
   botcommands: pageBot,
   ssh: pageSsh,

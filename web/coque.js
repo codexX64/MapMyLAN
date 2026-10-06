@@ -31,6 +31,7 @@ export const NAV = [
   { id: 'vlans', icon: 'vlan', group: 'main' },
   { id: 'security', icon: 'shield', group: 'security' },
   { id: 'vulns', icon: 'alert', group: 'security' },
+  { id: 'vigie', icon: 'shield', group: 'security', si: () => E.vigie },
   { id: 'router', icon: 'router', group: 'control' },
   { id: 'botcommands', icon: 'bot', group: 'control' },
   { id: 'ssh', icon: 'ssh', group: 'control' },
@@ -131,8 +132,11 @@ function rail(p, b, navs) {
   const groupes = GROUPES.map(g => h('div', { class: 'grp' }, h('span', { text: t(`nav.group.${g}`) }),
     NAV.filter(n => n.group === g && (!n.admin || admin)).map(n => {
       cnts[n.id] = h('span', { class: 'cnt' });
-      return (navs[n.id] = h('button', { class: 'nav', type: 'button', onclick: () => choisirPage(n.id), title: t(`nav.${n.id}`) },
+      const b2 = (navs[n.id] = h('button', { class: 'nav', type: 'button', onclick: () => choisirPage(n.id), title: t(`nav.${n.id}`) },
         ic(n.icon, 16), h('span', { class: 'lib', text: t(`nav.${n.id}`) }), cnts[n.id]));
+      // Une page qui dépend d'un service voisin (VIGIE) n'apparaît qu'avec lui.
+      if (n.si) { const maj = () => { b2.hidden = !n.si(); }; p.suivre('vigie', maj); maj(); }
+      return b2;
     })));
   const peindreCompteurs = () => {
     const c = compteurs();
@@ -214,7 +218,7 @@ export function ouvrirPalette() {
     const appareils = E.devices.filter(d => vaut([d.ip, d.mac, d.hostname, d.customName, d.vendor].filter(Boolean).join(' '))).slice(0, 6)
       .map(d => ({ groupe: t('palette.devices'), titre: d.customName || d.hostname || d.ip, id: d.ip, icone: pictoType(d.customType || d.type),
         droite: d.status === 'online' ? t('state.online') : t(`state.${d.status}`), attention: ['suspect', 'quarantined', 'banned'].includes(d.status), agir: () => choisirAppareil(d.id) }));
-    const pages = NAV.filter(n => (!n.admin || E.moi?.role === 'admin') && vaut(t(`nav.${n.id}`))).slice(0, q ? 5 : 4)
+    const pages = NAV.filter(n => (!n.admin || E.moi?.role === 'admin') && (!n.si || n.si()) && vaut(t(`nav.${n.id}`))).slice(0, q ? 5 : 4)
       .map(n => ({ groupe: t('palette.pages'), titre: t(`nav.${n.id}`), icone: n.icon, agir: () => choisirPage(n.id) }));
     const actions = ACTIONS.filter(a => vaut(a.titre)).map(a => ({ ...a, groupe: t('palette.actions') }));
     elements = [...appareils, ...pages, ...actions];

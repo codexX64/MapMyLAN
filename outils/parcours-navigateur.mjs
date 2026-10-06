@@ -93,8 +93,35 @@ const telegram = await serveurLocal((req, res) => {
   else res.end('{"ok":true,"result":{}}');
 });
 // SOCLE_THEME=console refait tout le parcours dans la gamme Console.
+// Une fausse VIGIE : la page Vigie et la section de la fiche la lisent.
+const JETON_VIGIE = `cer_mapmylan_${'0'.repeat(64)}`;
+const maintenant = Date.now();
+const constatsVigie = [
+  { id: 'c00000000001', cle: 'a', regle: 'surface.intrusion', ref: 'SEC-LOG-004', domaine: 'surface', gravite: 'critique', titre: 'Signe d’intrusion sur un appareil', sujet: 'telephone-4 (192.0.2.70)', sujetId: null, correction: 'Isoler l’appareil en quarantaine, puis identifier ce qui tourne dessus (balayage approfondi) avant de le rendre au réseau.' },
+  { id: 'c00000000002', cle: 'b', regle: 'authentification.clair', ref: 'SEC-INFRA-003', domaine: 'authentification', gravite: 'eleve', titre: 'Mot de passe en clair : Telnet 23', sujet: 'camera-7 (192.0.2.40)', sujetId: null, correction: 'Remplacer par la version chiffrée et fermer l’ancien port.' },
+  { id: 'c00000000003', cle: 'c', regle: 'surface.bdd', ref: 'SEC-INFRA-003', domaine: 'surface', gravite: 'eleve', titre: 'Base de données joignable : PostgreSQL 5432', sujet: 'serveur-a (192.0.2.10)', sujetId: null, correction: 'Lier la base à l’adresse locale ou au réseau des seules applications qui l’utilisent.' },
+  { id: 'c00000000004', cle: 'd', regle: 'maj.obsolete', ref: 'SEC-INFRA-003', domaine: 'maj', gravite: 'faible', titre: 'OpenSSH 8.2 : version ancienne.', sujet: 'serveur-a (192.0.2.10)', sujetId: null, correction: 'Mettre OpenSSH à jour vers une version maintenue.' },
+  { id: 'c00000000005', cle: 'e', regle: 'segmentation.vlans', ref: 'SEC-INFRA-003', domaine: 'segmentation', gravite: 'eleve', titre: 'Aucun VLAN : réseau à plat', sujet: '', sujetId: null, correction: 'Séparer au moins trois réseaux : postes, serveurs, objets connectés.' },
+  { id: 'c00000000006', cle: 'f', regle: 'surface.ok', ref: 'SEC-INFRA-003', domaine: 'surface', gravite: 'safe', titre: 'Surface sans écart', sujet: 'imprimante-2 (192.0.2.50)', sujetId: null, correction: '' },
+];
+const auditVigie = { id: 'Ab3dEf6hIj9k', debut: maintenant - 3600e3, statut: 'termine', declencheur: 'quotidien', score: 41,
+  domaines: { surface: { score: 28 }, segmentation: { score: 76 }, authentification: { score: 64 }, maj: { score: 82 }, chiffrement: { score: null }, journaux: { score: 90 } },
+  distribution: { safe: 31, info: 4, faible: 6, eleve: 5, critique: 1 },
+  ia: { statut: 'faite', moteur: 'locale', priorites: [], synthese: 'Un téléphone balaie le réseau depuis une heure et la caméra de l’entrée accepte Telnet : isoler le premier, fermer le second.' } };
+const vigie = await serveurLocal((req, res) => {
+  res.setHeader('content-type', 'application/json');
+  if (req.url === '/api/etat') return res.end(JSON.stringify({ audit: auditVigie, enCours: null, priorites: constatsVigie.slice(0, 3), domaines: { surface: 'Surface réseau', segmentation: 'Segmentation', authentification: 'Authentification', maj: 'Mises à jour', chiffrement: 'Chiffrement', journaux: 'Journaux & traçabilité' }, veille: { actif: true, minutes: 15 }, evenements: { nonAcquittes: 3, critiques: 1 } }));
+  if (req.url.startsWith('/api/audits/')) return res.end(JSON.stringify({ audit: auditVigie, constats: constatsVigie }));
+  if (req.url.startsWith('/api/evenements')) return res.end(JSON.stringify([
+    { id: 'e00000000001', quand: maintenant - 600e3, gravite: 'critique', type: 'intrusion', titre: 'Signe d’intrusion : telephone-4 (danger 92/100)', texte: 'Balayage de ports vers le réseau', acquitte: null },
+    { id: 'e00000000002', quand: maintenant - 1800e3, gravite: 'eleve', type: 'port.nouveau', titre: 'Port ouvert sur camera-7 : 23', texte: '192.0.2.40 — service apparu depuis la passe précédente.', acquitte: null },
+    { id: 'e00000000003', quand: maintenant - 7200e3, gravite: 'faible', type: 'appareil.nouveau', titre: 'Nouvel appareil : capteur-9', texte: '192.0.2.90', acquitte: null },
+  ]));
+  if (req.url.startsWith('/api/constats')) return res.end(JSON.stringify({ audit: { id: auditVigie.id, debut: auditVigie.debut }, constats: constatsVigie.slice(2, 4) }));
+  res.end('{}');
+});
 const GAMME = process.env.SOCLE_THEME || 'soma';
-const o = await lancer({ SCAN_SUBNET: '192.0.2.0/24', SOCLE_THEME: GAMME }, { executeur: reseau.executeur, telegramBase: telegram.url });
+const o = await lancer({ SCAN_SUBNET: '192.0.2.0/24', SOCLE_THEME: GAMME, VIGIE_URL: vigie.url, VIGIE_JETON: JETON_VIGIE }, { executeur: reseau.executeur, telegramBase: telegram.url });
 // localhost et non 127.0.0.1 : une clé d'accès se lie à un nom de domaine.
 const base = `http://localhost:${o.port}`;
 
@@ -283,7 +310,7 @@ for (const [nom, bouton, chemin, statut] of [['camera-7', 'Isoler', 'quarantine'
   });
 }
 
-const PAGES = ['dashboard', 'map', 'world', 'devices', 'vlans', 'security', 'vulns', 'router', 'botcommands', 'ssh', 'host',
+const PAGES = ['dashboard', 'map', 'world', 'devices', 'vlans', 'security', 'vulns', 'vigie', 'router', 'botcommands', 'ssh', 'host',
   'inventory', 'notifications', 'logs', 'reports', 'settings', 'users', 'compte'];
 
 // États : ce qu'on ouvre une fois arrivé sur la page.
@@ -659,5 +686,6 @@ for (const e of refus) console.log('  refus :', e);
 await navigateur.close();
 await o.arreter();
 await telegram.fermer();
+await vigie.fermer();
 const echecs = gestes.filter(g => g.startsWith('ÉCHEC')).length;
 process.exit(defauts.length || erreurs.length || refus.length || echecs ? 1 : 0);

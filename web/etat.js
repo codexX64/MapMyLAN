@@ -99,6 +99,7 @@ export async function chargerTout() {
     poser({ devices, vlans, alerts, stats, healthScore: sante.score, topology });
   } catch (e) { toast(e.message, true); }
   api.get('/api/logs?limit=100').then(logs => poser({ logs })).catch(() => { /* le journal d'avant reste, le flux le complète */ });
+  api.get('/api/vigie').then(v => poser({ vigie: !!v.relie })).catch(() => { /* sans réponse, la page Vigie reste cachée */ });
   api.get('/api/host/stats').then(hostStats => poser({ hostStats })).catch(() => { /* la page hôte dit « sans mesure » ; host:metrics suivra */ });
   // Un balayage fini pendant une coupure du flux n'a pas annoncé sa fin :
   // l'état du dernier fait foi.
