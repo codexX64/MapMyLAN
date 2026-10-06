@@ -26,7 +26,7 @@ export function routesTrafic(route, s, acces) {
       logo: plusOuMoins(f.logo), paysRegistre: plusOuMoins(f.country), sens: f.direction || 'sortant', suspect: f.suspect === 1, raison: plusOuMoins(f.raison),
     }));
   }, {
-    role: 'lecture',
+    role: 'lecture', jeton: true,
     requete: { limite: { type: 'entier', min: 1, max: 5000, defaut: 300 }, avant: INSTANT, depuis: INSTANT, sens: { type: 'chaine', parmi: ['sortant', 'entrant'] }, suspect: { type: 'chaine', parmi: ['true', 'false'] } },
   });
 
@@ -41,9 +41,9 @@ export function routesTrafic(route, s, acces) {
         .map(d => ({ dst: d.dst, nom: plusOuMoins(d.nom), domaine: plusOuMoins(d.domaine), operateur: plusOuMoins(d.operateur), logo: plusOuMoins(d.logo), paysRegistre: plusOuMoins(d.pays), sens: d.sens || 'sortant', suspect: d.suspect === 1, octets: d.octets || 0, dernier: d.dernier || 0 })),
       appareils: db.prepare(`SELECT srcIp src, SUM(bytes) octets FROM flux_trafic ${filtre} GROUP BY srcIp ORDER BY SUM(bytes) DESC LIMIT 300`).all(...a).map(x => ({ src: x.src, octets: x.octets || 0 })),
     };
-  }, { role: 'lecture', requete: { depuis: INSTANT } });
+  }, { role: 'lecture', jeton: true, requete: { depuis: INSTANT } });
 
-  route.get('/api/traffic/state', () => trafic.etatPublic(), { role: 'lecture' });
+  route.get('/api/traffic/state', () => trafic.etatPublic(), { role: 'lecture', jeton: true });
 
   route.post('/api/traffic/collect', ctx => {
     if (!quotas.collecte.prendre(ctx.acteur.id)) throw new ErreurHttp(429, 'Trop de relevés demandés : attends une minute.');

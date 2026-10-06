@@ -312,7 +312,8 @@
       "voice.stt",
       "voice.tts",
       "memory.brief",
-      "memory.learn"
+      "memory.learn",
+      "security.audit"
     ]
   },
   "triggers": [

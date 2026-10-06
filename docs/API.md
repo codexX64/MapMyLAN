@@ -18,6 +18,13 @@ chaque écart est signalé par **[2.0]**.
   routes marquées **jeton** l'acceptent ; ailleurs il reçoit 401. Un jeton
   n'est jamais lu dans un cookie. Pas de CSRF sur ce chemin (aucun navigateur
   ne pose cet en-tête tout seul).
+- **[2.1] Jeton dérivé** : `Authorization: Bearer cer_<nom>_<hmac>`, calculé
+  par le Hub pour un service voisin avec le jeton du Hub
+  (`INTEGRATION_TOKEN_SEED`) : `hex(HMAC-SHA256(semence, "cerveau:" + nom))`.
+  Rien n'est stocké ; MapMyLAN le vérifie par le même calcul, et changer le
+  jeton du Hub les révoque tous. Mêmes routes que les jetons d'intégration ;
+  rôle **membre** pour les noms de `JETONS_DERIVES_MEMBRE` (le Hub y pose
+  celui de VIGIE), **lecture** pour les autres.
 - **[2.0]** Les anciennes routes de comptes disparaissent : `/api/auth/*`
   (connexion, déconnexion, 2fa, premier démarrage, réinitialisation,
   changement de mot de passe, `me`, `needs-setup`, `bootstrap`, `totp/*`),
@@ -384,9 +391,9 @@ corps : { trigger: "/[a-z0-9_]{1,32}", description?, action (id du catalogue), p
 
 | Méthode | Chemin | Rôle | Réponse |
 |---|---|---|---|
-| GET | `/api/traffic/flows?limite=300&avant=&depuis=&sens=sortant\|entrant&suspect=true` | lecture | `[{ id, src, dst, port, proto, premier, dernier, octets, paquets, vues, nom?, domaine?, operateur?, logo?, paysRegistre?, sens, suspect, raison? }]` (limite ≤ 5000) |
-| GET | `/api/traffic/aggregats?depuis=` | lecture | `{ connexions, destinations: [{ dst, nom?, domaine?, operateur?, logo?, paysRegistre?, sens, suspect, octets, dernier }], appareils: [{ src, octets }] }` |
-| GET | `/api/traffic/state` | lecture | `{ equipement?, quand?, commande?, erreur?, liaisonPerdue?, fluxVus?, cible: { id, nom, hote, port } \| null, ecartees: [{ id, nom, hote, port, transport }], total, signales, entrants, tailleMo, plusAncien, retentionJours, retentionMaxMo }` |
+| GET | `/api/traffic/flows?limite=300&avant=&depuis=&sens=sortant\|entrant&suspect=true` | lecture, jeton **[2.1]** | `[{ id, src, dst, port, proto, premier, dernier, octets, paquets, vues, nom?, domaine?, operateur?, logo?, paysRegistre?, sens, suspect, raison? }]` (limite ≤ 5000) |
+| GET | `/api/traffic/aggregats?depuis=` | lecture, jeton **[2.1]** | `{ connexions, destinations: [{ dst, nom?, domaine?, operateur?, logo?, paysRegistre?, sens, suspect, octets, dernier }], appareils: [{ src, octets }] }` |
+| GET | `/api/traffic/state` | lecture, jeton **[2.1]** | `{ equipement?, quand?, commande?, erreur?, liaisonPerdue?, fluxVus?, cible: { id, nom, hote, port } \| null, ecartees: [{ id, nom, hote, port, transport }], total, signales, entrants, tailleMo, plusAncien, retentionJours, retentionMaxMo }` |
 | POST | `/api/traffic/collect` | membre | même forme que l'état de collecte (6 par minute) |
 | POST | `/api/traffic/purge` | admin | `{ parAge, parTaille, mo }` |
 | DELETE | `/api/traffic/flows` | admin, renfort | `{ supprimes }` |
@@ -402,6 +409,23 @@ corps : { trigger: "/[a-z0-9_]{1,32}", description?, action (id du catalogue), p
 `Jeton { id, name, prefix, role, createdAt, lastUsedAt, expiresAt, revokedAt, etat: "actif"|"expire"|"revoque" }`.
 **[2.0]** rôles `lecture`/`membre` (ex-`viewer`/`operator`) ; la portée
 « accounts » disparaît (un jeton ne gère jamais les comptes).
+
+### Vigie — `/api/vigie` **[2.1]**
+
+Relais vers VIGIE (audit de sécurité), avec le jeton que le Hub a dérivé pour
+MapMyLAN (`VIGIE_URL`, `VIGIE_JETON`). Session seulement : ces routes servent
+la page Vigie et la fiche d'appareil. Sans VIGIE reliée : 409 ; VIGIE muette
+ou qui refuse le jeton : 502.
+
+| Méthode | Chemin | Rôle | Réponse |
+|---|---|---|---|
+| GET | `/api/vigie` | lecture | `{ relie }` |
+| GET | `/api/vigie/etat` | lecture | état de VIGIE (`GET /api/etat` de VIGIE) |
+| GET | `/api/vigie/evenements` | lecture | événements de la veille, gravité faible et plus |
+| GET | `/api/vigie/audits/:id` | lecture | `{ audit, constats, priorites }` |
+| GET | `/api/vigie/audits/:id/pdf` | lecture | le rapport PDF |
+| GET | `/api/vigie/appareils/:id` | lecture | `{ audit, constats }` du dernier audit pour cet appareil |
+| POST | `/api/vigie/audit` | membre | `{ id, deja }` |
 
 ### Logos — `/api/logos`
 

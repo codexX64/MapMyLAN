@@ -104,7 +104,7 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
   s.ssh = new Ssh({ executeur: s.executeur });
   s.equipements = new Equipements(s);
   s.appareils = new Appareils(db);
-  s.jetons = new Jetons(db);
+  s.jetons = new Jetons(db, { semence: cfg.jetonHub, membres: cfg.derivesMembre });
   s.extensions = new Extensions({ journal: (niveau, message) => s.evts.journaliser(niveau, 'extensions', message) });
   s.memoire = new Memoire({ url: cfg.synapseUrl, jeton: cfg.synapseJeton });
   s.liaisons = new Liaisons({ cfg });

@@ -81,6 +81,7 @@ test('autorisation : politique écrite ici, puis chaque route balayée sans sess
     'GET /api/devices', 'GET /api/devices/health/score', 'GET /api/devices/scans/latest', 'GET /api/devices/scan/ranges', 'POST /api/devices/scan',
     'GET /api/devices/x', 'GET /api/devices/x/ping', 'POST /api/devices/x/deep-scan', 'POST /api/devices/x/ban', 'POST /api/devices/x/quarantine', 'POST /api/devices/x/unban',
     'GET /api/vlans', 'GET /api/topology', 'POST /api/topology/auto-build', 'GET /api/stats', 'GET /api/alerts', 'POST /api/alerts/x/ack', 'GET /api/host/stats',
+    'GET /api/traffic/flows', 'GET /api/traffic/aggregats', 'GET /api/traffic/state',
   ];
   const trie = l => [...l].sort();
   assert.deepEqual(trie(routes.filter(x => x.o.role === 'admin').map(x => x.cle)), trie(ADMIN));
@@ -753,4 +754,59 @@ test('thème : la page porte celui de SOCLE_THEME, posé par la page Thème du H
   const manifeste = JSON.parse(lire('hub.json'));
   assert.equal(manifeste.config.find(c => c.key === 'SOCLE_THEME'), undefined, 'le thème ne se règle plus dans la configuration du service');
   assert.equal(manifeste.minHubVersion, '0.7.0', '{{hub.theme}} vient avec le Hub 0.7.0');
+});
+
+test('VIGIE : jetons dérivés par le Hub (seul celui de VIGIE agit), page Vigie relayée avec le jeton de MapMyLAN', async () => {
+  const derive = (secret, nom) => `cer_${nom}_${crypto.createHmac('sha256', secret).update('cerveau:' + nom).digest('hex')}`;
+  const JETON_VIGIE = derive('jeton-hub-de-vigie-pour-les-essais-0123', 'mapmylan');
+  const recu = [];
+  let refuser = false;
+  const vigie = await serveurLocal((req, res) => {
+    recu.push({ methode: req.method, chemin: req.url, auth: req.headers.authorization });
+    if (refuser || req.headers.authorization !== `Bearer ${JETON_VIGIE}`) { res.writeHead(401, { 'content-type': 'application/json' }); return res.end('{"error":"Jeton invalide."}'); }
+    if (req.url.endsWith('/pdf')) { res.writeHead(200, { 'content-type': 'application/pdf' }); return res.end('%PDF-1.4\n%%EOF\n'); }
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/api/etat') return res.end(JSON.stringify({ audit: { id: 'Ab3dEf6hIj9k', score: 73 }, enCours: null }));
+    if (req.url === '/api/audits' && req.method === 'POST') return res.end('{"id":"Zz3dEf6hIj9k","deja":false}');
+    if (req.url.startsWith('/api/constats?appareil=')) return res.end('{"audit":{"id":"Ab3dEf6hIj9k"},"constats":[]}');
+    res.end('[]');
+  });
+  const x = await lancer({ INTEGRATION_TOKEN_SEED: GRAINE_HUB, JETONS_DERIVES_MEMBRE: 'vigie', VIGIE_URL: vigie.url, VIGIE_JETON: JETON_VIGIE }, { executeur: reseau.executeur });
+  try {
+    const c = new Client(x.port);
+    const deVigie = porteur(derive(GRAINE_HUB, 'vigie')), dAutre = porteur(derive(GRAINE_HUB, 'oracle'));
+    assert.equal((await c.get('/api/devices', deVigie)).status, 200);
+    assert.equal((await c.get('/api/traffic/flows?limite=10', deVigie)).status, 200, 'le trafic s’ouvre aux jetons');
+    assert.equal((await c.get('/api/traffic/state', deVigie)).status, 200);
+    assert.equal((await c.post('/api/devices/scan', {}, deVigie)).status, 200, 'VIGIE agit');
+    assert.equal((await c.get('/api/devices', dAutre)).status, 200, 'un autre service lit');
+    assert.equal((await c.post('/api/devices/scan', {}, dAutre)).status, 403, 'mais n’agit pas');
+    assert.equal((await c.get('/api/devices', porteur(derive('une-autre-semence-assez-longue', 'vigie')))).status, 401, 'signé par une autre semence');
+    assert.equal((await c.get('/api/devices', porteur(derive(GRAINE_HUB, 'vigie').replace(/.$/, m => (m === '0' ? '1' : '0'))))).status, 401);
+    assert.equal((await c.get('/api/settings', deVigie)).status, 401, 'route non marquée « jeton »');
+    assert.equal(x.db.prepare("SELECT COUNT(*) n FROM jetons_integration WHERE name LIKE 'service:%'").get().n, 0, 'rien n’est stocké');
+
+    const a = await administrateur(x);
+    assert.deepEqual((await a.get('/api/vigie')).json, { relie: true });
+    assert.equal((await a.get('/api/vigie/etat')).json.audit.score, 73);
+    assert.equal((await a.get('/api/vigie/appareils/routeur-1')).status, 200);
+    assert.equal((await a.post('/api/vigie/audit', {})).json.id, 'Zz3dEf6hIj9k');
+    const pdf = await a.get('/api/vigie/audits/Ab3dEf6hIj9k/pdf');
+    assert.equal(pdf.status, 200);
+    assert.equal(pdf.entetes['content-type'], 'application/pdf');
+    assert.equal((await a.get('/api/vigie/audits/pas-une-ref/pdf')).status, 404);
+    assert.ok(recu.every(r => r.auth === `Bearer ${JETON_VIGIE}`), 'toujours le jeton dérivé pour MapMyLAN');
+    assert.equal((await c.get('/api/vigie/etat', deVigie)).status, 401, 'la page Vigie sert l’interface, pas les jetons');
+    refuser = true;
+    const r = await a.get('/api/vigie/etat');
+    assert.equal(r.status, 502);
+    assert.match(r.json.error, /redéploie MapMyLAN/);
+  } finally { await x.arreter(); await vigie.fermer(); }
+  // Sans VIGIE : la page le dit, et le Compose du Hub relie les deux sens.
+  assert.deepEqual((await admin.get('/api/vigie')).json, { relie: false });
+  assert.equal((await admin.get('/api/vigie/etat')).status, 409);
+  const compose = readFileSync(new URL('../deploy/compose.hub.yml', import.meta.url), 'utf8');
+  assert.match(compose, /VIGIE_JETON: "\{\{provider\.security\.audit\.jetonCerveau\}\}"/);
+  assert.match(compose, /JETONS_DERIVES_MEMBRE: "\{\{provider\.security\.audit\.name\}\}"/);
+  assert.ok(JSON.parse(readFileSync(new URL('../hub.json', import.meta.url), 'utf8')).capabilities.accepts.includes('security.audit'));
 });

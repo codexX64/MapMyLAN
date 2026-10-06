@@ -29,6 +29,12 @@ export const SPEC = {
   voxJeton: { env: 'VOX_JETON', type: 'secret', min: 16 },
   synapseUrl: { env: 'SYNAPSE_URL', type: 'url' },
   synapseJeton: { env: 'SYNAPSE_JETON', type: 'secret', min: 16 },
+  // VIGIE (audit de sécurité) : son adresse vue de la machine, le jeton que
+  // le Hub a dérivé pour MapMyLAN, et les services dont le jeton dérivé peut
+  // agir ici (isoler, balayer) — les autres jetons dérivés lisent seulement.
+  vigieUrl: { env: 'VIGIE_URL', type: 'url' },
+  vigieJeton: { env: 'VIGIE_JETON', type: 'chaine', motif: /^cer_[a-z0-9][a-z0-9-]{1,30}_[0-9a-f]{64}$/ },
+  derivesMembre: { env: 'JETONS_DERIVES_MEMBRE', type: 'liste', defaut: [] },
   // L'adresse de MapMyLAN pour un humain : les autres services la donnent.
   serviceUi: { env: 'SERVICE_UI', type: 'url' },
   posteUrl: { env: 'POSTE_URL', type: 'url', schemas: ['https:'] },

@@ -60,6 +60,12 @@ services:
       # échanges. Jeton de cerveau dérivé par le Hub, pour ce seul service.
       SYNAPSE_URL: "{{provider.memory.brief.hostUrl}}"
       SYNAPSE_JETON: "{{provider.memory.brief.jetonCerveau}}"
+      # VIGIE, l'audit de sécurité : la page Vigie la lit avec un jeton dérivé
+      # pour MapMyLAN seul. En retour, le jeton dérivé de VIGIE ici (qui porte
+      # son nom) est le seul à pouvoir agir — les autres jetons dérivés lisent.
+      VIGIE_URL: "{{provider.security.audit.hostUrl}}"
+      VIGIE_JETON: "{{provider.security.audit.jetonCerveau}}"
+      JETONS_DERIVES_MEMBRE: "{{provider.security.audit.name}}"
       SERVICE_UI: "{{service.ui}}"
       # Comptes : clé maîtresse gardée par le Hub (jamais sur le volume),
       # poivre des mots de passe (celui de la 1.4.1 si elle est reprise).
