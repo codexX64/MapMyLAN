@@ -51,9 +51,53 @@ async function macDe(s, t) {
 
 const entier = v => (typeof v === 'number' && Number.isInteger(v) ? v : undefined);
 
+// Le bouclier de VIGIE : deux groupes d'adresses que VIGIE remplit, et que
+// deux règles du pare-feu (posées une fois dans UniFi) refusent. Rien d'autre
+// n'est écrit sur le contrôleur.
+export const GROUPES_BOUCLIER = { 4: 'VIGIE bloquees IPv4', 6: 'VIGIE bloquees IPv6' };
+const TYPE_GROUPE = { 4: 'address-group', 6: 'ipv6-address-group' };
+// UniFi refuse un groupe vide : une adresse de documentation le tient ouvert.
+const VIDE = { 4: '192.0.2.1', 6: '2001:db8::1' };
+
+async function ecrireGroupe(s, existant, v, membres) {
+  const corps = existant
+    ? { ...existant, group_members: membres }
+    : { name: GROUPES_BOUCLIER[v], group_type: TYPE_GROUPE[v], group_members: membres };
+  const url = `${s.base}/api/s/${s.site}/rest/firewallgroup${existant ? `/${existant._id}` : ''}`;
+  const r = await s.http.requete(url, { methode: existant ? 'PUT' : 'POST', corps });
+  const j = r.json();
+  if (r.status !== 200 || (j?.meta?.rc && j.meta.rc !== 'ok')) throw new ErreurHttp(502, `Le contrôleur a refusé le groupe ${GROUPES_BOUCLIER[v]} : ${j?.meta?.msg || `HTTP ${r.status}`}.`);
+  return existant?._id || j?.data?.[0]?._id || null;
+}
+
+// Les règles qui citent nos groupes : celles du pare-feu classique, et les
+// politiques du pare-feu par zones (UniFi Network 9 et plus). Sans elles, un
+// groupe ne bloque rien.
+async function reglesBouclier(s, ids) {
+  const liste = ids.filter(Boolean);
+  const cite = (o, ...cles) => cles.some(k => liste.some(id => JSON.stringify(o?.[k] ?? '').includes(id)));
+  const out = { entrant: false, sortant: false, regles: [] };
+  const noter = (nom, actif, entrant, sortant) => {
+    out.regles.push({ nom: String(nom || 'sans nom').slice(0, 80), actif });
+    if (actif && entrant) out.entrant = true;
+    if (actif && sortant) out.sortant = true;
+  };
+  for (const r of await lire(s, '/rest/firewallrule').catch(() => [])) {
+    if (!/drop|reject/i.test(r.action || '') || !cite(r, 'src_firewallgroup_ids', 'dst_firewallgroup_ids')) continue;
+    noter(r.name, r.enabled !== false, cite(r, 'src_firewallgroup_ids'), cite(r, 'dst_firewallgroup_ids'));
+  }
+  const p = await s.http.requete(`${s.base}/v2/api/site/${s.site}/firewall-policies`).catch(() => null);
+  const politiques = p?.status === 200 ? p.json() : null;
+  for (const r of Array.isArray(politiques) ? politiques : Array.isArray(politiques?.data) ? politiques.data : []) {
+    if (!/block|reject/i.test(JSON.stringify(r.action ?? '')) || !cite(r, 'source', 'destination')) continue;
+    noter(r.name, r.enabled !== false, cite(r, 'source'), cite(r, 'destination'));
+  }
+  return out;
+}
+
 export const unifi = {
   id: 'unifi', label: 'Ubiquiti · UniFi', transport: 'api',
-  capabilities: ['ban', 'unban', 'clients', 'arp', 'ports', 'vlans', 'reservation'], needs: ['password', 'apiBaseUrl', 'site'],
+  capabilities: ['ban', 'unban', 'clients', 'arp', 'ports', 'vlans', 'reservation', 'bouclier', 'ips'], needs: ['password', 'apiBaseUrl', 'site'],
   detect: p => /unifi|udm|ubiquiti/i.test(p),
 
   test: async ctx => {
@@ -145,4 +189,34 @@ export const unifi = {
     return `${await stamgr(s, 'block-sta', await macDe(s, t))}\nNote : UniFi n’expose pas d’isolement partiel, l’appareil est bloqué complètement.`;
   },
   unban: async (ctx, t) => { const s = await ouvrir(ctx); return stamgr(s, 'unblock-sta', await macDe(s, t)); },
+
+  // Les deux groupes égaux à la liste reçue (adresses publiques déjà vérifiées par la route).
+  bouclier: async (ctx, ips) => {
+    const s = await ouvrir(ctx);
+    const groupes = await lire(s, '/rest/firewallgroup');
+    const out = {};
+    for (const v of [4, 6]) {
+      const miennes = ips.filter(ip => (v === 4 ? !ip.includes(':') : ip.includes(':')));
+      const existant = groupes.find(g => g.name === GROUPES_BOUCLIER[v] && g.group_type === TYPE_GROUPE[v]);
+      const id = await ecrireGroupe(s, existant, v, miennes.length ? miennes : [VIDE[v]]);
+      out[v] = { id, nom: GROUPES_BOUCLIER[v], n: miennes.length };
+    }
+    return { groupes: out, regles: await reglesBouclier(s, [out[4].id, out[6].id]) };
+  },
+
+  // Les alertes de l'IPS de la passerelle (Suricata intégré) depuis une date.
+  ips: async (ctx, { depuis, jusque = Date.now(), limite = 500 }) => {
+    const s = await ouvrir(ctx);
+    const r = await s.http.requete(`${s.base}/api/s/${s.site}/stat/ips/event`, { methode: 'POST', corps: { start: depuis, end: jusque, _limit: limite } });
+    if (r.status !== 200) throw new ErreurHttp(502, `Le contrôleur n’a pas rendu ses alertes d’IPS (HTTP ${r.status}).`);
+    const ms = t => (typeof t === 'number' ? (t < 1e12 ? t * 1000 : t) : Date.parse(t) || null);
+    return (Array.isArray(r.json()?.data) ? r.json().data : []).slice(0, limite).map(e => ({
+      id: typeof e._id === 'string' ? e._id.slice(0, 40) : undefined,
+      quand: ms(e.timestamp ?? e.time ?? e.datetime),
+      src: e.src_ip, sport: entier(e.src_port), dst: e.dest_ip ?? e.dst_ip, dport: entier(e.dest_port ?? e.dst_port), proto: e.proto,
+      signature: String(e.inner_alert_signature ?? e.msg ?? '').slice(0, 200), sid: entier(e.inner_alert_signature_id),
+      categorie: String(e.inner_alert_category ?? e.catname ?? '').slice(0, 80), gravite: entier(e.inner_alert_severity),
+      action: String(e.inner_alert_action ?? '').slice(0, 20),
+    }));
+  },
 };
