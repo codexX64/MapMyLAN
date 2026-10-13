@@ -82,6 +82,7 @@ test('autorisation : politique écrite ici, puis chaque route balayée sans sess
     'GET /api/devices/x', 'GET /api/devices/x/ping', 'POST /api/devices/x/deep-scan', 'POST /api/devices/x/ban', 'POST /api/devices/x/quarantine', 'POST /api/devices/x/unban',
     'GET /api/vlans', 'GET /api/topology', 'POST /api/topology/auto-build', 'GET /api/stats', 'GET /api/alerts', 'POST /api/alerts/x/ack', 'GET /api/host/stats',
     'GET /api/traffic/flows', 'GET /api/traffic/aggregats', 'GET /api/traffic/state',
+    'GET /api/passerelle', 'GET /api/passerelle/ips', 'PUT /api/passerelle/bouclier',
   ];
   const trie = l => [...l].sort();
   assert.deepEqual(trie(routes.filter(x => x.o.role === 'admin').map(x => x.cle)), trie(ADMIN));
@@ -809,4 +810,83 @@ test('VIGIE : jetons dérivés par le Hub (seul celui de VIGIE agit), page Vigie
   assert.match(compose, /VIGIE_JETON: "\{\{provider\.security\.audit\.jetonCerveau\}\}"/);
   assert.match(compose, /JETONS_DERIVES_MEMBRE: "\{\{provider\.security\.audit\.name\}\}"/);
   assert.ok(JSON.parse(readFileSync(new URL('../hub.json', import.meta.url), 'utf8')).capabilities.accepts.includes('security.audit'));
+});
+
+test('passerelle pour VIGIE : alertes de l’IPS lues, groupes du bouclier tenus, adresses publiques seules, jeton de VIGIE seul en écriture', async () => {
+  const derive = (secret, nom) => `cer_${nom}_${crypto.createHmac('sha256', secret).update('cerveau:' + nom).digest('hex')}`;
+  const certificat = certificatEssai('localhost');
+  const groupes = [];
+  const recu = [];
+  const reponses = (req, res) => {
+    let corps = '';
+    req.on('data', d => { corps += d; });
+    req.on('end', () => {
+      recu.push({ methode: req.method, url: req.url, corps });
+      res.setHeader('content-type', 'application/json');
+      const ok = data => res.end(JSON.stringify({ meta: { rc: 'ok' }, data }));
+      if (req.url === '/api/auth/login') { res.setHeader('x-csrf-token', 'csrf-essai'); return res.end('{}'); }
+      const base = '/proxy/network/api/s/default';
+      if (req.url === `${base}/stat/ips/event`) {
+        const b = JSON.parse(corps);
+        return ok([
+          { _id: 'e1', timestamp: b.end - 1000, src_ip: '203.0.113.9', src_port: 4444, dest_ip: '10.9.1.20', dest_port: 22, proto: 'TCP', inner_alert_signature: 'ET SCAN Potential SSH Scan', inner_alert_signature_id: 2001219, inner_alert_category: 'Attempted Information Leak', inner_alert_severity: 2, inner_alert_action: 'blocked' },
+          { _id: 'e2', timestamp: Math.floor(b.end / 1000) - 5, src_ip: '198.51.100.7', dest_ip: '10.9.1.21', dest_port: 445, inner_alert_signature: 'ET EXPLOIT', inner_alert_severity: 1 },
+        ]);
+      }
+      if (req.url === `${base}/rest/firewallgroup` && req.method === 'GET') return ok(groupes);
+      if (req.url === `${base}/rest/firewallgroup` && req.method === 'POST') { const g = { _id: `g${groupes.length + 1}`.padEnd(24, '0'), ...JSON.parse(corps) }; groupes.push(g); return ok([g]); }
+      if (req.url.startsWith(`${base}/rest/firewallgroup/`) && req.method === 'PUT') { const g = groupes.find(x => req.url.endsWith(x._id)); Object.assign(g, JSON.parse(corps)); return ok([g]); }
+      if (req.url === `${base}/rest/firewallrule`) return ok([{ name: 'VIGIE entree', enabled: true, action: 'drop', src_firewallgroup_ids: [groupes[0]?._id] }]);
+      if (req.url === '/proxy/network/v2/api/site/default/firewall-policies') return res.end(JSON.stringify([{ name: 'VIGIE sortie', enabled: true, action: { type: 'BLOCK' }, destination: { ip_group_id: groupes[0]?._id } }]));
+      ok([]);
+    });
+  };
+  const serveur = https.createServer({ key: certificat.cle, cert: certificat.cert }, reponses);
+  await new Promise(r => serveur.listen(0, '127.0.0.1', r));
+  const port = serveur.address().port;
+  const x = await lancer({ INTEGRATION_TOKEN_SEED: GRAINE_HUB, JETONS_DERIVES_MEMBRE: 'vigie' }, { executeur: reseau.executeur });
+  try {
+    const c = new Client(x.port);
+    const deVigie = porteur(derive(GRAINE_HUB, 'vigie')), dAutre = porteur(derive(GRAINE_HUB, 'oracle'));
+    assert.deepEqual((await c.get('/api/passerelle', deVigie)).json, { reliee: false });
+    assert.equal((await c.get('/api/passerelle/ips', deVigie)).status, 409);
+    const a = await administrateur(x);
+    const ident = { vendor: 'unifi', transport: 'api', host: '127.0.0.1', port, username: 'admin', password: 'mot-de-passe-du-controleur', apiBaseUrl: `https://127.0.0.1:${port}`, site: 'default' };
+    const vu = await a.post('/api/router/detect', ident);
+    assert.equal((await a.put('/api/router', { ...ident, empreinteTls: vu.json.empreinteTls })).status, 200);
+
+    const p = (await c.get('/api/passerelle', deVigie)).json;
+    assert.deepEqual([p.reliee, p.constructeur, p.bouclier, p.ips, p.hote], [true, 'unifi', true, true, '127.0.0.1']);
+    assert.ok(!JSON.stringify(p).includes('mot-de-passe'), 'aucun identifiant ne sort');
+
+    const ips = await c.get(`/api/passerelle/ips?depuis=${Date.now() - 120e3}`, deVigie);
+    assert.equal(ips.status, 200, JSON.stringify(ips.json));
+    assert.deepEqual(ips.json.map(e => [e.src, e.dport, e.gravite, e.action]), [['203.0.113.9', 22, 2, 'blocked'], ['198.51.100.7', 445, 1, '']]);
+    assert.ok(ips.json.every(e => e.quand > Date.now() - 60e3), 'secondes et millisecondes ramenées en millisecondes');
+    assert.equal((await c.get('/api/passerelle/ips', dAutre)).status, 403, 'un autre service ne lit pas l’IPS');
+
+    const mettre = (o, corps) => c.req('PUT', '/api/passerelle/bouclier', corps, o);
+    assert.equal((await mettre(dAutre, { ips: ['8.8.4.4'] })).status, 403, 'un autre service ne bloque rien');
+    for (const mauvaise of ['10.9.1.5', '127.0.0.1', '100.64.1.1', 'fd00::1', '::ffff:10.0.0.1', '8.8.8.0/24', '0.0.0.0', 'pas une ip'])
+      assert.equal((await mettre(deVigie, { ips: ['8.8.4.4', mauvaise] })).status, 400, mauvaise);
+    assert.equal(groupes.length, 0, 'une liste refusée n’écrit rien');
+    const r = await mettre(deVigie, { ips: ['8.8.4.4', '2a01:4f8::7', '8.8.4.4'] });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.deepEqual(groupes.map(g => [g.name, g.group_type, g.group_members]), [['VIGIE bloquees IPv4', 'address-group', ['8.8.4.4']], ['VIGIE bloquees IPv6', 'ipv6-address-group', ['2a01:4f8::7']]]);
+    assert.deepEqual([r.json.groupes[4].n, r.json.regles.entrant, r.json.regles.sortant], [1, true, true]);
+    assert.deepEqual(r.json.regles.regles.map(x => x.nom), ['VIGIE entree', 'VIGIE sortie']);
+    // Vidée : une adresse de documentation tient le groupe ouvert ; mis à jour, pas recréé.
+    await mettre(deVigie, { ips: [] });
+    assert.deepEqual(groupes.map(g => g.group_members), [['192.0.2.1'], ['2001:db8::1']]);
+    assert.equal(recu.filter(q => q.methode === 'POST' && q.url.endsWith('/rest/firewallgroup')).length, 2);
+    // Une session : administrateur sous renfort seulement.
+    const lecteur = await inviter(a, 'lea', 'lecture');
+    assert.equal((await lecteur.put('/api/passerelle/bouclier', { ips: [] })).status, 403);
+    assert.equal((await lecteur.get('/api/passerelle')).status, 200);
+    assert.ok(x.db.prepare("SELECT COUNT(*) n FROM socle_journal WHERE action = 'passerelle.bouclier'").get().n >= 2, 'chaque écriture au journal');
+  } finally {
+    await x.arreter();
+    serveur.closeAllConnections();
+    await new Promise(res => serveur.close(res));
+  }
 });
