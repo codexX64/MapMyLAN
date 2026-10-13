@@ -17,6 +17,7 @@ import { routesTrafic } from './trafic.js';
 import { routesMessagerie } from './messagerie.js';
 import { routesAssistant } from './assistant.js';
 import { routesVigie } from './vigie.js';
+import { routesPasserelle } from './passerelle.js';
 
 const ECRITURES = new Set(['POST', 'PUT', 'PATCH']);
 // Un paramètre de chemin : identifiant, numéro, nom de canal ou de domaine.
@@ -35,7 +36,7 @@ export function creerApi(s) {
     get: (c, g, o) => declarer('GET', c, g, o), post: (c, g, o) => declarer('POST', c, g, o), put: (c, g, o) => declarer('PUT', c, g, o),
     patch: (c, g, o) => declarer('PATCH', c, g, o), del: (c, g, o) => declarer('DELETE', c, g, o),
   };
-  for (const enregistrer of [routesSysteme, routesAppareils, routesReseau, routesAutomatisation, routesTrafic, routesMessagerie, routesAssistant, routesVigie]) enregistrer(route, s, acces);
+  for (const enregistrer of [routesSysteme, routesAppareils, routesReseau, routesAutomatisation, routesTrafic, routesMessagerie, routesAssistant, routesVigie, routesPasserelle]) enregistrer(route, s, acces);
 
   async function traiter(ctx) {
     const { req, res, url } = ctx;
