@@ -427,6 +427,28 @@ ou qui refuse le jeton : 502.
 | GET | `/api/vigie/appareils/:id` | lecture | `{ audit, constats }` du dernier audit pour cet appareil |
 | POST | `/api/vigie/audit` | membre | `{ id, deja }` |
 
+### Passerelle — `/api/passerelle` **[2.2]**
+
+Le routeur principal, prêté au bouclier de VIGIE : quand MapMyLAN le pilote
+déjà, VIGIE s'en sert sans rien régler. Ses identifiants et son certificat
+épinglé ne quittent pas MapMyLAN. Jeton admis (le jeton dérivé de VIGIE, de
+rôle **membre** par `JETONS_DERIVES_MEMBRE`) ; en session, l'écriture exige
+un administrateur sous renfort. Sans routeur principal : 409.
+
+| Méthode | Chemin | Rôle | Corps / requête | Réponse |
+|---|---|---|---|---|
+| GET | `/api/passerelle` | lecture | — | `{ reliee }` ou `{ reliee, nom, hote, constructeur, libelle, bouclier, ips, dernierEssai, dernierEssaiOk }` |
+| GET | `/api/passerelle/ips` | membre | `?depuis=<ms>&limite=1-1000` (une journée au plus en arrière) | `[{ id, quand, src, sport, dst, dport, proto, signature, sid, categorie, gravite, action }]` — alertes de l'IPS du contrôleur (`stat/ips/event`) |
+| PUT | `/api/passerelle/bouclier` | membre (session : admin, renfort) | `{ ips: [adresse publique] }`, 2 000 au plus | `{ passerelle, groupes: { 4: { id, nom, n }, 6: … }, regles: { entrant, sortant, regles } }` |
+
+`PUT /api/passerelle/bouclier` rend les groupes d'adresses « VIGIE bloquees
+IPv4 » et « … IPv6 » du contrôleur égaux à la liste (une adresse de
+documentation tient un groupe vide ouvert), puis cherche les règles du
+pare-feu classique et les politiques du pare-feu par zones qui les citent :
+sans elles, les groupes ne bloquent rien. Toute adresse non publique
+(réseau local, boucle, CGNAT, réservée, plage) refuse la liste entière (400).
+UniFi seulement pour l'instant (capacités `bouclier` et `ips`).
+
 ### Logos — `/api/logos`
 
 | Méthode | Chemin | Rôle | Réponse |
