@@ -11,7 +11,7 @@ function voterFabricant(v, votes) {
   if (/\bmikrotik|routeros|edgerouter|ubnt\s*edge|draytek|zyxel\s*(usg|zywall)/.test(v)) pousser('router', 6, `fabricant « ${v} »`);
   if (/tp-link|tplink|archer|freebox|livebox|bbox|sfr\s*box|technicolor|sagemcom|arcadyan|askey/.test(v) && !/tl-sg|tl-sf|omada|eap\d/.test(v)) pousser('router', 5, `box ou routeur « ${v} »`);
   if (/pfsense|opnsense|fortinet|fortigate|sophos|palo\s*alto|watchguard|stormshield/.test(v)) pousser('firewall', 7, `fabricant pare-feu « ${v} »`);
-  // Une passerelle Ubiquiti (UDM, UXG) expose 8443 ; une borne (UAP) non.
+  // Une passerelle Ubiquiti expose 8443 ; une borne (UAP) non.
   if (/\bunifi|ubiquiti\b/.test(v)) { pousser('router', 4, 'passerelle Ubiquiti'); pousser('ap', 2, 'Ubiquiti'); }
   if (/aruba|ruckus|aerohive|meraki\s*mr|tp-link.*eap|engenius/.test(v)) pousser('ap', 5, `borne Wi-Fi « ${v} »`);
   if (/cisco\s*catalyst|procurve|aruba\s*\d|netgear.*(gs|xs)|d-link.*(dgs|dxs)|juniper\s*ex/.test(v)) pousser('switch', 6, `switch « ${v} »`);
