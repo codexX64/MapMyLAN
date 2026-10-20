@@ -3,9 +3,11 @@
 // par le jeton que le Hub a dérivé pour elle, y lit les alertes de l'IPS et y
 // tient la liste des adresses à refuser — rien d'autre.
 //
-// Lecture : tout jeton dérivé et toute session. Écriture : le jeton « membre »
-// (celui du service d'audit que le Hub désigne), ou un administrateur sous renfort.
+// Lecture : tout jeton dérivé et toute session. Écriture : le jeton dérivé
+// « membre » (celui du service d'audit que le Hub désigne), ou un administrateur
+// sous renfort — jamais un jeton d'intégration, ni celui du Hub.
 import { ErreurHttp } from '../../socle/src/index.js';
+import { Refus } from './acces.js';
 import { adaptateur } from '../adaptateurs/index.js';
 import { classer } from '../sortie.js';
 import { estIP } from '../cibles.js';
@@ -47,6 +49,7 @@ export function routesPasserelle(route, s, acces) {
 
   route.put('/api/passerelle/bouclier', async ctx => {
     if (ctx.acteur.type === 'compte') acces.exiger(ctx, 'admin', { renfort: true });
+    else if (!ctx.acteur.derive) throw new Refus(403, 'Le pare-feu ne se règle que par le service d’audit désigné par le Hub, ou par un administrateur.');
     const ips = [...new Set(ctx.corps.ips)];
     // Défense en profondeur : VIGIE ne bloque jamais le réseau local ; MapMyLAN non plus.
     for (const ip of ips) if (!estIP(ip) || classer(ip) !== 'publique') throw new ErreurHttp(400, `Adresse refusée : ${String(ip).slice(0, 45)} (une adresse publique seule).`);

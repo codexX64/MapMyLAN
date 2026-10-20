@@ -867,6 +867,9 @@ test('passerelle pour VIGIE : alertes de l’IPS lues, groupes du bouclier tenus
 
     const mettre = (o, corps) => c.req('PUT', '/api/passerelle/bouclier', corps, o);
     assert.equal((await mettre(dAutre, { ips: ['8.8.4.4'] })).status, 403, 'un autre service ne bloque rien');
+    assert.equal((await mettre(porteur(GRAINE_HUB), { ips: ['8.8.4.4'] })).status, 403, 'le jeton du Hub ne règle pas le pare-feu');
+    const integ = await a.post('/api/integrations', { name: 'automate', role: 'membre' });
+    assert.equal((await mettre(porteur(integ.json.token), { ips: ['8.8.4.4'] })).status, 403, 'un jeton d’intégration « membre » non plus');
     for (const mauvaise of ['10.9.1.5', '127.0.0.1', '100.64.1.1', 'fd00::1', '::ffff:10.0.0.1', '8.8.8.0/24', '0.0.0.0', 'pas une ip'])
       assert.equal((await mettre(deVigie, { ips: ['8.8.4.4', mauvaise] })).status, 400, mauvaise);
     assert.equal(groupes.length, 0, 'une liste refusée n’écrit rien');
