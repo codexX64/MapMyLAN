@@ -180,3 +180,19 @@ Commits suivants, hors de la passe ; la suite et la surface publique ci-dessus s
 - [x] Blind-comparison test passed — les passages touchés ont la forme de leurs voisins écrits avant la passe (`src/api/messagerie.js`, `src/rotation.js`, `web/lib/trafic.js`) : même langue, mêmes flèches à paramètre nu, raisons plutôt que descriptions
 - [x] Commit history: one concern per commit, repository style, no attribution trailers — racine neuve, réécriture découpée par sujet, relevés commités seuls, aucune mention d’outil dans tout l’historique
 - [x] REQ-CODE-001 to REQ-CODE-006 all PASS
+
+## Suivi du 2026-10-20 (2.0.3 → 2.2.1)
+Gel du comportement : 64 essais verts sur `v2.2.0` avant toute modification, 65 sur l’arbre final (un essai ajouté, trois complétés) ; les 123 routes gardent chemins, méthodes, rôles et formes de réponse. Changements voulus, chacun un correctif de SECURITY.md (« Suivi ») : `PUT /api/passerelle/bouclier` répond 403 à un jeton d’intégration et au jeton du Hub (S1) ; dix jetons refusés d’une même adresse la coupent (429), même après un redémarrage (S2) ; un PDF de VIGIE au-delà de 20 Mio n’est plus lu en entier (S3).
+
+| Chapitre | État | Ce qui a changé |
+|---|---|---|
+| 39 | DONE | deux commentaires qui nommaient des modèles ramenés à la famille (`7fa8125`) ; ceux ajoutés disent une raison (limiteur persistant, qui règle le pare-feu, lecture bornée) |
+| 43 | DONE | la lecture bornée du PDF quitte la boucle au lieu d’annuler deux fois le flux ; aucun `catch` muet ajouté |
+| 47 | DONE | chaque correctif retiré seul, la suite échoue (bouclier : 1 essai ; limiteur : 1 essai) ; le PDF démesuré était déjà refusé, l’essai fixe le refus, la lecture en flux se vérifie à la relecture |
+| 40, 41, 42, 44, 45, 46, 48 | DONE | rien à changer dans le code relu : vocabulaire, forme et contrat d’erreur des voisins repris tels quels |
+
+Balayage B.5 sur les fichiers touchés depuis le 2026-10-02 (`src/api/passerelle.js`, `src/api/vigie.js`, `src/adaptateurs/unifi.js`, `src/jetons.js`, `web/pages/vigie.js`) : aucun bandeau, aucun pictogramme, aucun `TODO` ; 10 `catch`, chacun un repli explicite (réponse illisible, règles absentes du contrôleur) ou une erreur rendue à l’écran ou au demandeur.
+
+- [x] Full suite passes and matches the baseline — 65 essais verts, les 64 de départ inchangés
+- [x] Public API diff empty — mêmes routes ; seuls écarts : les correctifs listés
+- [x] Commit history: one concern per commit, repository style, no attribution trailers — `git log --format=%b v2.2.0..main | grep -c .` → 0
