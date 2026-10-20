@@ -34,13 +34,18 @@ export class Acces {
       throw new ErreurHttp(401, 'Jeton refusé.');
     };
     if (!this.debitEssais.prendre(ctx.ip)) throw new ErreurHttp(429, 'Trop de requêtes.');
+    // Le limiteur persistant du socle : chaque jeton refusé compte pour
+    // l'adresse, et dix refus la coupent, même pour un bon jeton, même après
+    // un redémarrage.
+    const cles = [`ip:machine:${ctx.ip}`];
+    this.s.limiteur?.controler(cles);
     const m = /^Bearer ([\w-]{1,256})$/.exec(String(entete));
-    if (!m) refuser('forme');
+    if (!m) { this.s.limiteur?.echec(cles); refuser('forme'); }
     const v = this.s.jetons.verifier(m[1]);
-    if (!v.ok) refuser(v.raison);
+    if (!v.ok) { this.s.limiteur?.echec(cles); refuser(v.raison); }
     if (!jeton) refuser('route');
     if (!this.debitJeton.prendre(v.jeton.id)) throw new ErreurHttp(429, 'Trop de requêtes pour ce jeton.');
-    ctx.acteur = { type: 'jeton', id: `jeton:${v.jeton.id}`, jeton: v.jeton.id, nom: v.jeton.name, role: v.jeton.role };
+    ctx.acteur = { type: 'jeton', id: `jeton:${v.jeton.id}`, jeton: v.jeton.id, nom: v.jeton.name, role: v.jeton.role, derive: !!v.jeton.derive };
     if (RANG[v.jeton.role] < RANG[role]) throw new Refus(403, 'Droits insuffisants pour ce jeton.');
     this.s.jetons.noterUsage(v.jeton.id);
     return ctx.acteur;

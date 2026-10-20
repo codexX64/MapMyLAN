@@ -890,3 +890,17 @@ test('passerelle pour VIGIE : alertes de l’IPS lues, groupes du bouclier tenus
     await new Promise(res => serveur.close(res));
   }
 });
+
+test('jetons refusés : comptés pour l’adresse dans le limiteur persistant du socle, dix coupent même le bon jeton', async () => {
+  const x = await lancer({ INTEGRATION_TOKEN_SEED: GRAINE_HUB }, { executeur: reseau.executeur });
+  try {
+    const c = new Client(x.port);
+    const n = () => x.db.prepare("SELECT COALESCE(SUM(echecs), 0) n FROM socle_essais WHERE cle LIKE 'ip:machine:%'").get().n;
+    assert.equal((await c.get('/api/devices', porteur('mml_' + 'x'.repeat(40)))).status, 401);
+    assert.equal(n(), 1, 'un jeton inconnu compte');
+    assert.equal((await c.get('/api/devices', { entetes: { authorization: 'Bearer pas-un-jeton' } })).status, 401);
+    assert.equal(n(), 2, 'une forme fausse aussi');
+    for (let i = 0; i < 8; i++) await c.get('/api/devices', porteur('mml_' + String(i).repeat(40)));
+    assert.equal((await c.get('/api/devices', porteur(GRAINE_HUB))).status, 429, 'l’adresse est coupée, même pour le bon jeton');
+  } finally { await x.arreter(); }
+});

@@ -87,7 +87,7 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
   const cfg = lireConfigMapmylan(env);
   const db = ouvrirBase(cfg.donnees);
   const socle = await demarrerSocle({ service: { id: 'mapmylan', nom: 'MapMyLAN', contactSecurite: CONTACT_SECURITE }, db, dossier: cfg.donnees, env, log });
-  const { coffre, journal, portail, comptes } = socle;
+  const { coffre, journal, portail, comptes, limiteur } = socle;
   // Rotation de SOCLE_CLE : les secrets de MapMyLAN suivent ceux du socle.
   const tour = resceller({ db, coffre });
   if (tour.rescelles || tour.illisibles) {
@@ -96,7 +96,7 @@ export async function demarrer(env = process.env, { log = CONSOLE, options = {} 
   }
 
   // Le conteneur des services : chacun reçoit ce dont il a besoin, rien n'est global.
-  const s = { cfg, db, log, options, coffre, journal, portail, comptes };
+  const s = { cfg, db, log, options, coffre, journal, portail, comptes, limiteur };
   s.evts = new Evenements({ db, log });
   s.reglages = new Reglages(db);
   s.sortie = new Sortie({ internes: () => s.reglages.lire('sortie.autorisees', []) || [] });
