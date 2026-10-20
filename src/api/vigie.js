@@ -6,6 +6,21 @@ import { ErreurHttp } from '../../socle/src/index.js';
 import { vide } from './schemas.js';
 
 const REF = /^[A-Za-z0-9_-]{12}$/;
+const MAX_PDF = 20 * 1048576;
+
+// Le corps d'une réponse, lu jusqu'à `max` octets : au-delà, la lecture
+// s'arrête et rien n'est gardé (null), au lieu de tout charger pour refuser après.
+async function lireBorne(r, max) {
+  if (Number(r.headers.get('content-length')) > max) { await r.body?.cancel().catch(() => {}); return null; }
+  const morceaux = [];
+  let n = 0;
+  for await (const m of r.body) {
+    n += m.length;
+    if (n > max) return null;   // sortir de la boucle annule le flux
+    morceaux.push(m);
+  }
+  return Buffer.concat(morceaux);
+}
 const APPAREIL = /^[A-Za-z0-9_-]{1,64}$/;
 
 export function routesVigie(route, s, acces) {
@@ -40,8 +55,8 @@ export function routesVigie(route, s, acces) {
   }, { role: 'lecture' });
   route.get('/api/vigie/audits/:id/pdf', async ctx => {
     const r = await appeler('GET', `/api/audits/${ref(ctx.params.id)}/pdf`, { brut: true, delai: 60_000 });
-    const pdf = Buffer.from(await r.arrayBuffer());
-    if (pdf.subarray(0, 5).toString('latin1') !== '%PDF-' || pdf.length > 20 * 1048576) throw new ErreurHttp(502, 'VIGIE a rendu autre chose qu’un PDF.');
+    const pdf = await lireBorne(r, MAX_PDF);
+    if (!pdf || pdf.subarray(0, 5).toString('latin1') !== '%PDF-') throw new ErreurHttp(502, 'VIGIE a rendu autre chose qu’un PDF.');
     ctx.res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': pdf.length, 'cache-control': 'no-store', 'content-disposition': `attachment; filename="vigie-audit-${ctx.params.id}.pdf"` });
     ctx.res.end(pdf);
   }, { role: 'lecture' });

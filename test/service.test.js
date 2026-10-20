@@ -765,6 +765,7 @@ test('VIGIE : jetons dérivés par le Hub (seul celui de VIGIE agit), page Vigie
   const vigie = await serveurLocal((req, res) => {
     recu.push({ methode: req.method, chemin: req.url, auth: req.headers.authorization });
     if (refuser || req.headers.authorization !== `Bearer ${JETON_VIGIE}`) { res.writeHead(401, { 'content-type': 'application/json' }); return res.end('{"error":"Jeton invalide."}'); }
+    if (req.url === '/api/audits/Gr0sGr0sGr0s/pdf') { res.writeHead(200, { 'content-type': 'application/pdf' }); res.write('%PDF-1.4\n'); const bloc = Buffer.alloc(1048576, 32); let n = 0; const suite = () => { while (n < 22 && res.write(bloc)) n++; if (n < 22) res.once('drain', () => { n++; suite(); }); else res.end(); }; return suite(); }
     if (req.url.endsWith('/pdf')) { res.writeHead(200, { 'content-type': 'application/pdf' }); return res.end('%PDF-1.4\n%%EOF\n'); }
     res.setHeader('content-type', 'application/json');
     if (req.url === '/api/etat') return res.end(JSON.stringify({ audit: { id: 'Ab3dEf6hIj9k', score: 73 }, enCours: null }));
@@ -796,6 +797,7 @@ test('VIGIE : jetons dérivés par le Hub (seul celui de VIGIE agit), page Vigie
     assert.equal(pdf.status, 200);
     assert.equal(pdf.entetes['content-type'], 'application/pdf');
     assert.equal((await a.get('/api/vigie/audits/pas-une-ref/pdf')).status, 404);
+    assert.equal((await a.get('/api/vigie/audits/Gr0sGr0sGr0s/pdf')).status, 502, 'un PDF démesuré n’est pas lu en entier ni relayé');
     assert.ok(recu.every(r => r.auth === `Bearer ${JETON_VIGIE}`), 'toujours le jeton dérivé pour MapMyLAN');
     assert.equal((await c.get('/api/vigie/etat', deVigie)).status, 401, 'la page Vigie sert l’interface, pas les jetons');
     refuser = true;
