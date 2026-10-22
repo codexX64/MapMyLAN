@@ -79,7 +79,7 @@ test('autorisation : politique écrite ici, puis chaque route balayée sans sess
   ];
   const JETON = [
     'GET /api/devices', 'GET /api/devices/health/score', 'GET /api/devices/scans/latest', 'GET /api/devices/scan/ranges', 'POST /api/devices/scan',
-    'GET /api/devices/x', 'GET /api/devices/x/ping', 'POST /api/devices/x/deep-scan', 'POST /api/devices/x/ban', 'POST /api/devices/x/quarantine', 'POST /api/devices/x/unban',
+    'GET /api/devices/x', 'GET /api/devices/x/ping', 'POST /api/devices/x/deep-scan', 'POST /api/devices/x/ban', 'POST /api/devices/x/quarantine', 'POST /api/devices/x/unban', 'POST /api/devices/x/wake', 'POST /api/reveil',
     'GET /api/vlans', 'GET /api/topology', 'POST /api/topology/auto-build', 'GET /api/stats', 'GET /api/alerts', 'POST /api/alerts/x/ack', 'GET /api/host/stats',
     'GET /api/traffic/flows', 'GET /api/traffic/aggregats', 'GET /api/traffic/state',
     'GET /api/passerelle', 'GET /api/passerelle/ips', 'PUT /api/passerelle/bouclier',
@@ -89,6 +89,8 @@ test('autorisation : politique écrite ici, puis chaque route balayée sans sess
   assert.deepEqual(trie(routes.filter(x => x.o.renfort).map(x => x.cle)), trie(RENFORT));
   assert.deepEqual(trie(routes.filter(x => x.o.jeton).map(x => x.cle)), trie(JETON));
   assert.deepEqual(routes.filter(x => x.o.public).map(x => x.cle), ['GET /api/health']);
+  // Réveil par la MAC : déclaré en lecture pour les jetons dérivés des services, refusé à un compte en lecture.
+  assert.equal((await lecteur.post('/api/reveil', { mac: 'aa:bb:cc:00:00:01' })).status, 403);
 
   const anonyme = new Client(o.port);
   const ecarts = [];
@@ -787,6 +789,17 @@ test('VIGIE : jetons dérivés par le Hub (seul celui de VIGIE agit), page Vigie
     assert.equal((await c.get('/api/devices', porteur(derive(GRAINE_HUB, 'vigie').replace(/.$/, m => (m === '0' ? '1' : '0'))))).status, 401);
     assert.equal((await c.get('/api/settings', deVigie)).status, 401, 'route non marquée « jeton »');
     assert.equal(x.db.prepare("SELECT COUNT(*) n FROM jetons_integration WHERE name LIKE 'service:%'").get().n, 0, 'rien n’est stocké');
+    // Réveil : un jeton dérivé en lecture (NEXARC) réveille par la MAC, d’un appareil connu seulement.
+    assert.equal((await c.post('/api/reveil', { mac: 'aa:bb:cc:00:00:99' }, dAutre)).status, 404, 'MAC jamais vue');
+    assert.equal((await c.post('/api/reveil', { mac: 'pas-une-mac' }, dAutre)).status, 400);
+    assert.equal((await c.post('/api/reveil', { mac: 'ff:ff:ff:ff:ff:ff' }, dAutre)).status, 400, 'pas de diffusion déguisée');
+    x.db.prepare("INSERT INTO appareils(id, ip, mac, type, tags, status, firstSeen, lastSeen) VALUES('pcEteint0001', '192.0.2.77', 'AA:BB:CC:00:00:77', 'computer', '[]', 'offline', 1, 1)").run();
+    const rv = await c.post('/api/reveil', { mac: 'aa-bb-cc-00-00-77' }, dAutre);
+    assert.equal(rv.status, 200, JSON.stringify(rv.json));
+    assert.deepEqual(rv.json.macs, ['aa:bb:cc:00:00:77']);
+    assert.ok(rv.json.diffusions.includes('255.255.255.255'));
+    assert.equal((await c.post('/api/devices/pcEteint0001/wake', {}, dAutre)).status, 403, 'la route de la fiche reste au rôle membre');
+    assert.equal((await c.post('/api/devices/pcEteint0001/wake', {}, deVigie)).status, 200);
 
     const a = await administrateur(x);
     assert.deepEqual((await a.get('/api/vigie')).json, { relie: true });

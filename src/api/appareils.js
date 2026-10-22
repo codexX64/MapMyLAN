@@ -5,6 +5,7 @@ import * as F from '../formes.js';
 import { dedoublonner, fusionner, suggestionsRegroupement } from '../inventaire.js';
 import { plageUtilisable, verifierAdresse } from '../vlans.js';
 import { nettoyerNom } from '../cibles.js';
+import { diffusions, emettre, macReveil } from '../reveil.js';
 import { IPV4, MAC, CIDR, ID, TYPES_APPAREIL, nom, texte, coordonnee, vide } from './schemas.js';
 
 const CHAMPS_APPAREIL = {
@@ -18,7 +19,7 @@ const RAISON = { reason: texte(200) };
 
 export function routesAppareils(route, s, acces) {
   const { db, appareils, scanner, defense } = s;
-  const quotas = { balayage: new Debit({ max: 3 }), approfondi: new Debit({ max: 10 }), ping: new Debit({ max: 30 }) };
+  const quotas = { balayage: new Debit({ max: 3 }), approfondi: new Debit({ max: 10 }), ping: new Debit({ max: 30 }), reveil: new Debit({ max: 20 }) };
   const payer = (quota, ctx, message) => { if (!quotas[quota].prendre(ctx.acteur.id)) throw new ErreurHttp(429, message); };
   // Un identifiant inconnu et un identifiant mal formé répondent pareil.
   const ligne = id => (ID.test(id) && appareils.ligne(id)) || (() => { throw new ErreurHttp(404, 'Appareil introuvable.'); })();
@@ -162,6 +163,38 @@ export function routesAppareils(route, s, acces) {
     s.commandes.declencher('scan.deep_complete', { ip: d.ip, ports: r.ports.map(p => p.port).join(',') });
     return r;
   }, { role: 'membre', jeton: true, corps: vide });
+
+  // Réveil par le réseau : la MAC principale et celles des interfaces
+  // filaires de l'appareil, sur chaque réseau local de MapMyLAN.
+  const reveiller = async (ctx, d) => {
+    payer('reveil', ctx, 'Trop de réveils : attends une minute.');
+    const macs = [...new Set([d.mac, ...db.prepare("SELECT mac FROM interfaces WHERE deviceId = ? AND type = 'ethernet'").all(d.id).map(i => i.mac)].map(macReveil).filter(Boolean))];
+    if (!macs.length) throw new ErreurHttp(409, 'Aucune adresse MAC connue pour cet appareil : impossible de le réveiller.');
+    // Plus la diffusion dirigée du /24 de l'appareil : un routeur qui la laisse passer
+    // (rare, désactivé par défaut) réveille aussi un appareil d'un autre segment.
+    const dirigee = /^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/.exec(d.ip || '')?.[1];
+    const adresses = [...diffusions(undefined, { seule: s.cfg.interfaceScan || '' }), ...(dirigee && d.ip !== '0.0.0.0' ? [`${dirigee}.255`] : [])];
+    let parties = [];
+    try { for (const mac of macs) parties = await emettre(mac, adresses); } catch (e) { throw new ErreurHttp(502, `Paquet magique non envoyé : ${e.code || 'erreur réseau'}.`); }
+    if (!parties.length) throw new ErreurHttp(502, 'Paquet magique non envoyé : aucune interface réseau ne l’a accepté.');
+    acces.tracer(ctx, 'appareil.reveille', d.id, { macs: macs.length, diffusions: parties.length });
+    s.evts.journaliser('info', 'reveil', `Réveil envoyé à ${d.customName || d.hostname || d.ip} (${macs.join(', ')}).`);
+    return { ok: true, macs, diffusions: parties };
+  };
+  route.post('/api/devices/:id/wake', ctx => reveiller(ctx, ligne(ctx.params.id)), { role: 'membre', jeton: true, corps: vide });
+  // Les autres services du Hub (NEXARC) réveillent par la MAC, avec leur
+  // jeton dérivé : réveiller n'interrompt rien, c'est le seul geste qu'un
+  // jeton dérivé en lecture peut faire ici. La MAC doit être connue de
+  // l'inventaire : MapMyLAN ne diffuse pas pour un appareil qu'il n'a jamais vu.
+  route.post('/api/reveil', ctx => {
+    const a = ctx.acteur;
+    if (!(a.role === 'membre' || a.role === 'admin' || a.derive)) throw new ErreurHttp(403, 'Droits insuffisants pour ce jeton.');
+    const mac = macReveil(ctx.corps.mac);
+    if (!mac) throw new ErreurHttp(400, 'Adresse MAC invalide.');
+    const id = db.prepare('SELECT id FROM appareils WHERE lower(mac) = ? UNION SELECT deviceId FROM interfaces WHERE lower(mac) = ? LIMIT 1').get(mac, mac)?.id;
+    if (!id) throw new ErreurHttp(404, 'MAC inconnue de MapMyLAN : il n’a jamais vu cet appareil sur son réseau.');
+    return reveiller(ctx, appareils.ligne(id));
+  }, { role: 'lecture', jeton: true, corps: { mac: { type: 'chaine', requis: true, max: 17, motif: MAC } } });
 
   route.get('/api/devices/:id/history', ctx => appareils.historique(ligne(ctx.params.id).id, 100), { role: 'lecture' });
 

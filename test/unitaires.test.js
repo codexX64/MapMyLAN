@@ -2,6 +2,8 @@
 // classement, registres, logos, tickets, mémoire, jetons, extensions, trafic,
 // VLAN, commandes automatiques, assistant. Reprend les essais de la 1.4.1
 // (garde, valider, registre, logos, ticket, mémoire, extensions, assistant).
+import { paquetMagique, macReveil, diffusions, emettre } from '../src/reveil.js';
+import dgramEssai from 'node:dgram';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -421,4 +423,31 @@ test('poste : la clé d’envoi part en Authorization (jeton d’envoi de CODMAI
   assert.equal(vus[0].o.headers.authorization, 'Bearer cmd_' + 'k'.repeat(40));
   assert.equal(vus[0].o.headers['x-poste-key'], 'cmd_' + 'k'.repeat(40));
   assert.doesNotMatch(JSON.parse(vus[0].o.body).subject, /[\r\n]/);
+});
+
+test('réveil : paquet magique, MAC d’appareil seulement, diffusion par interface réelle, envoi reçu', async () => {
+  const p = paquetMagique('AA-BB-CC-00-00-10');
+  assert.equal(p.length, 102);
+  assert.ok(p.subarray(0, 6).every(o => o === 0xff));
+  for (let i = 0; i < 16; i++) assert.equal(p.subarray(6 + i * 6, 12 + i * 6).toString('hex'), 'aabbcc000010');
+  assert.equal(macReveil('aa:bb:cc:00:00:10'), 'aa:bb:cc:00:00:10');
+  for (const m of ['ff:ff:ff:ff:ff:ff', '01:00:5e:00:00:01', '00:00:00:00:00:00', 'aa:bb:cc:00:00', 'zz:bb:cc:00:00:10', '']) assert.equal(macReveil(m), null, m);
+  assert.throws(() => paquetMagique('ff:ff:ff:ff:ff:ff'), /MAC/);
+  const ifs = {
+    lo: [{ family: 'IPv4', address: '127.0.0.1', netmask: '255.0.0.0', internal: true }],
+    eth0: [{ family: 'IPv4', address: '192.0.2.40', netmask: '255.255.255.0', internal: false }, { family: 'IPv6', address: 'fe80::1', netmask: 'ffff:ffff:ffff:ffff::', internal: false }],
+    vmbr1: [{ family: 'IPv4', address: '198.51.100.9', netmask: '255.255.252.0', internal: false }],
+    docker0: [{ family: 'IPv4', address: '172.17.0.1', netmask: '255.255.0.0', internal: false }],
+    'br-1a2b': [{ family: 'IPv4', address: '172.18.0.1', netmask: '255.255.0.0', internal: false }],
+    veth9: [{ family: 'IPv4', address: '169.254.1.1', netmask: '255.255.255.255', internal: false }],
+  };
+  assert.deepEqual(diffusions(ifs), ['192.0.2.255', '198.51.103.255'], 'ni Docker ni boucle');
+  assert.deepEqual(diffusions(ifs, { seule: 'eth0' }), ['192.0.2.255'], 'l’interface de balayage seule');
+  const recepteur = dgramEssai.createSocket('udp4');
+  await new Promise(ok => recepteur.bind(0, '127.0.0.1', ok));
+  const recu = new Promise(ok => recepteur.once('message', ok));
+  const parties = await emettre('aa:bb:cc:00:00:10', ['127.0.0.1'], { ports: [recepteur.address().port] });
+  assert.ok(parties.includes('127.0.0.1'));
+  assert.deepEqual(await recu, paquetMagique('aa:bb:cc:00:00:10'));
+  recepteur.close();
 });
