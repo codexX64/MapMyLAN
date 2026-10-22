@@ -304,7 +304,8 @@
       "network.scan",
       "network.block",
       "alerts.source",
-      "host.metrics"
+      "host.metrics",
+      "network.wake"
     ],
     "requires": [],
     "accepts": [
