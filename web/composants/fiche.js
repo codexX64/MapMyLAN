@@ -222,6 +222,9 @@ function fiche(id, fermer) {
         a.notes ? h('div', { class: 'fnotes' }, h('div', { class: 'lbl', text: 'Notes' }), h('div', { class: 'fnotes-t', text: a.notes })) : null,
       ] : formulaire(),
       titre('Adresse'), zoneAdresse,
+      a.mac ? [titre('Réveil'), h('div', { class: 'fdefense' },
+        h('button', { class: 'btn', type: 'button', disabled: occupe, title: 'Paquet magique sur le réseau de MapMyLAN. L’appareil doit avoir le réveil par le réseau activé (BIOS et carte réseau).',
+          onclick: () => agir('Paquet magique envoyé : l’appareil démarre dans quelques secondes s’il accepte le réveil par le réseau.', () => api.post(`/api/devices/${id}/wake`)) }, ic('power', 14), 'Allumer (Wake-on-LAN)'))] : null,
       titre('Défense'),
       a.isMainRouter
         ? h('div', { class: 'note info' }, ic('shield', 15, { style: { marginTop: 1 } }), h('span', { text: "L'équipement principal est protégé : aucune action de défense ne lui est applicable." }))
