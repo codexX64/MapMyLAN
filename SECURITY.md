@@ -48,6 +48,9 @@ Relecture en lecture seule des 13 commits publiés depuis cet audit (2.1.0 : pag
 
 Examinés sans écart : le calcul et la vérification des jetons dérivés (HMAC à la même semence, longueur et temps constant, une autre semence ou un caractère changé → 401), les adresses envoyées au pare-feu (adresses publiques seules, boucle, plages privées, CGNAT, ULA, IPv4 mappée et CIDR refusés, liste refusée sans rien écrire), la page Vigie (session seule, jeton dérivé pour MapMyLAN, sans redirection, délai), l’interface ajoutée (texte seulement). 65 essais (35 du service, 30 autres), tous verts ; 10 routes ajoutées, chacune dans la table des droits de l’essai de balayage.
 
+## Suivi du 2026-10-22 (2.3.0)
+Ajout du réveil par le réseau. `POST /api/devices/:id/wake` (rôle membre, jeton admis) envoie le paquet magique aux MAC de l'appareil ; `POST /api/reveil` (`src/api/appareils.js:189`) le fait pour une MAC, à la demande d'un service du Hub (NEXARC) avec son jeton dérivé : réveiller n'interrompt rien, c'est le seul geste qu'un jeton dérivé en lecture obtient ici (`src/api/appareils.js:191`), un compte en lecture reste refusé (403). La MAC doit être connue de l'inventaire (404 sinon) et n'est jamais de diffusion ni de multidiffusion (`src/reveil.js:18`) ; 20 réveils par minute et par acteur ; chaque réveil au journal chaîné. Le paquet part en UDP vers les adresses de diffusion des interfaces réelles (ni Docker ni boucle), 255.255.255.255 et le /24 de l'appareil : aucun privilège ajouté au conteneur. Aucun contrôle ne change de statut. Essais : 66, dont 2 nouveaux (paquet, MAC refusées, diffusions, envoi reçu ; jetons et rôles de la route).
+
 ## Control status
 | ID | Severity | Status | Evidence | Notes |
 |---|---|---|---|---|

@@ -196,3 +196,6 @@ Balayage B.5 sur les fichiers touchés depuis le 2026-10-02 (`src/api/passerelle
 - [x] Full suite passes and matches the baseline — 65 essais verts, les 64 de départ inchangés
 - [x] Public API diff empty — mêmes routes ; seuls écarts : les correctifs listés
 - [x] Commit history: one concern per commit, repository style, no attribution trailers — `git log --format=%b v2.2.0..main | grep -c .` → 0
+
+## Suivi du 2026-10-22 (2.3.0)
+Module `src/reveil.js` (paquet, MAC, diffusions, envoi), une fonction par geste ; la route de la fiche et celle des services partagent `reveiller`. Vocabulaire et quotas (`Debit`, `payer`, `acces.tracer`) repris des routes voisines. 66 essais verts, dont 2 nouveaux.
